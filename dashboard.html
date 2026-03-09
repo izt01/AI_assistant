@@ -24,6 +24,7 @@
 </style>
 </head>
 <body>
+<div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="app-layout">
@@ -76,6 +77,8 @@
 </div>
 
 <script src="shared.js"></script>
+<script>
+buildMobileHeader("ダッシュボード"); buildMobileNav("dashboard");</script>
 <script>
 let user = null
 
@@ -203,5 +206,6 @@ document.getElementById('tip-text').textContent = tips[Math.floor(Math.random()*
 
 function startChat(ai) { location.href = 'chat.html?ai=' + ai }
 </script>
+<div id="mobile-nav-root"></div>
 </body>
 </html>

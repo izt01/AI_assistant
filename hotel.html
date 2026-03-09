@@ -19,6 +19,7 @@
 </style>
 </head>
 <body>
+<div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="app-layout">
@@ -112,6 +113,8 @@
 
 <script src="shared.js"></script>
 <script>
+buildMobileHeader("ホテル検索"); buildMobileNav("dashboard");</script>
+<script>
 const user = requireAuth()
 if(user) {
   document.getElementById('sidebar-root').innerHTML = buildSidebar('chat-travel')
@@ -153,5 +156,6 @@ function bookingDone() {
   setTimeout(()=>location.href='dashboard.html', 2000)
 }
 </script>
+<div id="mobile-nav-root"></div>
 </body>
 </html>

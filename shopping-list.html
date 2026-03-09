@@ -23,6 +23,7 @@
 </style>
 </head>
 <body>
+<div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="app-layout">
@@ -130,6 +131,8 @@
 </div>
 
 <script src="shared.js"></script>
+<script>
+buildMobileHeader("買い物リスト"); buildMobileNav("dashboard");</script>
 <script>
 const user = requireAuth()
 if(user) {
@@ -268,5 +271,6 @@ function paymentDone() {
   setTimeout(()=>location.href='dashboard.html', 2000)
 }
 </script>
+<div id="mobile-nav-root"></div>
 </body>
 </html>
