@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>新規登録 — Lumina AI</title>
+<style>
+body{background:var(--ink)}
+.step-bar{display:flex;align-items:center;margin-bottom:26px;gap:0}
+.sb-step{display:flex;align-items:center;gap:7px;font-size:11.5px}
+.sb-num{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex-shrink:0;transition:all .2s}
+.sb-num.done{background:var(--success);color:#fff}
+.sb-num.active{background:var(--gold2);color:var(--ink)}
+.sb-num.todo{background:var(--border);color:var(--subtle)}
+.sb-step-label{color:var(--muted);font-size:11px}
+.sb-step-label.active{color:var(--ink);font-weight:600}
+.sb-line{flex:1;height:1.5px;background:var(--border);margin:0 6px}
+.sb-line.done{background:var(--success)}
+.plan-sel{border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .2s;position:relative}
+.plan-sel:hover{border-color:var(--gold2)}
+.plan-sel.active{border-color:var(--gold2);background:rgba(201,168,76,.04);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
+.plan-sel-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-size:9px;font-weight:700;padding:2px 12px;border-radius:99px;white-space:nowrap}
+.plan-sel-name{font-family:'Fraunces',serif;font-size:17px;font-weight:900;color:var(--ink);margin-bottom:2px}
+.plan-sel-price{font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--gold);letter-spacing:-.04em;line-height:1}
+.plan-sel-price span{font-size:11px;font-weight:400;color:var(--muted)}
+.plan-sel-limit{font-size:11px;color:var(--muted);margin-top:3px}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+
+<div class="auth-layout">
+  <!-- Left panel -->
+  <div class="auth-panel">
+    <div class="auth-panel-orb ap-orb1"></div>
+    <div class="auth-panel-orb ap-orb2"></div>
+    <div class="ap-grid"></div>
+    <div class="ap-content">
+      <div class="ap-logo"><div class="ap-logo-icon">✦</div>Lumina AI</div>
+      <div class="ap-title"><em>無料</em>で今すぐ<br>始められます</div>
+      <p class="ap-desc">クレジットカード不要。メールアドレスだけで即日利用開始できます。</p>
+      <div class="ap-feature"><div class="ap-feat-icon">✦</div><div class="ap-feat-text">Freeプランは完全無料・毎月10回まで利用可</div></div>
+      <div class="ap-feature"><div class="ap-feat-icon">🔒</div><div class="ap-feat-text">個人情報は暗号化して安全に保管</div></div>
+      <div class="ap-feature"><div class="ap-feat-icon">📱</div><div class="ap-feat-text">いつでもプラン変更・解約可能</div></div>
+    </div>
+  </div>
+
+  <!-- Right form -->
+  <div class="auth-right">
+    <div class="form-box">
+      <div class="form-logo"><div class="form-logo-gem">✦</div>Lumina</div>
+
+      <!-- Step bar -->
+      <div class="step-bar" id="step-bar">
+        <div class="sb-step">
+          <div class="sb-num active" id="s1">1</div>
+          <div class="sb-step-label active" id="sl1">アカウント</div>
+        </div>
+        <div class="sb-line" id="l1"></div>
+        <div class="sb-step">
+          <div class="sb-num todo" id="s2">2</div>
+          <div class="sb-step-label" id="sl2">プラン選択</div>
+        </div>
+        <div class="sb-line" id="l2"></div>
+        <div class="sb-step">
+          <div class="sb-num todo" id="s3">3</div>
+          <div class="sb-step-label" id="sl3">完了</div>
+        </div>
+      </div>
+
+      <!-- Step 1: Account info -->
+      <div id="step1">
+        <div class="fh">アカウント作成</div>
+        <p class="fsub">メールアドレスとパスワードで登録します</p>
+        <div class="field">
+          <label class="lbl">お名前<span class="req">*</span></label>
+          <input class="inp" id="name" type="text" placeholder="山田 花子">
+        </div>
+        <div class="field">
+          <label class="lbl">メールアドレス<span class="req">*</span></label>
+          <input class="inp" id="email" type="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label class="lbl">パスワード<span class="req">*</span></label>
+          <input class="inp" id="pw" type="password" placeholder="8文字以上" oninput="checkPw(this.value)">
+          <div class="pw-bars"><div class="pw-bar" id="b0"></div><div class="pw-bar" id="b1"></div><div class="pw-bar" id="b2"></div><div class="pw-bar" id="b3"></div></div>
+          <div class="pw-str" id="pw-str">—</div>
+        </div>
+        <div class="field">
+          <label class="lbl">パスワード（確認）<span class="req">*</span></label>
+          <input class="inp" id="pw2" type="password" placeholder="もう一度入力">
+        </div>
+        <div class="field">
+          <label class="check-row"><input type="checkbox" id="agree"> 利用規約とプライバシーポリシーに同意します</label>
+        </div>
+        <button class="btn btn-gold btn-w btn-lg" onclick="goStep2()">次へ →</button>
+        <div class="ff">すでにアカウントをお持ちの方は <a href="login.html" class="flink">ログイン</a></div>
+      </div>
+
+      <!-- Step 2: Plan selection -->
+      <div id="step2" style="display:none">
+        <div class="fh">プランを選ぶ</div>
+        <p class="fsub">あとからいつでも変更できます</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+          <div class="plan-sel" id="pl-free" onclick="selPlan('free')">
+            <div class="plan-sel-name">Free</div>
+            <div class="plan-sel-price">¥0<span>/月</span></div>
+            <div class="plan-sel-limit">月10回まで会話可能</div>
+          </div>
+          <div class="plan-sel active" id="pl-pro" onclick="selPlan('pro')">
+            <div class="plan-sel-badge">人気 No.1</div>
+            <div class="plan-sel-name">Pro</div>
+            <div class="plan-sel-price">¥980<span>/月</span></div>
+            <div class="plan-sel-limit">月50回まで会話可能 · ホテル予約・決済連携</div>
+          </div>
+          <div class="plan-sel" id="pl-master" onclick="selPlan('master')">
+            <div class="plan-sel-name">Master</div>
+            <div class="plan-sel-price">¥2,980<span>/月</span></div>
+            <div class="plan-sel-limit">月200回まで会話可能 · 全機能アンロック</div>
+          </div>
+        </div>
+        <div id="payment-field" style="display:none">
+          <div class="field">
+            <label class="lbl">カード番号<span class="req">*</span></label>
+            <input class="inp" id="card" type="text" placeholder="1234 5678 9012 3456" maxlength="19" oninput="formatCard(this)">
+          </div>
+          <div class="row2">
+            <div class="field"><label class="lbl">有効期限</label><input class="inp" id="expiry" type="text" placeholder="MM/YY" maxlength="5"></div>
+            <div class="field"><label class="lbl">セキュリティコード</label><input class="inp" id="cvv" type="text" placeholder="123" maxlength="4"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g" style="flex:0 0 auto" onclick="goStep1()">← 戻る</button>
+          <button class="btn btn-gold btn-w btn-lg" onclick="doRegister()">登録を完了する</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Complete -->
+      <div id="step3" style="display:none">
+        <div class="suc-wrap">
+          <div class="suc-icon">✓</div>
+          <div class="fh" style="text-align:center">登録完了！</div>
+          <p class="fsub" style="text-align:center">Luminaへようこそ。AIとの会話を始めましょう。</p>
+          <div class="info-box" style="text-align:left">
+            <strong>登録プラン：</strong><span id="done-plan"></span><br>
+            <strong>今月の会話可能回数：</strong><span id="done-limit"></span>回
+          </div>
+          <button class="btn btn-gold btn-w btn-lg" onclick="location.href='dashboard.html'">ダッシュボードへ →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+let selectedPlan = 'pro'
+
+// Pre-select from URL
+const urlPlan = new URLSearchParams(location.search).get('plan')
+if(urlPlan && PLANS[urlPlan]) { selectedPlan = urlPlan; selPlan(urlPlan) }
+
+function selPlan(p) {
+  selectedPlan = p
+  document.querySelectorAll('.plan-sel').forEach(el => el.classList.remove('active'))
+  document.getElementById('pl-'+p).classList.add('active')
+  document.getElementById('payment-field').style.display = p === 'free' ? 'none' : 'block'
+}
+
+function checkPw(v) {
+  const bars = [0,1,2,3].map(i => document.getElementById('b'+i))
+  bars.forEach(b => { b.className='pw-bar' })
+  const str = document.getElementById('pw-str')
+  if(!v){str.textContent='—';return}
+  let score=0
+  if(v.length>=8)score++
+  if(/[A-Z]/.test(v)||/[a-z]/.test(v))score++
+  if(/\d/.test(v))score++
+  if(/[^a-zA-Z\d]/.test(v))score++
+  const labels=['弱い','やや弱い','普通','強い']
+  const cls=['w','w','m','s']
+  for(let i=0;i<score;i++) bars[i].classList.add(cls[score-1])
+  str.textContent=labels[score-1]||'—'
+}
+
+function formatCard(el) {
+  let v = el.value.replace(/\D/g,'').substring(0,16)
+  el.value = v.replace(/(.{4})/g,'$1 ').trim()
+}
+
+function goStep1() {
+  document.getElementById('step2').style.display='none'
+  document.getElementById('step1').style.display='block'
+  setStep(1)
+}
+
+function goStep2() {
+  const name=document.getElementById('name').value.trim()
+  const email=document.getElementById('email').value.trim()
+  const pw=document.getElementById('pw').value
+  const pw2=document.getElementById('pw2').value
+  const agree=document.getElementById('agree').checked
+  if(!name||!email||!pw){toast('すべての必須項目を入力してください','d');return}
+  if(pw.length<8){toast('パスワードは8文字以上で入力してください','d');return}
+  if(pw!==pw2){toast('パスワードが一致しません','d');return}
+  if(!agree){toast('利用規約への同意が必要です','d');return}
+  document.getElementById('step1').style.display='none'
+  document.getElementById('step2').style.display='block'
+  setStep(2)
+  selPlan(selectedPlan)
+}
+
+function setStep(n) {
+  for(let i=1;i<=3;i++){
+    const s=document.getElementById('s'+i)
+    const sl=document.getElementById('sl'+i)
+    s.className='sb-num '+(i<n?'done':i===n?'active':'todo')
+    if(i<n)s.textContent='✓'
+    sl.className='sb-step-label'+(i===n?' active':'')
+    if(i<3)document.getElementById('l'+i).className='sb-line'+(i<n?' done':'')
+  }
+}
+
+async function doRegister() {
+  const name=document.getElementById('name').value.trim()
+  const email=document.getElementById('email').value.trim()
+  const pw=document.getElementById('pw').value
+  if(selectedPlan!=='free'){
+    const card=document.getElementById('card').value
+    if(!card){toast('カード情報を入力してください','d');return}
+  }
+  const plan=selectedPlan
+  const info=PLANS[plan]
+  const btn=document.querySelector('#step2 .btn-gold')
+  if(btn){btn.disabled=true;btn.textContent='登録中…'}
+  try {
+    const d = await apiRequest('/auth/register',{method:'POST',body:{nickname:name,email,password:pw,plan}})
+    setToken(d.token)
+    setCachedUser(d.user)
+    document.getElementById('step2').style.display='none'
+    document.getElementById('step3').style.display='block'
+    setStep(3)
+    document.getElementById('done-plan').textContent=info.name+'プラン'
+    document.getElementById('done-limit').textContent=info.limit
+  } catch(e) {
+    toast(e.error||'登録に失敗しました','d')
+    if(btn){btn.disabled=false;btn.textContent='アカウントを作成する'}
+  }
+}
+</script>
+</body>
+</html>

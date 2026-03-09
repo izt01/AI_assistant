@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lumina AI — あなたの毎日を、もっと豊かに</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Noto Sans JP',sans-serif;background:#0a0b0f;color:#e8e4dc;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+
+/* Grain overlay */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:100;opacity:.4}
+
+:root{
+  --gold:#c9a84c;
+  --gold2:#e8c97a;
+  --cream:#e8e4dc;
+  --muted:rgba(232,228,220,.45);
+  --ink:#0a0b0f;
+  --ink2:#12141a;
+  --ink3:#1c1f28;
+  --border:rgba(201,168,76,.15);
+  --r:10px;
+}
+
+/* ── Nav ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:50;padding:20px 56px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:all .3s}
+nav.scrolled{background:rgba(10,11,15,.88);backdrop-filter:blur(16px);border-bottom-color:var(--border)}
+.logo{font-family:'Fraunces',serif;font-size:20px;font-weight:900;letter-spacing:-.03em;color:var(--cream);display:flex;align-items:center;gap:9px}
+.logo-gem{width:28px;height:28px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 4px 16px rgba(201,168,76,.3)}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{font-size:13px;color:var(--muted);transition:color .2s}
+.nav-links a:hover{color:var(--cream)}
+.nav-cta{display:flex;gap:9px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:9px 20px;border-radius:var(--r);font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .2s;border:1.5px solid transparent;white-space:nowrap}
+.btn-ghost{background:transparent;color:var(--cream);border-color:rgba(232,228,220,.2)}
+.btn-ghost:hover{border-color:var(--cream);background:rgba(255,255,255,.04)}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-weight:700;border:none;box-shadow:0 4px 20px rgba(201,168,76,.25)}
+.btn-gold:hover{box-shadow:0 6px 28px rgba(201,168,76,.4);transform:translateY(-1px)}
+.btn-gold:active{transform:translateY(0)}
+
+/* ── Hero ── */
+.hero-section{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 36px 60px;position:relative;overflow:hidden}
+
+/* animated orbs */
+.orb{position:absolute;border-radius:50%;filter:blur(72px);pointer-events:none}
+.orb1{width:500px;height:500px;background:radial-gradient(circle,rgba(201,168,76,.18) 0%,transparent 70%);top:-100px;left:-100px;animation:drift1 12s ease-in-out infinite}
+.orb2{width:400px;height:400px;background:radial-gradient(circle,rgba(120,80,200,.14) 0%,transparent 70%);bottom:-50px;right:-80px;animation:drift2 15s ease-in-out infinite}
+.orb3{width:300px;height:300px;background:radial-gradient(circle,rgba(80,160,200,.1) 0%,transparent 70%);top:50%;left:60%;animation:drift3 9s ease-in-out infinite}
+@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,30px) scale(1.1)}66%{transform:translate(-20px,20px) scale(.95)}}
+@keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-30px,-40px)}}
+@keyframes drift3{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-25px)}}
+
+/* Grid lines */
+.hero-section::after{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(201,168,76,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,.04) 1px,transparent 1px);background-size:72px 72px;pointer-events:none}
+
+.hero-content{position:relative;z-index:2}
+.hero-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.22);border-radius:99px;padding:6px 16px;font-size:11px;font-weight:500;color:var(--gold2);letter-spacing:.08em;margin-bottom:28px;animation:fadeUp .7s ease both}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:pulse 2.2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+h1{font-family:'Fraunces',serif;font-size:clamp(44px,6vw,84px);font-weight:900;line-height:1.04;letter-spacing:-.04em;color:var(--cream);margin-bottom:20px;animation:fadeUp .7s .1s ease both}
+.grad{background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 50%,#f0d890 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-style:italic}
+.hero-desc{font-size:15px;color:var(--muted);line-height:1.85;max-width:480px;margin:0 auto 40px;animation:fadeUp .7s .2s ease both}
+.hero-cta{display:flex;gap:11px;justify-content:center;flex-wrap:wrap;animation:fadeUp .7s .3s ease both}
+.btn-lg{padding:13px 30px;font-size:14px;border-radius:12px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+.hero-scroll{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--muted);font-size:10.5px;letter-spacing:.1em;z-index:2;animation:fadeUp 1s .8s ease both}
+.scroll-line{width:1px;height:32px;background:linear-gradient(to bottom,transparent,var(--gold));animation:scrollLine 1.8s ease-in-out infinite}
+@keyframes scrollLine{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* ── Stats ── */
+.stats-bar{padding:40px 56px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;justify-content:center;gap:56px;flex-wrap:wrap;background:rgba(255,255,255,.015)}
+.stat-item{text-align:center}
+.stat-num{font-family:'Fraunces',serif;font-size:36px;font-weight:900;color:var(--gold2);letter-spacing:-.04em;line-height:1}
+.stat-label{font-size:11.5px;color:var(--muted);margin-top:4px}
+
+/* ── AI Services ── */
+section{padding:86px 56px}
+.section-badge{display:inline-block;background:rgba(201,168,76,.08);border:1px solid var(--border);border-radius:99px;padding:5px 15px;font-size:10.5px;font-weight:600;color:var(--gold);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px}
+.section-title{font-family:'Fraunces',serif;font-size:clamp(28px,3.5vw,46px);font-weight:900;color:var(--cream);letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
+.section-desc{font-size:13.5px;color:var(--muted);line-height:1.8;max-width:480px;margin-bottom:44px}
+
+.ai-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.ai-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+.ai-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 0% 0%,var(--card-glow,.1) 0%,transparent 50%);opacity:0;transition:opacity .3s}
+.ai-card:hover{border-color:rgba(201,168,76,.25);transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.ai-card:hover::before{opacity:1}
+.ai-icon{width:44px;height:44px;border-radius:11px;background:var(--card-bg);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.ai-name{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--cream);margin-bottom:6px;letter-spacing:-.02em}
+.ai-desc{font-size:11.5px;color:var(--muted);line-height:1.7}
+.ai-tag{display:inline-block;margin-top:10px;font-size:10px;font-weight:600;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.15);color:var(--gold);padding:2px 9px;border-radius:99px}
+
+/* ── Pricing ── */
+.pricing-section{background:var(--ink2)}
+.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:860px;margin:0 auto}
+.plan{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:28px 24px;position:relative;transition:all .25s}
+.plan.featured{border-color:var(--gold);background:rgba(201,168,76,.05);box-shadow:0 0 0 1px var(--gold),0 20px 60px rgba(201,168,76,.12)}
+.plan-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-size:9.5px;font-weight:700;padding:3px 14px;border-radius:99px;white-space:nowrap;letter-spacing:.05em}
+.plan-name{font-family:'Fraunces',serif;font-size:21px;font-weight:900;color:var(--cream);letter-spacing:-.02em;margin-bottom:6px}
+.plan-price{font-family:'Fraunces',serif;font-size:40px;font-weight:900;color:var(--gold2);letter-spacing:-.05em;line-height:1;margin-bottom:4px}
+.plan-price span{font-size:14px;font-weight:400;color:var(--muted)}
+.plan-cycle{font-size:11px;color:var(--muted);margin-bottom:22px}
+.plan-feat{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
+.plan-feat li{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:rgba(232,228,220,.65);line-height:1.5}
+.plan-feat .ck{color:var(--gold);font-size:11px;flex-shrink:0;margin-top:2px}
+
+/* ── Testimonials ── */
+.test-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.test-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:20px}
+.test-stars{color:var(--gold);font-size:12px;margin-bottom:9px;letter-spacing:2px}
+.test-text{font-size:12.5px;color:rgba(232,228,220,.65);line-height:1.75;margin-bottom:13px;font-style:italic}
+.test-author{display:flex;align-items:center;gap:8px}
+.test-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#8b6fff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--ink)}
+.test-name{font-size:12px;font-weight:600;color:var(--cream)}
+.test-meta{font-size:10.5px;color:var(--muted)}
+
+/* ── CTA section ── */
+.cta-section{text-align:center;padding:80px 36px;position:relative;overflow:hidden}
+.cta-section::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(201,168,76,.12) 0%,transparent 70%);pointer-events:none}
+
+/* ── Footer ── */
+footer{padding:40px 56px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--ink2)}
+.footer-logo{font-family:'Fraunces',serif;font-size:16px;font-weight:900;color:var(--cream);letter-spacing:-.03em}
+.footer-links{display:flex;gap:22px}
+.footer-links a{font-size:11.5px;color:var(--muted);transition:color .2s}
+.footer-links a:hover{color:var(--gold)}
+.footer-copy{font-size:11px;color:rgba(232,228,220,.22)}
+
+/* demo shortcuts */
+.demo-bar{background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.15);border-radius:12px;padding:14px 20px;margin:30px auto 0;max-width:560px;text-align:center}
+.demo-title{font-size:11px;font-weight:600;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px}
+.demo-btns{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+.demo-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:6px 13px;font-size:11.5px;font-family:inherit;color:rgba(232,228,220,.7);cursor:pointer;transition:all .18s}
+.demo-btn:hover{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.3);color:var(--gold2)}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="index.html" class="logo">
+    <div class="logo-gem">✦</div>
+    Lumina
+  </a>
+  <div class="nav-links">
+    <a href="#services">サービス</a>
+    <a href="#pricing">料金</a>
+    <a href="#reviews">口コミ</a>
+  </div>
+  <div class="nav-cta">
+    <button class="btn btn-ghost" onclick="location.href='login.html'">ログイン</button>
+    <button class="btn btn-gold" onclick="location.href='register.html'">無料で始める</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero-section">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="badge-dot"></span>
+      7つの専門AIアシスタント搭載
+    </div>
+    <h1>
+      日常のすべてに<br>
+      <span class="grad">賢いAI</span>を
+    </h1>
+    <p class="hero-desc">旅行・料理・買い物・DIY・家電・健康——あなたの生活のあらゆる場面を、専門AIがサポートします。</p>
+    <div class="hero-cta">
+      <button class="btn btn-gold btn-lg" onclick="location.href='register.html'">
+        ✦ 無料で始める
+      </button>
+      <button class="btn btn-ghost btn-lg" onclick="document.getElementById('services').scrollIntoView({behavior:'smooth'})">
+        サービスを見る →
+      </button>
+    </div>
+    <div class="demo-bar">
+      <div class="demo-title">デモでログイン</div>
+      <div class="demo-btns">
+        <button class="demo-btn" onclick="demoLogin('free')">Freeプランで体験</button>
+        <button class="demo-btn" onclick="demoLogin('pro')">Proプランで体験</button>
+        <button class="demo-btn" onclick="demoLogin('master')">Masterプランで体験</button>
+      </div>
+    </div>
+  </div>
+  <div class="hero-scroll">
+    SCROLL
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat-item"><div class="stat-num">7</div><div class="stat-label">専門AIアシスタント</div></div>
+  <div class="stat-item"><div class="stat-num">98%</div><div class="stat-label">ユーザー満足度</div></div>
+  <div class="stat-item"><div class="stat-num">24h</div><div class="stat-label">いつでも利用可能</div></div>
+  <div class="stat-item"><div class="stat-num">¥0</div><div class="stat-label">無料プランあり</div></div>
+</div>
+
+<!-- AI SERVICES -->
+<section id="services">
+  <div class="section-badge">AI Services</div>
+  <div class="section-title">7つの<span class="grad">専門AI</span>が<br>あなたをサポート</div>
+  <p class="section-desc">それぞれの分野に特化したAIが、深い知識と豊富な提案であなたの生活を豊かにします。</p>
+  <div class="ai-grid">
+    <div class="ai-card" style="--card-bg:rgba(100,149,237,.15);--card-glow:rgba(100,149,237,.12)">
+      <div class="ai-icon" style="background:rgba(100,149,237,.15)">✈️</div>
+      <div class="ai-name">旅行 AI</div>
+      <div class="ai-desc">行き先提案から旅程作成、ホテル手配まで。夢の旅をトータルサポートします。</div>
+      <div class="ai-tag">ホテル予約連携</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(255,165,0,.15);--card-glow:rgba(255,165,0,.12)">
+      <div class="ai-icon" style="background:rgba(255,165,0,.15)">🍳</div>
+      <div class="ai-name">料理 AI</div>
+      <div class="ai-desc">食材から献立提案、詳しいレシピ解説まで。食卓を豊かにするアイデアが満載。</div>
+      <div class="ai-tag">買い物リスト生成</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(50,205,50,.15);--card-glow:rgba(50,205,50,.12)">
+      <div class="ai-icon" style="background:rgba(50,205,50,.15)">🛍️</div>
+      <div class="ai-name">買い物 AI</div>
+      <div class="ai-desc">商品比較から最安値検索、まとめ買いアドバイスまで。賢い消費をお手伝い。</div>
+      <div class="ai-tag">決済機能連携</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(255,99,71,.15);--card-glow:rgba(255,99,71,.12)">
+      <div class="ai-icon" style="background:rgba(255,99,71,.15)">🔨</div>
+      <div class="ai-name">DIY AI</div>
+      <div class="ai-desc">修繕・作成・改造。手順を分かりやすく解説し、必要な道具もリストアップ。</div>
+      <div class="ai-tag">材料リスト生成</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(147,112,219,.15);--card-glow:rgba(147,112,219,.12)">
+      <div class="ai-icon" style="background:rgba(147,112,219,.15)">📺</div>
+      <div class="ai-name">家電・インテリア AI</div>
+      <div class="ai-desc">家電選びから部屋コーディネートまで。理想の暮らしをデザインします。</div>
+      <div class="ai-tag">商品紹介連携</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(0,206,209,.15);--card-glow:rgba(0,206,209,.12)">
+      <div class="ai-icon" style="background:rgba(0,206,209,.15)">💚</div>
+      <div class="ai-name">健康 AI</div>
+      <div class="ai-desc">体の悩みに寄り添い、生活習慣改善のアドバイスを提案します。※医療診断は行いません。</div>
+      <div class="ai-tag">ウェルネス特化</div>
+    </div>
+    <div class="ai-card" style="--card-bg:rgba(201,168,76,.15);--card-glow:rgba(201,168,76,.2);border-color:rgba(201,168,76,.2)">
+      <div class="ai-icon" style="background:linear-gradient(135deg,rgba(201,168,76,.2),rgba(201,168,76,.08))">✦</div>
+      <div class="ai-name">総合型チャット AI</div>
+      <div class="ai-desc">何でも相談OK。会話の内容を分析して、最適な専門AIへシームレスに案内します。</div>
+      <div class="ai-tag">全AI統合</div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" class="pricing-section">
+  <div class="section-badge" style="margin:0 auto 16px;display:table">Pricing</div>
+  <div class="section-title" style="text-align:center">シンプルな<span class="grad">料金プラン</span></div>
+  <p class="section-desc" style="text-align:center;margin:0 auto 44px">まずは無料から。必要に応じてアップグレードできます。</p>
+  <div class="plan-grid">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">¥0<span>/月</span></div>
+      <div class="plan-cycle">毎月自動更新</div>
+      <ul class="plan-feat">
+        <li><span class="ck">✦</span>月10回の会話</li>
+        <li><span class="ck">✦</span>全AIアシスタント利用可</li>
+        <li><span class="ck">✦</span>基本機能すべて</li>
+        <li style="opacity:.35"><span class="ck">—</span>買い物・ホテル予約</li>
+        <li style="opacity:.35"><span class="ck">—</span>優先サポート</li>
+      </ul>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="location.href='register.html?plan=free'">無料で始める</button>
+    </div>
+    <div class="plan featured">
+      <div class="plan-badge">人気 No.1</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">¥980<span>/月</span></div>
+      <div class="plan-cycle">毎月自動更新</div>
+      <ul class="plan-feat">
+        <li><span class="ck">✦</span>月50回の会話</li>
+        <li><span class="ck">✦</span>全AIアシスタント利用可</li>
+        <li><span class="ck">✦</span>買い物・ホテル予約連携</li>
+        <li><span class="ck">✦</span>会話履歴保存</li>
+        <li style="opacity:.35"><span class="ck">—</span>優先サポート</li>
+      </ul>
+      <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="location.href='register.html?plan=pro'">Proで始める</button>
+    </div>
+    <div class="plan">
+      <div class="plan-name">Master</div>
+      <div class="plan-price">¥2,980<span>/月</span></div>
+      <div class="plan-cycle">毎月自動更新</div>
+      <ul class="plan-feat">
+        <li><span class="ck">✦</span>月200回の会話</li>
+        <li><span class="ck">✦</span>全AIアシスタント利用可</li>
+        <li><span class="ck">✦</span>全機能アンロック</li>
+        <li><span class="ck">✦</span>優先サポート</li>
+        <li><span class="ck">✦</span>従量課金対応</li>
+      </ul>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="location.href='register.html?plan=master'">Masterで始める</button>
+    </div>
+  </div>
+  <p style="text-align:center;margin-top:22px;font-size:12px;color:rgba(232,228,220,.3)">会話制限到達後は従量課金（1回 ¥50）または上位プランへのアップグレードが可能です</p>
+</section>
+
+<!-- TESTIMONIALS -->
+<section id="reviews">
+  <div class="section-badge">Reviews</div>
+  <div class="section-title">ユーザーの<span class="grad">声</span></div>
+  <p class="section-desc" style="margin-bottom:36px">実際にお使いの方々からいただいた声をご紹介します。</p>
+  <div class="test-grid">
+    <div class="test-card">
+      <div class="test-stars">★★★★★</div>
+      <div class="test-text">旅行AIがすごく役立ちました。プランを入力するだけで詳細な旅程を作ってくれて、ホテルの候補まで出してくれるのが便利すぎる。</div>
+      <div class="test-author">
+        <div class="test-avatar">山</div>
+        <div><div class="test-name">山田 花子</div><div class="test-meta">Proプラン利用中・旅行好き</div></div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-stars">★★★★★</div>
+      <div class="test-text">料理AIのおかげで毎日の献立に困らなくなりました。冷蔵庫の余り物を入力するだけでレシピを考えてくれます。</div>
+      <div class="test-author">
+        <div class="test-avatar" style="background:linear-gradient(135deg,#ff6b6b,#ffa07a)">佐</div>
+        <div><div class="test-name">佐藤 太郎</div><div class="test-meta">Freeプラン利用中・料理初心者</div></div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-stars">★★★★☆</div>
+      <div class="test-text">家電AIが家のリフォームを考えるのにめちゃくちゃ助かった。予算と好みを入れるだけで具体的な商品を提案してくれる。</div>
+      <div class="test-author">
+        <div class="test-avatar" style="background:linear-gradient(135deg,#4ecdc4,#45b7d1)">鈴</div>
+        <div><div class="test-name">鈴木 一郎</div><div class="test-meta">Masterプラン利用中</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div style="position:relative;z-index:2">
+    <div class="section-badge" style="margin:0 auto 16px;display:table">Get Started</div>
+    <div class="section-title" style="text-align:center;margin-bottom:16px">今すぐ<span class="grad">無料</span>で始めよう</div>
+    <p style="font-size:13.5px;color:var(--muted);text-align:center;margin-bottom:32px">登録は1分。クレジットカード不要。</p>
+    <div style="display:flex;gap:11px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-gold btn-lg" onclick="location.href='register.html'">✦ 無料アカウントを作成</button>
+      <button class="btn btn-ghost btn-lg" onclick="location.href='login.html'">ログインする</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">✦ Lumina</div>
+  <div class="footer-links">
+    <a href="#">利用規約</a>
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">特定商取引法</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <div class="footer-copy">© 2025 Lumina AI. All rights reserved.</div>
+</footer>
+
+<script>
+// Nav scroll effect
+window.addEventListener('scroll',()=>{
+  document.getElementById('nav').classList.toggle('scrolled',scrollY>40)
+})
+
+// Demo login
+function demoLogin(plan){
+  const user={name:'デモユーザー',email:'demo@lumina.ai',plan}
+  const limits={free:10,pro:50,master:200}
+  const used={free:7,pro:23,master:45}
+  localStorage.setItem('lu_user',JSON.stringify({...user,limit:limits[plan],used:used[plan]}))
+  location.href='dashboard.html'
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>プラン・課金 — Lumina AI</title>
+<style>
+.plan-card{border:2px solid var(--border);border-radius:18px;padding:22px;position:relative;transition:all .2s;background:var(--surface)}
+.plan-card.current{border-color:var(--gold2);box-shadow:0 0 0 1px var(--gold2),0 8px 30px rgba(201,168,76,.1)}
+.plan-card.recommended{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb,0 8px 30px rgba(37,99,235,.08)}
+.plan-badge-top{position:absolute;top:-11px;left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:700;padding:3px 14px;border-radius:99px;white-space:nowrap}
+.plan-badge-top.curr{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink)}
+.plan-badge-top.rec{background:#2563eb;color:#fff}
+.plan-name{font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--ink);margin-bottom:4px}
+.plan-price{font-family:'Fraunces',serif;font-size:38px;font-weight:900;color:var(--gold);letter-spacing:-.04em;line-height:1;margin-bottom:3px}
+.plan-price span{font-size:13px;font-weight:400;color:var(--muted)}
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:8px;margin:16px 0}
+.feat-list li{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted)}
+.feat-check{font-size:11px;flex-shrink:0;margin-top:2px}
+.feat-check.ok{color:var(--success)}.feat-check.no{color:var(--subtle)}
+.history-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--cream2);font-size:12.5px}
+.history-row:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div class="app-layout">
+  <div id="sidebar-root"></div>
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body wide" style="animation:fadeUp .3s ease both">
+      <div class="tabs">
+        <button class="tb active" onclick="showTab('plans',this)">プラン比較</button>
+        <button class="tb" onclick="showTab('billing',this)">請求・支払い</button>
+        <button class="tb" onclick="showTab('usage',this)">利用履歴</button>
+      </div>
+
+      <!-- Plans Tab -->
+      <div id="tab-plans">
+        <div class="ph">
+          <div class="pt">プランを選ぶ</div>
+          <div id="current-plan-note"></div>
+        </div>
+        <div class="grid3" style="gap:16px;margin-bottom:22px" id="plan-cards"></div>
+
+        <!-- Pay as you go -->
+        <div class="card" style="background:linear-gradient(135deg,var(--ink),var(--ink2));color:#fff">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">
+            <div>
+              <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;margin-bottom:4px">従量課金</div>
+              <div style="font-size:12.5px;color:rgba(255,255,255,.5);max-width:400px;line-height:1.6">
+                月間制限に達した後でも、1回¥50で会話を続けられます。使いすぎの心配がなく、必要なときだけご利用できます。
+              </div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-family:'Fraunces',serif;font-size:32px;font-weight:900;color:var(--gold3)">¥50<span style="font-size:13px;font-weight:400;color:rgba(255,255,255,.4)">/回</span></div>
+              <button class="btn btn-gold btn-sm" style="margin-top:6px" onclick="enablePayG()">従量課金を有効にする</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billing Tab -->
+      <div id="tab-billing" style="display:none">
+        <div class="grid2" style="gap:18px">
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <div class="st">現在の支払い方法</div>
+              <div style="display:flex;align-items:center;gap:11px;padding:11px;background:var(--cream2);border-radius:var(--r);margin-bottom:12px">
+                <div style="width:44px;height:28px;background:#1a1f71;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700">VISA</div>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600">•••• •••• •••• 4242</div>
+                  <div style="font-size:11px;color:var(--muted)">有効期限: 12/27</div>
+                </div>
+                <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="changeCard()">変更</button>
+              </div>
+              <button class="btn btn-g btn-sm" onclick="addCard()">+ 別のカードを追加</button>
+            </div>
+            <div class="card">
+              <div class="st">次回請求</div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-size:12.5px;color:var(--muted)">次回請求日</div>
+                  <div style="font-size:13px;font-weight:600;color:var(--ink)">2025年6月1日</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:12.5px;color:var(--muted)">請求額</div>
+                  <div id="next-billing" style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--gold)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="st">請求履歴</div>
+            <div id="billing-history"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Usage Tab -->
+      <div id="tab-usage" style="display:none">
+        <div class="card" style="margin-bottom:18px">
+          <div class="st">今月の利用状況</div>
+          <div id="usage-detail-full"></div>
+        </div>
+        <div class="card">
+          <div class="st">AI別使用回数（今月）</div>
+          <div id="ai-usage-chart"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const user = requireAuth()
+if(user) init()
+
+function init() {
+  document.getElementById('sidebar-root').innerHTML = buildSidebar('plan')
+  document.getElementById('header-root').innerHTML = buildHeader('プラン・課金', 'プランの確認・変更')
+
+  const plan = getPlanInfo(user.plan)
+  const upgradeParam = new URLSearchParams(location.search).get('upgrade')
+  if(upgradeParam) {
+    document.querySelectorAll('.tb')[0].click()
+    toast(`${PLANS[upgradeParam].name}プランへのアップグレード画面です`, '')
+  }
+
+  document.getElementById('current-plan-note').innerHTML = `
+    <div class="alert a-i" style="margin:0"><span class="alert-icon">ℹ</span>現在のプラン: <strong>${plan.name}</strong> (¥${plan.price.toLocaleString()}/月・月${plan.limit}回)</div>`
+
+  // Plan cards
+  const planOrder = ['free','pro','master']
+  document.getElementById('plan-cards').innerHTML = planOrder.map(p => {
+    const info = PLANS[p]
+    const isCurrent = user.plan === p
+    const isRec = p === 'pro' && user.plan === 'free'
+    const feats = {
+      free: [{ok:true,t:'月10回の会話'},{ok:true,t:'全AIアシスタント'},{ok:false,t:'ホテル・決済連携'},{ok:false,t:'会話履歴保存'}],
+      pro:  [{ok:true,t:'月50回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'ホテル・決済連携'},{ok:true,t:'会話履歴保存'},{ok:false,t:'優先サポート'}],
+      master:[{ok:true,t:'月200回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'全機能アンロック'},{ok:true,t:'優先サポート'},{ok:true,t:'従量課金対応'}],
+    }
+    return `
+      <div class="plan-card${isCurrent?' current':isRec?' recommended':''}">
+        ${isCurrent?'<div class="plan-badge-top curr">現在のプラン</div>':isRec?'<div class="plan-badge-top rec">おすすめ</div>':''}
+        <div class="plan-name">${info.name}</div>
+        <div class="plan-price">¥${info.price.toLocaleString()}<span>/月</span></div>
+        <div style="font-size:11px;color:var(--subtle)">月${info.limit}回まで</div>
+        <ul class="feat-list">
+          ${feats[p].map(f=>`<li><span class="feat-check ${f.ok?'ok':'no'}">${f.ok?'✓':'—'}</span>${f.t}</li>`).join('')}
+        </ul>
+        ${isCurrent
+          ? `<button class="btn btn-g btn-w" disabled>現在のプラン</button>`
+          : user.plan !== 'free' && p === 'free'
+          ? `<button class="btn btn-g btn-w" onclick="changePlan('${p}')">ダウングレード</button>`
+          : `<button class="btn btn-${p==='pro'?'p':'gold'} btn-w" onclick="changePlan('${p}')">${PLANS[user.plan].price < info.price ? 'アップグレード' : 'プランを変更'}</button>`}
+      </div>`
+  }).join('')
+
+  // Billing
+  document.getElementById('next-billing').textContent = `¥${plan.price.toLocaleString()}`
+  const months = ['2025年4月','2025年3月','2025年2月','2025年1月']
+  document.getElementById('billing-history').innerHTML = months.map((m,i) => `
+    <div class="history-row">
+      <div><div style="font-size:12.5px;color:var(--ink3)">${m}</div><div style="font-size:11px;color:var(--subtle)">${plan.name}プラン</div></div>
+      <div style="text-align:right"><div style="font-weight:600">¥${plan.price.toLocaleString()}</div><button class="btn btn-g btn-sm">領収書</button></div>
+    </div>`).join('')
+
+  // Usage detail
+  const pct = getUsagePct(user)
+  const progCls = pct>=90?'dngr':pct>=70?'warn':''
+  document.getElementById('usage-detail-full').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span>今月の会話数: <strong>${user.used} / ${user.limit}回</strong></span>
+      <span class="badge ${pct>=90?'b-red':pct>=70?'b-gold':'b-green'}">${pct}% 使用</span>
+    </div>
+    <div class="prog-wrap" style="height:10px"><div class="prog ${progCls}" style="width:${pct}%"></div></div>
+    <div style="font-size:11px;color:var(--subtle);margin-top:6px">残り${user.limit-user.used}回 · 月末リセット</div>`
+
+  // AI usage bars
+  const aiUsage = [
+    {name:'総合AI',used:Math.round(user.used*.3),icon:'✦'},
+    {name:'旅行AI',used:Math.round(user.used*.25),icon:'✈️'},
+    {name:'料理AI',used:Math.round(user.used*.2),icon:'🍳'},
+    {name:'買い物AI',used:Math.round(user.used*.12),icon:'🛍️'},
+    {name:'健康AI',used:Math.round(user.used*.08),icon:'💚'},
+    {name:'家電AI',used:Math.round(user.used*.05),icon:'📺'},
+  ]
+  document.getElementById('ai-usage-chart').innerHTML = aiUsage.map(a => `
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+      <div style="width:60px;font-size:12px;color:var(--muted);white-space:nowrap">${a.icon} ${a.name}</div>
+      <div class="prog-wrap" style="flex:1"><div class="prog" style="width:${Math.round(a.used/user.used*100||0)}%"></div></div>
+      <div style="width:30px;text-align:right;font-size:12px;font-weight:600;color:var(--ink3)">${a.used}回</div>
+    </div>`).join('')
+}
+
+function showTab(id, btn) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none')
+  document.getElementById('tab-'+id).style.display='block'
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'))
+  btn.classList.add('active')
+}
+
+function changePlan(plan) {
+  const info = PLANS[plan]
+  const isUp = info.price > PLANS[user.plan].price
+  showModal({
+    title: isUp ? `${info.name}にアップグレード` : `${info.name}にダウングレード`,
+    body: `<p style="font-size:12.5px;color:var(--muted);line-height:1.7">
+      <strong>${PLANS[user.plan].name}</strong> → <strong>${info.name}</strong>へのプラン変更です。<br>
+      月額: ¥${info.price.toLocaleString()} · 月${info.limit}回まで会話可能<br>
+      ${isUp?'即日適用されます。':'次回更新日より適用されます。'}
+    </p>`,
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:`${info.name}に変更`, cls:'btn-gold', fn:`applyPlan('${plan}')`},
+    ]
+  })
+}
+
+function applyPlan(plan) {
+  const info = PLANS[plan]
+  user.plan = plan; user.limit = info.limit
+  setUser(user)
+  closeModal()
+  toast(`${info.name}プランに変更しました！`, 's')
+  setTimeout(()=>location.reload(), 800)
+}
+
+function enablePayG() {
+  toast('従量課金を有効にしました。制限到達後、¥50/回で会話できます。', 's')
+}
+
+function changeCard() {
+  showModal({
+    title:'カードを変更',
+    body:`<div class="field"><label class="lbl">新しいカード番号</label><input class="inp" placeholder="1234 5678 9012 3456"></div><div class="row2"><div class="field"><label class="lbl">有効期限</label><input class="inp" placeholder="MM/YY"></div><div class="field"><label class="lbl">CVV</label><input class="inp" placeholder="123"></div></div>`,
+    actions:[{label:'キャンセル',cls:'btn-g',fn:'closeModal()'},{label:'更新',cls:'btn-gold',fn:"toast('カードを更新しました','s');closeModal()"}]
+  })
+}
+function addCard() { changeCard() }
+</script>
+</body>
+</html>

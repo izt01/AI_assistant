@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>買い物リスト — Lumina AI</title>
+<style>
+.item-row{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);margin-bottom:8px;transition:all .15s}
+.item-row.done{opacity:.5;text-decoration:line-through}
+.item-row:hover{border-color:var(--gold2);background:rgba(201,168,76,.02)}
+.item-check{width:20px;height:20px;border-radius:5px;border:2px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.item-check.ck{background:var(--success);border-color:var(--success);color:#fff}
+.product-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;cursor:pointer;transition:all .2s}
+.product-card:hover{border-color:var(--gold2);transform:translateY(-2px);box-shadow:0 6px 20px rgba(201,168,76,.1)}
+.product-img{height:120px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:36px}
+.product-body{padding:13px}
+.product-name{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px;line-height:1.4}
+.product-price{font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--gold)}
+.tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;margin-right:4px}
+.tag-new{background:#dbeafe;color:#1d4ed8}
+.tag-sale{background:#fee2e2;color:#991b1b}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div class="app-layout">
+  <div id="sidebar-root"></div>
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body" style="max-width:900px;animation:fadeUp .3s ease both">
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tb active" onclick="showTab('list',this)">📋 買い物リスト</button>
+        <button class="tb" onclick="showTab('products',this)">🛍️ おすすめ商品</button>
+        <button class="tb" onclick="showTab('payment',this)">💳 決済</button>
+      </div>
+
+      <!-- Shopping List Tab -->
+      <div id="tab-list">
+        <div class="ph">
+          <div>
+            <div class="pt">買い物リスト</div>
+            <div class="ps">料理AIが生成した今週の必要食材</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-g btn-sm" onclick="addItemPrompt()">+ 追加</button>
+            <button class="btn btn-gold btn-sm" onclick="showTab('payment',document.querySelectorAll('.tb')[2])">決済へ進む →</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div class="st">野菜・果物</div>
+          <div id="list-veg"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="st">肉・魚</div>
+          <div id="list-meat"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="st">調味料・その他</div>
+          <div id="list-other"></div>
+        </div>
+
+        <div class="card" style="text-align:center;background:var(--cream2)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:3px">小計（未チェック）</div>
+          <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)" id="subtotal">¥4,280</div>
+          <div style="font-size:11px;color:var(--subtle);margin-top:3px">18品目</div>
+        </div>
+      </div>
+
+      <!-- Products Tab -->
+      <div id="tab-products" style="display:none">
+        <div class="ph">
+          <div>
+            <div class="pt">AIおすすめ商品</div>
+            <div class="ps">買い物AIがあなたのニーズに合わせてセレクト</div>
+          </div>
+          <select class="sel" style="width:auto;font-size:12px">
+            <option>すべてのカテゴリ</option>
+            <option>家電</option>
+            <option>キッチン用品</option>
+            <option>日用品</option>
+          </select>
+        </div>
+        <div class="grid3" style="gap:14px" id="product-grid"></div>
+      </div>
+
+      <!-- Payment Tab -->
+      <div id="tab-payment" style="display:none">
+        <div class="ph">
+          <div class="pt">決済情報入力</div>
+        </div>
+        <div class="grid2" style="gap:18px">
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <div class="st">注文内容確認</div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px" id="order-items"></div>
+              <div class="sep"></div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:4px"><span>小計</span><span>¥4,280</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:4px"><span>配送料</span><span>¥350</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:var(--ink);margin-top:8px"><span>合計</span><span style="color:var(--gold)">¥4,630</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="st">お支払い方法</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+              <label class="check-row"><input type="radio" name="pay" checked style="accent-color:var(--gold2)"> クレジットカード</label>
+              <label class="check-row"><input type="radio" name="pay" style="accent-color:var(--gold2)"> コンビニ払い</label>
+              <label class="check-row"><input type="radio" name="pay" style="accent-color:var(--gold2)"> 銀行振込</label>
+            </div>
+            <div class="field"><label class="lbl">カード番号<span class="req">*</span></label><input class="inp" placeholder="1234 5678 9012 3456" oninput="this.value=this.value.replace(/\D/g,'').replace(/(.{4})/g,'$1 ').trim().substring(0,19)"></div>
+            <div class="row2">
+              <div class="field"><label class="lbl">有効期限</label><input class="inp" placeholder="MM/YY" maxlength="5"></div>
+              <div class="field"><label class="lbl">CVV</label><input class="inp" placeholder="123" maxlength="4"></div>
+            </div>
+            <div class="field"><label class="lbl">カード名義</label><input class="inp" placeholder="HANAKO YAMADA"></div>
+            <button class="btn btn-gold btn-w btn-lg" onclick="processPayment()">¥4,630 を支払う →</button>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;font-size:11px;color:var(--subtle)">
+              🔒 SSL暗号化通信
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const user = requireAuth()
+if(user) {
+  document.getElementById('sidebar-root').innerHTML = buildSidebar('chat-shopping')
+  document.getElementById('header-root').innerHTML = buildHeader('買い物リスト・決済', '料理 AI / 買い物 AI からの提案')
+}
+
+// Shopping list data
+const listData = {
+  veg: ['玉ねぎ（3個）','にんじん（2本）','じゃがいも（4個）','ほうれん草（1袋）','トマト（4個）'],
+  meat: ['鶏もも肉（400g）','豚バラ肉（300g）','卵（10個）','牛ひき肉（200g）'],
+  other: ['醤油（1本）','みりん（1本）','だし汁パック','サラダ油','塩・コショウ'],
+}
+
+let checked = new Set()
+
+function renderList(id, items, category) {
+  document.getElementById(id).innerHTML = items.map((item, i) => {
+    const key = category+i
+    const isDone = checked.has(key)
+    return `<div class="item-row${isDone?' done':''}" id="ir-${key}">
+      <div class="item-check${isDone?' ck':''}" id="ic-${key}" onclick="toggleItem('${key}')">
+        ${isDone?'✓':''}
+      </div>
+      <span style="flex:1;font-size:13px">${item}</span>
+      <button class="btn btn-g btn-sm" onclick="removeItem('${key}',this)">✕</button>
+    </div>`
+  }).join('')
+}
+
+renderList('list-veg', listData.veg, 'v')
+renderList('list-meat', listData.meat, 'm')
+renderList('list-other', listData.other, 'o')
+
+function toggleItem(key) {
+  if(checked.has(key)) checked.delete(key)
+  else checked.add(key)
+  const row = document.getElementById('ir-'+key)
+  const ic = document.getElementById('ic-'+key)
+  row.classList.toggle('done', checked.has(key))
+  ic.classList.toggle('ck', checked.has(key))
+  ic.textContent = checked.has(key) ? '✓' : ''
+}
+
+function removeItem(key, btn) { btn.closest('.item-row').remove() }
+
+function addItemPrompt() {
+  showModal({
+    title: '商品を追加',
+    body: '<div class="field"><label class="lbl">商品名</label><input class="inp" id="new-item" placeholder="例：牛乳（1本）" autofocus></div>',
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:'追加', cls:'btn-gold', fn:'addItemDone()'},
+    ]
+  })
+}
+
+function addItemDone() {
+  const val = document.getElementById('new-item')?.value
+  if(val) {
+    const div = document.createElement('div')
+    div.className='item-row'
+    div.innerHTML=`<div class="item-check"></div><span style="flex:1;font-size:13px">${val}</span><button class="btn btn-g btn-sm" onclick="this.closest('.item-row').remove()">✕</button>`
+    document.getElementById('list-other').appendChild(div)
+    toast('追加しました', 's')
+  }
+  closeModal()
+}
+
+// Products
+const products = [
+  {icon:'🫖',name:'電気ケトル Pro 1.0L',tag:'new',price:'¥4,980',cat:'家電'},
+  {icon:'🍳',name:'IHクッキングヒーター 2口',tag:'sale',price:'¥12,800',cat:'家電'},
+  {icon:'🧹',name:'コードレスクリーナー',tag:'',price:'¥24,500',cat:'家電'},
+  {icon:'🥣',name:'ホーロー鍋 22cm',tag:'',price:'¥6,200',cat:'キッチン'},
+  {icon:'🫙',name:'保存容器セット 10点',tag:'sale',price:'¥1,980',cat:'日用品'},
+  {icon:'🧴',name:'食器用洗剤 詰め替えセット',tag:'',price:'¥880',cat:'日用品'},
+]
+
+document.getElementById('product-grid').innerHTML = products.map(p => `
+  <div class="product-card" onclick="addToCart('${p.name}','${p.price}')">
+    <div class="product-img">${p.icon}</div>
+    <div class="product-body">
+      ${p.tag?`<span class="tag tag-${p.tag}">${p.tag==='new'?'NEW':'SALE'}</span>`:''}
+      <div class="product-name">${p.name}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <div class="product-price">${p.price}</div>
+        <button class="btn btn-gold btn-sm" onclick="event.stopPropagation();addToCart('${p.name}','${p.price}')">カートへ</button>
+      </div>
+    </div>
+  </div>`).join('')
+
+let cart = []
+function addToCart(name, price) {
+  cart.push({name, price})
+  toast(`${name} をカートに追加しました`, 's')
+  updateOrderItems()
+}
+
+function updateOrderItems() {
+  document.getElementById('order-items').innerHTML = cart.slice(0,3).map(c=>`
+    <div style="display:flex;justify-content:space-between;font-size:12.5px">
+      <span style="color:var(--ink3)">${c.name}</span>
+      <span style="font-weight:600;color:var(--ink)">${c.price}</span>
+    </div>`).join('') + (cart.length===0?'<div style="font-size:12px;color:var(--subtle);text-align:center;padding:10px">カートは空です</div>':'')
+}
+updateOrderItems()
+
+// Prefill some order items
+cart = [{name:'鶏もも肉 400g',price:'¥488'},{name:'玉ねぎ 3個',price:'¥218'},{name:'その他食材',price:'¥3,574'}]
+updateOrderItems()
+
+function showTab(id, btn) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none')
+  document.getElementById('tab-'+id).style.display='block'
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'))
+  btn.classList.add('active')
+}
+
+function processPayment() {
+  const card = document.querySelector('#tab-payment input[placeholder*="1234"]').value
+  if(!card || card.replace(/\s/g,'').length < 16) { toast('カード番号を正しく入力してください', 'd'); return }
+  showModal({
+    title: '決済を確認',
+    body: '<p style="font-size:12.5px;color:var(--muted);line-height:1.7">¥4,630 の決済を行います。よろしいですか？</p>',
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:'支払う', cls:'btn-gold', fn:'paymentDone()'},
+    ]
+  })
+}
+
+function paymentDone() {
+  closeModal()
+  toast('決済が完了しました！ご注文ありがとうございます 🎉', 's')
+  setTimeout(()=>location.href='dashboard.html', 2000)
+}
+</script>
+</body>
+</html>

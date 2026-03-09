@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>プロフィール — Lumina AI</title>
+<style>
+.pref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.pref-chip{border:1.5px solid var(--border);border-radius:99px;padding:6px 14px;font-size:12px;cursor:pointer;transition:all .16s;text-align:center;color:var(--muted);background:var(--surface)}
+.pref-chip.sel{border-color:var(--gold2);background:rgba(201,168,76,.06);color:var(--gold);font-weight:600}
+.avatar-big{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div class="app-layout">
+  <div id="sidebar-root"></div>
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body narrow" style="animation:fadeUp .3s ease both">
+      <div class="tabs">
+        <button class="tb active" onclick="showTab('profile',this)">基本情報</button>
+        <button class="tb" onclick="showTab('prefs',this)">趣味・嗜好（任意）</button>
+        <button class="tb" onclick="showTab('notif',this)">通知設定</button>
+        <button class="tb" onclick="showTab('security',this)">セキュリティ</button>
+      </div>
+
+      <!-- Profile Tab -->
+      <div id="tab-profile">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+          <div class="avatar-big" id="av-big">?</div>
+          <div>
+            <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--ink)" id="pf-name-disp"></div>
+            <div style="font-size:12px;color:var(--muted)" id="pf-email-disp"></div>
+            <div id="pf-plan-disp" style="margin-top:3px"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">基本情報</div>
+          <div class="field"><label class="lbl">お名前<span class="req">*</span></label><input class="inp" id="pf-name" placeholder="山田 花子"></div>
+          <div class="field"><label class="lbl">メールアドレス<span class="req">*</span></label><input class="inp" id="pf-email" type="email" placeholder="you@example.com"></div>
+          <div class="row2">
+            <div class="field"><label class="lbl">生年月日</label><input class="inp" type="date" id="pf-dob"></div>
+            <div class="field"><label class="lbl">性別</label>
+              <select class="sel" id="pf-gender"><option value="">—</option><option>男性</option><option>女性</option><option>その他</option><option>未回答</option></select>
+            </div>
+          </div>
+          <div class="field"><label class="lbl">居住地域</label>
+            <select class="sel" id="pf-region"><option value="">—</option>
+              <option>北海道</option><option>東北</option><option>関東</option><option>中部</option><option>近畿</option><option>中国・四国</option><option>九州・沖縄</option>
+            </select>
+          </div>
+          <button class="btn btn-gold" onclick="saveProfile()">保存する</button>
+        </div>
+      </div>
+
+      <!-- Preferences Tab -->
+      <div id="tab-prefs" style="display:none">
+        <div class="info-box">
+          <strong>趣味・嗜好の登録は任意です。</strong><br>
+          登録することで、AIがあなたの好みを理解してより精度の高いアドバイスをご提供できます。
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">興味のある分野</div>
+          <div class="pref-grid" id="pref-interest">
+            <div class="pref-chip" onclick="togglePref(this)">🍳 料理</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">✈️ 旅行</div>
+            <div class="pref-chip" onclick="togglePref(this)">🔨 DIY</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">📺 家電</div>
+            <div class="pref-chip" onclick="togglePref(this)">💚 健康</div>
+            <div class="pref-chip" onclick="togglePref(this)">📚 読書</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">🏃 運動</div>
+            <div class="pref-chip" onclick="togglePref(this)">🎮 ゲーム</div>
+            <div class="pref-chip" onclick="togglePref(this)">🎵 音楽</div>
+            <div class="pref-chip" onclick="togglePref(this)">🎨 アート</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">食の好み</div>
+          <div class="field"><label class="lbl">アレルギー・食べられないもの</label><input class="inp" placeholder="例：甲殻類、乳製品"></div>
+          <div class="pref-grid">
+            <div class="pref-chip sel" onclick="togglePref(this)">和食</div>
+            <div class="pref-chip" onclick="togglePref(this)">洋食</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">中華</div>
+            <div class="pref-chip" onclick="togglePref(this)">イタリアン</div>
+            <div class="pref-chip" onclick="togglePref(this)">エスニック</div>
+            <div class="pref-chip" onclick="togglePref(this)">ベジタリアン</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">旅行スタイル</div>
+          <div class="pref-grid">
+            <div class="pref-chip sel" onclick="togglePref(this)">観光地巡り</div>
+            <div class="pref-chip" onclick="togglePref(this)">グルメ旅</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">温泉・旅館</div>
+            <div class="pref-chip" onclick="togglePref(this)">アドベンチャー</div>
+            <div class="pref-chip" onclick="togglePref(this)">ゆっくり休養</div>
+            <div class="pref-chip" onclick="togglePref(this)">バックパック</div>
+          </div>
+          <div class="field" style="margin-top:10px"><label class="lbl">予算感（1泊）</label>
+            <select class="sel"><option>〜¥10,000</option><option selected>〜¥20,000</option><option>〜¥30,000</option><option>制限なし</option></select>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">健康・ライフスタイル</div>
+          <div class="pref-grid">
+            <div class="pref-chip" onclick="togglePref(this)">ダイエット中</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">筋トレ</div>
+            <div class="pref-chip" onclick="togglePref(this)">ヨガ</div>
+            <div class="pref-chip" onclick="togglePref(this)">ランニング</div>
+            <div class="pref-chip sel" onclick="togglePref(this)">ウォーキング</div>
+            <div class="pref-chip" onclick="togglePref(this)">瞑想</div>
+          </div>
+        </div>
+
+        <button class="btn btn-gold btn-lg btn-w" onclick="savePrefs()">嗜好を保存する</button>
+        <button class="btn btn-g btn-sm btn-w" style="margin-top:8px" onclick="skipPrefs()">スキップ（後で設定）</button>
+      </div>
+
+      <!-- Notification Tab -->
+      <div id="tab-notif" style="display:none">
+        <div class="card">
+          <div class="st">通知設定</div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div><div style="font-size:13px;font-weight:600;color:var(--ink)">使用量アラート</div><div style="font-size:11.5px;color:var(--muted)">会話残り回数が少なくなったら通知</div></div>
+              <label class="tog"><input type="checkbox" checked><span class="tog-s"></span></label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div><div style="font-size:13px;font-weight:600;color:var(--ink)">プランの更新</div><div style="font-size:11.5px;color:var(--muted)">月次更新の前日に通知</div></div>
+              <label class="tog"><input type="checkbox" checked><span class="tog-s"></span></label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div><div style="font-size:13px;font-weight:600;color:var(--ink)">新機能のお知らせ</div><div style="font-size:11.5px;color:var(--muted)">新しいAI機能や改善のお知らせ</div></div>
+              <label class="tog"><input type="checkbox"><span class="tog-s"></span></label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div><div style="font-size:13px;font-weight:600;color:var(--ink)">メールマガジン</div><div style="font-size:11.5px;color:var(--muted)">お得な情報や活用ガイドを送信</div></div>
+              <label class="tog"><input type="checkbox"><span class="tog-s"></span></label>
+            </div>
+          </div>
+          <div class="sep"></div>
+          <button class="btn btn-gold" onclick="toast('通知設定を保存しました','s')">保存する</button>
+        </div>
+      </div>
+
+      <!-- Security Tab -->
+      <div id="tab-security" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">パスワード変更</div>
+          <div class="field"><label class="lbl">現在のパスワード<span class="req">*</span></label><input class="inp" type="password" placeholder="現在のパスワード"></div>
+          <div class="field"><label class="lbl">新しいパスワード<span class="req">*</span></label><input class="inp" type="password" placeholder="8文字以上" id="new-pw" oninput="checkPw(this.value)">
+            <div class="pw-bars"><div class="pw-bar" id="b0"></div><div class="pw-bar" id="b1"></div><div class="pw-bar" id="b2"></div><div class="pw-bar" id="b3"></div></div>
+          </div>
+          <div class="field"><label class="lbl">新しいパスワード（確認）<span class="req">*</span></label><input class="inp" type="password" placeholder="もう一度入力"></div>
+          <button class="btn btn-gold" onclick="toast('パスワードを変更しました','s')">変更する</button>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="st">ログインセッション</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">現在ログイン中のデバイス</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:rgba(37,99,235,.04);border:1px solid rgba(37,99,235,.15);border-radius:var(--r)">
+              <div><div style="font-size:12.5px;font-weight:600">Chrome / Mac <span class="badge b-green">現在</span></div><div style="font-size:11px;color:var(--muted)">東京 · 2025-05-01 14:30</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--cream2);border-radius:var(--r)">
+              <div><div style="font-size:12.5px;font-weight:600">Safari / iPhone</div><div style="font-size:11px;color:var(--muted)">東京 · 2025-04-28 09:15</div></div>
+              <button class="btn btn-d btn-sm" onclick="toast('セッションを無効にしました','s')">無効化</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="border-color:var(--danger)">
+          <div class="st" style="color:var(--danger)">危険な操作</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">アカウントを削除すると、すべてのデータが失われます。この操作は取り消せません。</div>
+          <button class="btn btn-d btn-sm" onclick="deleteAccount()">アカウントを削除する</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.tog{position:relative;width:40px;height:22px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tog-s{position:absolute;inset:0;background:var(--border2);border-radius:99px;cursor:pointer;transition:background .18s}
+.tog-s::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.tog input:checked~.tog-s{background:var(--gold2)}
+.tog input:checked~.tog-s::before{transform:translateX(18px)}
+</style>
+
+<script src="shared.js"></script>
+<script>
+let user = null
+
+requireAuth().then(async u => {
+  if(!u) return
+  user = u
+  buildSidebar('profile')
+  buildHeader('プロフィール設定')
+
+  document.getElementById('pf-name').value = user.nickname || ''
+  document.getElementById('pf-email').value = user.email || ''
+  document.getElementById('av-big').textContent = (user.nickname||user.email||'?')[0]
+  document.getElementById('pf-name-disp').textContent = user.nickname || user.email
+  document.getElementById('pf-email-disp').textContent = user.email
+  document.getElementById('pf-plan-disp').innerHTML = `<span class="plan-pill">✦ ${getPlanInfo(user.plan).name}</span>`
+
+  // プロフィール情報を取得してフォームに反映
+  try {
+    const [profileData, prefsData] = await Promise.all([
+      apiRequest('/profile'),
+      apiRequest('/preferences'),
+    ])
+    // プロフィールフィールド
+    if(document.getElementById('pf-area')) document.getElementById('pf-area').value = profileData.area || ''
+    if(document.getElementById('pf-budget')) document.getElementById('pf-budget').value = profileData.monthly_budget || ''
+    if(document.getElementById('pf-household')) document.getElementById('pf-household').value = profileData.household_size || ''
+
+    // 好みのチップを選択状態に
+    const foodLiked = prefsData.food?.liked_cuisines || []
+    document.querySelectorAll('.pref-chip[data-cat="cuisine"]').forEach(el => {
+      if(foodLiked.includes(el.dataset.val)) el.classList.add('sel')
+    })
+    const constraints = prefsData.constraints || {}
+    if(constraints.require_non_smoking && document.getElementById('chk-nonsmoking'))
+      document.getElementById('chk-nonsmoking').checked = true
+    if(constraints.require_stroller_ok && document.getElementById('chk-stroller'))
+      document.getElementById('chk-stroller').checked = true
+    if(constraints.require_pet_ok && document.getElementById('chk-pet'))
+      document.getElementById('chk-pet').checked = true
+    if(constraints.max_meal_budget && document.getElementById('pf-meal-budget'))
+      document.getElementById('pf-meal-budget').value = constraints.max_meal_budget
+  } catch(e) {
+    console.log('プロフィール取得エラー:', e)
+  }
+})
+
+function showTab(id, btn) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none')
+  document.getElementById('tab-'+id).style.display='block'
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'))
+  btn.classList.add('active')
+}
+
+function togglePref(el) { el.classList.toggle('sel') }
+
+async function saveProfile() {
+  const nickname = document.getElementById('pf-name').value.trim()
+  const email    = document.getElementById('pf-email').value.trim()
+  if(!nickname||!email) { toast('必須項目を入力してください','d'); return }
+
+  try {
+    // プロフィール情報を保存
+    const profileUpdate = {}
+    if(document.getElementById('pf-area')) profileUpdate.area = document.getElementById('pf-area').value
+    if(document.getElementById('pf-budget')) profileUpdate.monthly_budget = parseInt(document.getElementById('pf-budget').value)||null
+    if(document.getElementById('pf-household')) profileUpdate.household_size = parseInt(document.getElementById('pf-household').value)||null
+
+    if(Object.keys(profileUpdate).length > 0) {
+      await apiRequest('/profile', {method:'PUT', body:profileUpdate})
+    }
+
+    // ローカルキャッシュを更新
+    if(user) { user.nickname = nickname; setCachedUser(user) }
+    document.getElementById('av-big').textContent = nickname[0]
+    document.getElementById('pf-name-disp').textContent = nickname
+    document.getElementById('pf-email-disp').textContent = email
+    toast('プロフィールを保存しました','s')
+  } catch(e) {
+    toast(e.error||'保存に失敗しました','d')
+  }
+}
+
+async function savePrefs() {
+  try {
+    // 食事の好みチップを収集
+    const likedCuisines = []
+    document.querySelectorAll('.pref-chip[data-cat="cuisine"].sel').forEach(el => {
+      likedCuisines.push(el.dataset.val)
+    })
+
+    // 制約情報を収集
+    const constraints = {}
+    if(document.getElementById('chk-nonsmoking')) constraints.require_non_smoking = document.getElementById('chk-nonsmoking').checked
+    if(document.getElementById('chk-stroller'))   constraints.require_stroller_ok  = document.getElementById('chk-stroller').checked
+    if(document.getElementById('chk-pet'))         constraints.require_pet_ok       = document.getElementById('chk-pet').checked
+    if(document.getElementById('pf-meal-budget'))  constraints.max_meal_budget = parseInt(document.getElementById('pf-meal-budget').value)||null
+
+    await Promise.all([
+      likedCuisines.length > 0 ? apiRequest('/preferences/food',{method:'PUT',body:{liked_cuisines:likedCuisines}}) : Promise.resolve(),
+      Object.keys(constraints).length > 0 ? apiRequest('/preferences/constraints',{method:'PUT',body:constraints}) : Promise.resolve(),
+    ])
+    toast('趣味・嗜好を保存しました！AIがより精度の高い提案をします','s')
+  } catch(e) {
+    toast(e.error||'保存に失敗しました','d')
+  }
+}
+
+function skipPrefs() { location.href='dashboard.html' }
+
+function checkPw(v) {
+  const bars=[0,1,2,3].map(i=>document.getElementById('b'+i))
+  bars.forEach(b=>{b.className='pw-bar'})
+  if(!v) return
+  let s=0
+  if(v.length>=8)s++
+  if(/[A-Z]/.test(v)||/[a-z]/.test(v))s++
+  if(/\d/.test(v))s++
+  if(/[^a-zA-Z\d]/.test(v))s++
+  const cls=['w','w','m','s']
+  for(let i=0;i<s;i++) bars[i].classList.add(cls[s-1])
+}
+
+function deleteAccount() {
+  showModal({
+    title: 'アカウントを削除しますか？',
+    body: '<p style="font-size:12.5px;color:var(--muted);line-height:1.7">この操作は<strong style="color:var(--danger)">取り消せません</strong>。すべての会話履歴、設定、プランが削除されます。</p>',
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:'削除する', cls:'btn-d', fn:'doDelete()'},
+    ]
+  })
+}
+
+function doDelete() {
+  clearToken(); closeModal()
+  toast('アカウントを削除しました','s')
+  setTimeout(()=>location.href='index.html',1200)
+}
+</script>
+</body>
+</html>

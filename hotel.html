@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>ホテル情報入力 — Lumina AI</title>
+<style>
+.hotel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;cursor:pointer;transition:all .2s}
+.hotel-card:hover{border-color:var(--gold2);box-shadow:0 6px 24px rgba(201,168,76,.1);transform:translateY(-2px)}
+.hotel-img{height:140px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-size:40px}
+.hotel-body{padding:14px}
+.hotel-name{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--ink);margin-bottom:3px}
+.hotel-loc{font-size:11.5px;color:var(--muted);margin-bottom:7px}
+.hotel-price{font-family:'Fraunces',serif;font-size:19px;font-weight:900;color:var(--gold)}
+.hotel-price span{font-size:11px;font-weight:400;color:var(--muted)}
+.star{color:#f59e0b;font-size:12px}
+.hotel-sel{border:2px solid var(--gold2);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div class="app-layout">
+  <div id="sidebar-root"></div>
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body" style="max-width:900px;animation:fadeUp .3s ease both">
+      <div class="ph">
+        <div>
+          <div class="pt">ホテル情報入力</div>
+          <div class="ps">旅行AIがご提案するホテルから選択してください</div>
+        </div>
+        <button class="btn btn-g btn-sm" onclick="history.back()">← チャットに戻る</button>
+      </div>
+
+      <!-- Search criteria -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="st">検索条件</div>
+        <div class="grid3" style="gap:12px;margin-bottom:14px">
+          <div class="field" style="margin:0"><label class="lbl">目的地</label><input class="inp" value="京都" id="dest"></div>
+          <div class="field" style="margin:0"><label class="lbl">チェックイン</label><input class="inp" type="date" id="cin" value="2025-05-01"></div>
+          <div class="field" style="margin:0"><label class="lbl">チェックアウト</label><input class="inp" type="date" id="cout" value="2025-05-03"></div>
+        </div>
+        <div class="grid3" style="gap:12px">
+          <div class="field" style="margin:0"><label class="lbl">人数</label><select class="sel"><option>2名</option><option>1名</option><option>3名</option><option>4名</option></select></div>
+          <div class="field" style="margin:0"><label class="lbl">予算（1泊）</label><select class="sel"><option>〜¥10,000</option><option>〜¥20,000</option><option>〜¥30,000</option><option>制限なし</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-gold btn-w" onclick="searchHotels()">🔍 検索</button></div>
+        </div>
+      </div>
+
+      <!-- Hotel results -->
+      <div class="st">AIおすすめホテル <span style="font-size:11px;color:var(--muted);font-weight:400">（3件）</span></div>
+      <div class="grid3" style="gap:14px;margin-bottom:22px" id="hotel-list">
+        <div class="hotel-card" id="h0" onclick="selectHotel(0)">
+          <div class="hotel-img" style="background:linear-gradient(135deg,#f7971e,#ffd200)">🏯</div>
+          <div class="hotel-body">
+            <div class="hotel-name">THE THOUSAND KYOTO</div>
+            <div class="hotel-loc">📍 京都駅直結</div>
+            <div style="margin-bottom:5px"><span class="star">★★★★★</span><span style="font-size:11px;color:var(--muted);margin-left:4px">4.8 (1,240件)</span></div>
+            <div class="hotel-price">¥18,500<span>/泊・2名</span></div>
+          </div>
+        </div>
+        <div class="hotel-card hotel-sel" id="h1" onclick="selectHotel(1)">
+          <div class="hotel-img" style="background:linear-gradient(135deg,#43cea2,#185a9d)">🌸</div>
+          <div class="hotel-body">
+            <div style="position:relative">
+              <div class="hotel-name">京都ブライトンホテル</div>
+              <span class="badge b-gold" style="position:absolute;top:0;right:0">AIおすすめ</span>
+            </div>
+            <div class="hotel-loc">📍 二条城近く</div>
+            <div style="margin-bottom:5px"><span class="star">★★★★★</span><span style="font-size:11px;color:var(--muted);margin-left:4px">4.7 (980件)</span></div>
+            <div class="hotel-price">¥22,000<span>/泊・2名</span></div>
+          </div>
+        </div>
+        <div class="hotel-card" id="h2" onclick="selectHotel(2)">
+          <div class="hotel-img" style="background:linear-gradient(135deg,#ee0979,#ff6a00)">🎋</div>
+          <div class="hotel-body">
+            <div class="hotel-name">嵐山辨慶</div>
+            <div class="hotel-loc">📍 嵐山・渡月橋そば</div>
+            <div style="margin-bottom:5px"><span class="star">★★★★★</span><span style="font-size:11px;color:var(--muted);margin-left:4px">4.9 (560件)</span></div>
+            <div class="hotel-price">¥35,000<span>/泊・2名</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Booking form -->
+      <div class="card" id="booking-form">
+        <div class="st">予約者情報</div>
+        <div class="alert a-i"><span class="alert-icon">ℹ</span>選択中のホテル：<strong id="sel-hotel-name">京都ブライトンホテル</strong></div>
+        <div class="grid2">
+          <div class="field"><label class="lbl">お名前（漢字）<span class="req">*</span></label><input class="inp" placeholder="山田 花子" id="gname"></div>
+          <div class="field"><label class="lbl">お名前（フリガナ）<span class="req">*</span></label><input class="inp" placeholder="ヤマダ ハナコ"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label class="lbl">電話番号<span class="req">*</span></label><input class="inp" type="tel" placeholder="090-1234-5678"></div>
+          <div class="field"><label class="lbl">メールアドレス<span class="req">*</span></label><input class="inp" type="email" placeholder="you@example.com"></div>
+        </div>
+        <div class="field"><label class="lbl">特別リクエスト</label><textarea class="ta" placeholder="アレルギー・アクセシビリティなど"></textarea></div>
+        <div class="sep"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted)">合計金額（2泊）</div>
+            <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)">¥44,000 <span style="font-size:12px;font-weight:400;color:var(--muted)">（税込）</span></div>
+          </div>
+          <button class="btn btn-gold btn-lg" onclick="confirmBooking()">予約を確定する →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const user = requireAuth()
+if(user) {
+  document.getElementById('sidebar-root').innerHTML = buildSidebar('chat-travel')
+  document.getElementById('header-root').innerHTML = buildHeader('ホテル情報入力', '旅行 AI からの提案')
+  if(user.email) document.querySelector('#booking-form input[type="email"]').value = user.email
+}
+
+let selectedHotel = 1
+const hotels = ['THE THOUSAND KYOTO', '京都ブライトンホテル', '嵐山辨慶']
+
+function selectHotel(i) {
+  document.querySelectorAll('.hotel-card').forEach(c=>c.classList.remove('hotel-sel'))
+  document.getElementById('h'+i).classList.add('hotel-sel')
+  selectedHotel = i
+  document.getElementById('sel-hotel-name').textContent = hotels[i]
+}
+
+function searchHotels() {
+  toast('検索中…', '')
+  setTimeout(()=>toast('最新の空き状況を反映しました', 's'), 1200)
+}
+
+function confirmBooking() {
+  const name = document.getElementById('gname').value
+  if(!name) { toast('お名前を入力してください', 'd'); return }
+  showModal({
+    title: '予約を確定しますか？',
+    body: `<p style="font-size:12.5px;color:var(--muted);line-height:1.7"><strong>${hotels[selectedHotel]}</strong><br>チェックイン: 2025年5月1日<br>チェックアウト: 2025年5月3日（2泊）<br>合計: ¥44,000（税込）</p>`,
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:'予約を確定する', cls:'btn-gold', fn:'bookingDone()'},
+    ]
+  })
+}
+
+function bookingDone() {
+  closeModal()
+  toast('ご予約が完了しました！確認メールをお送りします ✈️', 's')
+  setTimeout(()=>location.href='dashboard.html', 2000)
+}
+</script>
+</body>
+</html>

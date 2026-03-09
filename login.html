@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>ログイン — Lumina AI</title>
+<style>
+body{background:var(--ink)}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+
+<div class="auth-layout">
+  <!-- Left panel -->
+  <div class="auth-panel">
+    <div class="auth-panel-orb ap-orb1"></div>
+    <div class="auth-panel-orb ap-orb2"></div>
+    <div class="ap-grid"></div>
+    <div class="ap-content">
+      <div class="ap-logo"><div class="ap-logo-icon">✦</div>Lumina AI</div>
+      <div class="ap-title">日常のすべてを<br><em>もっとスマートに</em></div>
+      <p class="ap-desc">7つの専門AIアシスタントが、あなたの生活のあらゆる場面をサポートします。</p>
+      <div class="ap-feature"><div class="ap-feat-icon">✈️</div><div class="ap-feat-text">旅行・料理・買い物・DIYをAIがサポート</div></div>
+      <div class="ap-feature"><div class="ap-feat-icon">✦</div><div class="ap-feat-text">総合AIがあなたのニーズを理解して最適な専門AIへ案内</div></div>
+      <div class="ap-feature"><div class="ap-feat-icon">💚</div><div class="ap-feat-text">無料プランから始められる、使いやすい料金体系</div></div>
+    </div>
+  </div>
+
+  <!-- Right form -->
+  <div class="auth-right">
+    <div class="form-box">
+      <div class="form-logo"><div class="form-logo-gem">✦</div>Lumina</div>
+      <div class="fh">おかえりなさい</div>
+      <p class="fsub">アカウントにログインしてAIとの会話を始めましょう</p>
+
+      <div id="err-banner" class="alert a-d" style="display:none">
+        <span class="alert-icon">⚠</span>
+        <span id="err-text">メールアドレスまたはパスワードが正しくありません</span>
+      </div>
+
+      <div class="field">
+        <label class="lbl">メールアドレス<span class="req">*</span></label>
+        <input class="inp" id="email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label class="lbl">パスワード<span class="req">*</span></label>
+        <div style="position:relative">
+          <input class="inp" id="pw" type="password" placeholder="パスワードを入力" autocomplete="current-password">
+          <button type="button" id="pw-toggle" onclick="togglePw()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;color:var(--subtle)">👁</button>
+        </div>
+      </div>
+      <div style="text-align:right;margin-top:-8px;margin-bottom:16px">
+        <a href="forgot-password.html" class="flink" style="font-size:12px">パスワードをお忘れの方</a>
+      </div>
+      <button class="btn btn-gold btn-w btn-lg" id="login-btn" onclick="doLogin()">ログイン</button>
+
+      <div class="divider" style="margin-top:18px">または</div>
+
+      <div style="background:var(--cream2);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-align:center;margin-bottom:9px;letter-spacing:.06em;text-transform:uppercase">デモアカウント</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn btn-g" style="flex:1;font-size:11px" onclick="demoLogin('free')">Free</button>
+          <button class="btn btn-g" style="flex:1;font-size:11px" onclick="demoLogin('pro')">Pro</button>
+          <button class="btn btn-g" style="flex:1;font-size:11px" onclick="demoLogin('master')">Master</button>
+        </div>
+      </div>
+
+      <div class="ff">
+        アカウントをお持ちでない方は
+        <a href="register.html" class="flink">新規登録</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+function togglePw(){
+  const el=document.getElementById('pw')
+  el.type=el.type==='password'?'text':'password'
+}
+async function doLogin(){
+  const email=document.getElementById('email').value.trim()
+  const pw=document.getElementById('pw').value
+  const btn=document.getElementById('login-btn')
+  const err=document.getElementById('err-banner')
+  err.style.display='none'
+  if(!email||!pw){
+    document.getElementById('err-text').textContent='メールアドレスとパスワードを入力してください'
+    err.style.display='flex'; return
+  }
+  btn.disabled=true; btn.textContent='ログイン中…'
+  try {
+    const d = await apiRequest('/auth/login',{method:'POST',body:{email,password:pw}})
+    setToken(d.token)
+    setCachedUser(d.user)
+    location.href='dashboard.html'
+  } catch(e) {
+    document.getElementById('err-text').textContent = e.error || 'ログインに失敗しました'
+    err.style.display='flex'
+    btn.disabled=false; btn.textContent='ログイン'
+  }
+}
+async function demoLogin(plan){
+  // デモアカウントを作成またはログイン
+  const email=`demo_${plan}@lumina.ai`
+  const pw='demo12345'
+  try {
+    // まずログイン試行
+    const d = await apiRequest('/auth/login',{method:'POST',body:{email,password:pw}})
+    setToken(d.token); setCachedUser(d.user)
+  } catch {
+    // 存在しなければ登録
+    try {
+      const d = await apiRequest('/auth/register',{method:'POST',body:{
+        nickname:`デモ(${plan.toUpperCase()})`,email,password:pw,plan
+      }})
+      setToken(d.token); setCachedUser(d.user)
+    } catch(e2) {
+      toast(e2.error||'デモログインに失敗しました','d'); return
+    }
+  }
+  toast('デモアカウントでログインしました','s')
+  setTimeout(()=>location.href='dashboard.html',700)
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin() })
+</script>
+</body>
+</html>

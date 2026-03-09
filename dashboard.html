@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<title>ダッシュボード — Lumina AI</title>
+<style>
+.ai-shortcut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.ai-sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;cursor:pointer;transition:all .2s;text-align:center}
+.ai-sc:hover{border-color:var(--gold2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.1)}
+.ai-sc-icon{font-size:26px;margin-bottom:8px}
+.ai-sc-name{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-.02em;margin-bottom:2px}
+.ai-sc-desc{font-size:10.5px;color:var(--muted)}
+.usage-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px}
+.usage-ring-wrap{display:flex;align-items:center;gap:20px}
+.recent-chat{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);cursor:pointer;transition:background .15s}
+.recent-chat:hover{background:var(--cream2)}
+.rc-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.rc-title{font-size:12.5px;font-weight:600;color:var(--ink3)}
+.rc-meta{font-size:11px;color:var(--subtle)}
+.tip-card{background:linear-gradient(135deg,var(--ink) 0%,var(--ink2) 100%);border-radius:var(--rl);padding:18px;color:#fff;position:relative;overflow:hidden}
+.tip-card::before{content:'✦';position:absolute;right:16px;top:12px;font-size:48px;opacity:.07;font-family:'Fraunces',serif}
+</style>
+</head>
+<body>
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div class="app-layout">
+  <div id="sidebar-root"></div>
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body" style="animation:fadeUp .3s ease both">
+
+      <!-- Usage warning -->
+      <div id="usage-warn" style="display:none"></div>
+
+      <!-- KPI -->
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <div class="grid2" style="gap:18px;margin-bottom:22px">
+        <!-- Usage detail -->
+        <div class="usage-card">
+          <div class="st">今月の利用状況</div>
+          <div id="usage-detail"></div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-gold btn-sm" onclick="location.href='plan.html'">プランを見る</button>
+            <button class="btn btn-g btn-sm" onclick="location.href='chat.html?ai=all'">会話を始める</button>
+          </div>
+        </div>
+        <!-- Tip -->
+        <div class="tip-card">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px">今日のヒント</div>
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:10px" id="tip-text">総合チャットAIに「旅行の計画を立てたい」と話しかけてみましょう</div>
+          <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)" onclick="location.href='chat.html?ai=all'">試してみる →</button>
+        </div>
+      </div>
+
+      <!-- AI Shortcuts -->
+      <div style="margin-bottom:22px">
+        <div class="ph"><div class="pt">AIアシスタントを選ぶ</div></div>
+        <div class="ai-shortcut-grid" id="ai-shortcuts"></div>
+      </div>
+
+      <!-- Recent chats -->
+      <div class="card">
+        <div class="ph" style="margin-bottom:12px">
+          <div class="st">最近の会話</div>
+          <button class="btn btn-g btn-sm" onclick="location.href='chat.html?ai=all'">すべて見る</button>
+        </div>
+        <div id="recent-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+let user = null
+
+requireAuth().then(u => {
+  if(u){ user=u; init() }
+})
+
+async function init() {
+  buildSidebar('dashboard')
+  buildHeader('ダッシュボード', 'おかえりなさい、' + (user.nickname||user.email) + 'さん')
+
+  const plan = getPlanInfo(user.plan)
+  const pct  = getUsagePct(user)
+  const used = user.usage_count || 0
+  const limit= plan.limit
+  const remaining = Math.max(0, limit - used)
+
+  // Usage warning
+  if(pct >= 90) {
+    document.getElementById('usage-warn').style.display = 'flex'
+    document.getElementById('usage-warn').innerHTML = `
+      <div class="usage-banner dngr" style="display:flex">
+        <span>⚠ 今月の会話残り<strong>${remaining}回</strong>です。上限に達すると会話できなくなります。</span>
+        <button class="btn btn-d btn-sm" onclick="location.href='plan.html'">アップグレード</button>
+      </div>`
+  } else if(pct >= 70) {
+    document.getElementById('usage-warn').style.display = 'flex'
+    document.getElementById('usage-warn').innerHTML = `
+      <div class="usage-banner" style="display:flex">
+        <span>今月の会話残り<strong>${remaining}回</strong>です。</span>
+        <button class="btn btn-sm" style="background:rgba(217,119,6,.1);color:#92400e;border:1px solid rgba(217,119,6,.3)" onclick="location.href='plan.html'">プランを見る</button>
+      </div>`
+  }
+
+  // マッチスコアを取得
+  const score = await fetchMatchScore()
+  const matchPct = Math.round(score.overall_score || 0)
+
+  // KPI
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi"><div class="kpi-label">今月の会話数</div><div class="kpi-val gold">${used}</div><div class="kpi-sub">/ ${limit}回</div></div>
+    <div class="kpi"><div class="kpi-label">残り会話数</div><div class="kpi-val">${remaining}</div><div class="kpi-sub">${pct}% 使用済み</div></div>
+    <div class="kpi"><div class="kpi-label">AIマッチ度</div><div class="kpi-val" style="color:var(--gold)">${matchPct}%</div><div class="kpi-sub">会話 ${score.total_sessions||0}回</div></div>
+    <div class="kpi"><div class="kpi-label">現在のプラン</div><div class="kpi-val" style="font-size:20px">${plan.name}</div><div class="kpi-sub">¥${plan.price.toLocaleString()}/月</div></div>`
+
+  // Usage detail
+  const progCls = pct >= 90 ? 'dngr' : pct >= 70 ? 'warn' : ''
+  document.getElementById('usage-detail').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+      <span style="font-size:12.5px;color:var(--muted)">今月の会話数</span>
+      <span style="font-family:'Fraunces',serif;font-size:15px;font-weight:700">${used} <span style="font-size:12px;color:var(--muted);font-weight:400">/ ${limit}回</span></span>
+    </div>
+    <div class="prog-wrap" style="height:8px">
+      <div class="prog ${progCls}" style="width:${pct}%"></div>
+    </div>
+    <div style="font-size:11px;color:var(--subtle);margin-top:5px;text-align:right">${remaining}回残っています</div>
+    <div style="margin-top:12px;padding:9px 11px;background:var(--cream2);border-radius:8px;font-size:11.5px;color:var(--muted)">
+      プラン: <strong style="color:var(--gold)">${plan.name}</strong> &nbsp;·&nbsp; ¥${plan.price.toLocaleString()}/月 &nbsp;·&nbsp; 月${limit}回まで
+    </div>
+    <div style="margin-top:10px;padding:9px 11px;background:linear-gradient(135deg,rgba(201,168,76,.05),rgba(201,168,76,.1));border-radius:8px;border:1px solid rgba(201,168,76,.15)">
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">✦ AIマッチ度</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;height:6px;background:var(--cream2);border-radius:99px">
+          <div style="height:100%;width:${matchPct}%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:99px"></div>
+        </div>
+        <strong style="color:var(--gold);font-size:14px">${matchPct}%</strong>
+      </div>
+      <div style="font-size:11px;color:var(--subtle);margin-top:4px">会話を重ねるほど精度が上がります</div>
+    </div>`
+
+  // AI shortcuts
+  const ais = [
+    {id:'all',icon:'✦',name:'総合 AI',desc:'何でも相談',color:'#c9a84c'},
+    {id:'travel',icon:'✈️',name:'旅行 AI',desc:'旅程・ホテル',color:'#6495ed'},
+    {id:'cooking',icon:'🍳',name:'料理 AI',desc:'レシピ・献立',color:'#ffa500'},
+    {id:'shopping',icon:'🛍️',name:'買い物 AI',desc:'比較・購入',color:'#32cd32'},
+    {id:'diy',icon:'🔨',name:'DIY AI',desc:'工作・修繕',color:'#ff6347'},
+    {id:'home',icon:'📺',name:'家電・インテリア',desc:'部屋作り',color:'#9370db'},
+    {id:'health',icon:'💚',name:'健康 AI',desc:'ウェルネス',color:'#00ced1'},
+  ]
+  document.getElementById('ai-shortcuts').innerHTML = ais.map(a => `
+    <div class="ai-sc" onclick="startChat('${a.id}')">
+      <div class="ai-sc-icon">${a.icon}</div>
+      <div class="ai-sc-name">${a.name}</div>
+      <div class="ai-sc-desc">${a.desc}</div>
+    </div>`).join('')
+
+  // 最近の会話をAPIから取得
+  try {
+    const d = await apiRequest('/chat/sessions?limit=5')
+    const sessions = d.sessions || []
+    const AI_ICONS = {all:'✦',travel:'✈️',cooking:'🍳',shopping:'🛍️',diy:'🔨',home:'📺',health:'💚'}
+    const AI_COLORS = {all:'rgba(201,168,76,.15)',travel:'rgba(100,149,237,.15)',cooking:'rgba(255,165,0,.15)',
+      shopping:'rgba(50,205,50,.15)',diy:'rgba(255,99,71,.15)',home:'rgba(147,112,219,.15)',health:'rgba(0,206,209,.15)'}
+    if(sessions.length > 0) {
+      document.getElementById('recent-list').innerHTML = sessions.map(s => {
+        const dt = new Date(s.started_at)
+        const diff = Date.now() - dt.getTime()
+        const timeStr = diff < 3600000 ? `${Math.round(diff/60000)}分前`
+          : diff < 86400000 ? `${Math.round(diff/3600000)}時間前`
+          : `${Math.round(diff/86400000)}日前`
+        return `<div class="recent-chat" onclick="location.href='chat.html?ai=${s.ai_type}'">
+          <div class="rc-icon" style="background:${AI_COLORS[s.ai_type]||AI_COLORS.all}">${AI_ICONS[s.ai_type]||'✦'}</div>
+          <div style="flex:1;min-width:0">
+            <div class="rc-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title||s.ai_type+' AIとの会話'}</div>
+            <div class="rc-meta">${timeStr} · ${s.msg_count}メッセージ</div>
+          </div>
+          <span style="color:var(--subtle);font-size:13px">›</span>
+        </div>`
+      }).join('')
+    } else {
+      document.getElementById('recent-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--subtle);font-size:13px">まだ会話がありません。AIに話しかけてみましょう！</div>'
+    }
+  } catch { /* セッション取得失敗時はデフォルト表示 */ }
+}
+
+const tips = [
+  '総合チャットAIに「旅行の計画を立てたい」と話しかけてみましょう',
+  '料理AIに冷蔵庫の食材を伝えると、献立を提案してもらえます',
+  '買い物AIは予算と用途を伝えると最適な商品を比較してくれます',
+  'DIY AIに写真で問題を説明すると、修繕方法を教えてくれます',
+  '健康AIに生活習慣を話すと、改善アドバイスがもらえます',
+]
+document.getElementById('tip-text').textContent = tips[Math.floor(Math.random()*tips.length)]
+
+function startChat(ai) { location.href = 'chat.html?ai=' + ai }
+</script>
+</body>
+</html>
