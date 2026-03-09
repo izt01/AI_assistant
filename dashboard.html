@@ -152,6 +152,7 @@ async function init() {
   // AI shortcuts
   const ais = [
     {id:'all',icon:'✦',name:'総合 AI',desc:'何でも相談',color:'#c9a84c'},
+    {id:'gourmet',icon:'🍽️',name:'グルメ AI',desc:'お店を探す',color:'#f97316'},
     {id:'travel',icon:'✈️',name:'旅行 AI',desc:'旅程・ホテル',color:'#6495ed'},
     {id:'cooking',icon:'🍳',name:'料理 AI',desc:'レシピ・献立',color:'#ffa500'},
     {id:'shopping',icon:'🛍️',name:'買い物 AI',desc:'比較・購入',color:'#32cd32'},
@@ -170,8 +171,8 @@ async function init() {
   try {
     const d = await apiRequest('/chat/sessions?limit=5')
     const sessions = d.sessions || []
-    const AI_ICONS = {all:'✦',travel:'✈️',cooking:'🍳',shopping:'🛍️',diy:'🔨',home:'📺',health:'💚'}
-    const AI_COLORS = {all:'rgba(201,168,76,.15)',travel:'rgba(100,149,237,.15)',cooking:'rgba(255,165,0,.15)',
+    const AI_ICONS = {all:'✦',gourmet:'🍽️',travel:'✈️',cooking:'🍳',shopping:'🛍️',diy:'🔨',home:'📺',health:'💚'}
+    const AI_COLORS = {all:'rgba(201,168,76,.15)',gourmet:'rgba(249,115,22,.15)',travel:'rgba(100,149,237,.15)',cooking:'rgba(255,165,0,.15)',
       shopping:'rgba(50,205,50,.15)',diy:'rgba(255,99,71,.15)',home:'rgba(147,112,219,.15)',health:'rgba(0,206,209,.15)'}
     if(sessions.length > 0) {
       document.getElementById('recent-list').innerHTML = sessions.map(s => {

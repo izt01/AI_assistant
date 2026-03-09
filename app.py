@@ -173,6 +173,7 @@ def db_init_lumina_tables():
         user_id           UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
         overall_score     FLOAT NOT NULL DEFAULT 0.0,
         food_score        FLOAT NOT NULL DEFAULT 0.0,
+        gourmet_score     FLOAT NOT NULL DEFAULT 0.0,
         travel_score      FLOAT NOT NULL DEFAULT 0.0,
         shopping_score    FLOAT NOT NULL DEFAULT 0.0,
         health_score      FLOAT NOT NULL DEFAULT 0.0,
@@ -305,7 +306,7 @@ def build_context_injection(user_id, ai_type):
     if p.get("monthly_budget"):  lines.append(f"月次予算目安: ¥{p['monthly_budget']:,}")
     if p.get("transport_modes"): lines.append(f"移動手段: {', '.join(p['transport_modes'])}")
 
-    if ai_type in ("recipe", "health", "general"):
+    if ai_type in ("recipe", "gourmet", "health", "general"):
         fd = ctx.get("food", {})
         if fd.get("liked_cuisines"):    lines.append(f"好きな料理: {', '.join(fd['liked_cuisines'])}")
         if fd.get("disliked_cuisines"): lines.append(f"苦手な料理: {', '.join(fd['disliked_cuisines'])}")
@@ -346,7 +347,7 @@ def build_context_injection(user_id, ai_type):
     return "\n".join(lines)
 
 def update_match_score(user_id, ai_type, rating=0):
-    col = {"recipe":"food_score","travel":"travel_score","shopping":"shopping_score",
+    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score","shopping":"shopping_score",
            "health":"health_score","appliance":"home_score","diy":"diy_score"}.get(ai_type,"overall_score")
     conn = get_db()
     with conn.cursor() as cur:
@@ -516,6 +517,8 @@ def chat():
     ai_type     = d.get("ai_type", "all")
     messages_in = d.get("messages", [])
     session_id  = d.get("session_id")
+    user_lat    = d.get("lat")
+    user_lng    = d.get("lng")
 
     if not messages_in:
         return jsonify({"error": "メッセージがありません"}), 400
@@ -525,7 +528,8 @@ def chat():
         return jsonify({"error": "usage_limit_reached", "limit": limit}), 429
 
     AI_NAME_MAP = {"all": None, "cooking": "recipe", "travel": "travel",
-                   "shopping": "shopping", "diy": "diy", "home": "appliance", "health": "health"}
+                   "shopping": "shopping", "diy": "diy", "home": "appliance", "health": "health",
+                   "gourmet": "gourmet"}
     agent_name = AI_NAME_MAP.get(ai_type)
 
     # セッション管理
@@ -550,6 +554,9 @@ def chat():
     print(f"[Router] user={uid} ai_type={ai_type} → agent={agent_name}")
 
     context_injection = build_context_injection(uid, agent_name)
+    # グルメAI: 位置情報をコンテキストに注入
+    if agent_name == "gourmet" and user_lat and user_lng:
+        context_injection += f"\n\n【ユーザーの現在地】\n緯度: {user_lat}\n経度: {user_lng}\n※ search_restaurants を呼ぶ際はこの座標を使用してください"
     agent = AGENT_MAP.get(agent_name)
 
     try:

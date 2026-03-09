@@ -137,6 +137,7 @@ async function tryChat(aiType, fn){
 const NAV_ITEMS=[
   {id:'dashboard',icon:'⊞',label:'ダッシュボード',href:'dashboard.html'},
   {id:'all',      icon:'✦',label:'総合チャット',   href:'chat.html?ai=all'},
+  {id:'gourmet',  icon:'🍽️',label:'グルメ AI',       href:'chat.html?ai=gourmet'},
   {id:'travel',   icon:'✈️',label:'旅行 AI',        href:'chat.html?ai=travel'},
   {id:'cooking',  icon:'🍳',label:'料理 AI',        href:'chat.html?ai=cooking'},
   {id:'shopping', icon:'🛍️',label:'買い物 AI',      href:'chat.html?ai=shopping'},

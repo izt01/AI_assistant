@@ -5,6 +5,7 @@ from .shopping  import ShoppingAgent
 from .diy       import DiyAgent
 from .appliance import ApplianceAgent
 from .health    import HealthAgent
+from .gourmet   import GourmetAgent
 
 AGENT_MAP = {
     "recipe":    RecipeAgent(),
@@ -13,4 +14,5 @@ AGENT_MAP = {
     "diy":       DiyAgent(),
     "appliance": ApplianceAgent(),
     "health":    HealthAgent(),
+    "gourmet":   GourmetAgent(),
 }

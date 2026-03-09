@@ -495,3 +495,96 @@ table.dt{width:100%;border-collapse:collapse}
 .topbar-title { font-family:'Fraunces',serif; font-size:17px; font-weight:900;
   color:var(--ink); letter-spacing:-.03em; }
 .topbar-sub { font-size:11.5px; color:var(--muted); margin-top:1px; }
+
+/* ─────────────────────────────────────────────
+   グルメAI: 飲食店カード
+───────────────────────────────────────────── */
+.restaurant-cards {
+  margin: 10px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rest-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all .16s;
+  text-decoration: none;
+}
+.rest-card:hover {
+  border-color: #f97316;
+  background: rgba(249,115,22,.04);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(249,115,22,.12);
+}
+.rest-rank {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rest-body {
+  flex: 1;
+  min-width: 0;
+}
+.rest-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rest-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 3px;
+}
+.rest-rating {
+  font-size: 11.5px;
+  color: var(--gold);
+  font-weight: 600;
+}
+.rest-open {
+  font-size: 10.5px;
+  background: rgba(22,163,74,.1);
+  color: #16a34a;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.rest-closed {
+  font-size: 10.5px;
+  background: rgba(220,38,38,.08);
+  color: #dc2626;
+  padding: 1px 7px;
+  border-radius: 20px;
+}
+.rest-addr {
+  font-size: 11px;
+  color: var(--subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rest-arrow {
+  font-size: 20px;
+  color: var(--subtle);
+  flex-shrink: 0;
+  line-height: 1;
+}
