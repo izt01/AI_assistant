@@ -22,7 +22,7 @@
 .msg-row{display:flex;align-items:flex-start;gap:9px}
 .msg-row.user{flex-direction:row-reverse}
 .msg-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px}
-.msg-bubble{max-width:72%;padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.65}
+.msg-bubble{max-width:82%;padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.65}
 .msg-row.ai .msg-bubble{background:var(--surface);border:1px solid var(--border);color:var(--ink3);border-radius:4px 16px 16px 16px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
 .msg-row.user .msg-bubble{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border-radius:16px 4px 16px 16px;font-weight:500}
 .msg-time{font-size:10px;color:var(--subtle);margin-top:4px;text-align:right}
@@ -50,6 +50,7 @@
 </style>
 </head>
 <body>
+<div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="app-layout">
@@ -82,6 +83,14 @@
 </div>
 
 <script src="shared.js"></script>
+<script>
+
+const _aiParam = new URLSearchParams(location.search).get('ai') || 'all';
+const _aiNames = {all:'総合AI',travel:'旅行AI',cooking:'料理AI',shopping:'買い物AI',diy:'DIY AI',home:'家電AI',health:'健康AI'};
+buildMobileHeader(_aiNames[_aiParam]||'チャット', 'dashboard.html',
+  '<button class="mh-action" onclick="clearChat()" title="リセット" style="font-size:16px">↺</button>');
+buildMobileNav("chat");
+</script>
 <script>
 // ─── 初期化（非同期）────────────────────────────────────────
 let user = null
@@ -162,7 +171,6 @@ function getChips(ai) {
 function sendChip(text) { document.getElementById('chat-input').value = text; sendMsg() }
 
 function addMessage(role, text) {
-  messages.push({role, text, time: new Date()})
   const el = document.createElement('div')
   el.className = `msg-row ${role}`
   const timeStr = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})
@@ -212,10 +220,13 @@ function scrollBottom() {
 }
 
 function updateUsageBadge() {
-  const u = getUser()
-  const remaining = u.limit - u.used
-  const pct = getUsagePct(u)
+  const u = getUser() || {}
+  const limit = u.usage_limit || PLANS[u.plan]?.limit || 10
+  const used  = u.usage_count || 0
+  const remaining = Math.max(0, limit - used)
+  const pct = Math.min(100, Math.round(used / limit * 100))
   const badge = document.getElementById('usage-badge')
+  if (!badge) return
   badge.className = 'usage-badge' + (pct>=90?' dngr':pct>=70?' warn':'')
   badge.textContent = `残り${remaining}回`
 }
@@ -247,8 +258,9 @@ async function sendMsg() {
   isTyping = true
   document.querySelectorAll('.chip-row').forEach(e=>e.remove())
 
-  addMessage('user', text)
+  // APIに送るメッセージ配列（role/content形式）に追加
   messages.push({ role:'user', content:text })
+  addMessage('user', text)
   showTyping()
 
   try {
@@ -266,8 +278,8 @@ async function sendMsg() {
     lastMessageId    = resp.message_id
 
     const reply = resp.reply || ''
-    addMessage('ai', reply)
     messages.push({ role:'assistant', content:reply })
+    addMessage('ai', reply)
 
     if(resp.learning_applied > 0) {
       toast(`✦ AIがあなたの好みを${resp.learning_applied}件学習しました`, '')
@@ -428,5 +440,6 @@ function clearChat() {
   init()
 }
 </script>
+<div id="mobile-nav-root"></div>
 </body>
 </html>

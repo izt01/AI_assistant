@@ -13,6 +13,7 @@
 </style>
 </head>
 <body>
+<div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="app-layout">
@@ -197,6 +198,8 @@
 
 <script src="shared.js"></script>
 <script>
+buildMobileHeader("プロフィール"); buildMobileNav("profile");</script>
+<script>
 let user = null
 
 requireAuth().then(async u => {
@@ -335,5 +338,6 @@ function doDelete() {
   setTimeout(()=>location.href='index.html',1200)
 }
 </script>
+<div id="mobile-nav-root"></div>
 </body>
 </html>

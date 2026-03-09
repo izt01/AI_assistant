@@ -207,3 +207,50 @@ async function fetchMatchScore(){
   try{ return await apiRequest('/match-score') }
   catch{ return {overall_score:0,total_sessions:0} }
 }
+
+// ══════════════════════════════════════════════
+//  モバイルUI ヘルパー
+// ══════════════════════════════════════════════
+
+/**
+ * モバイルヘッダーを生成して <body> 先頭に挿入
+ * @param {string} title  - 中央に表示するタイトル
+ * @param {string} backHref - 左の戻るボタンのリンク先（省略でロゴ）
+ * @param {string} actionHtml - 右側に置くHTML（省略で空）
+ */
+function buildMobileHeader(title, backHref, actionHtml = '') {
+  const el = document.getElementById('mobile-header-root')
+  if (!el) return
+  const left = backHref
+    ? `<a href="${backHref}" class="mh-action" style="font-size:18px">‹</a>`
+    : `<div class="mh-logo"><div class="mh-logo-icon">✦</div>Lumina</div>`
+  el.innerHTML = `
+    <div class="mobile-header" id="mobile-header">
+      ${left}
+      <div class="mh-title">${title}</div>
+      <div style="width:36px;display:flex;justify-content:flex-end">${actionHtml}</div>
+    </div>`
+}
+
+/**
+ * ボトムナビゲーションを生成して <body> 末尾に挿入
+ * @param {string} active - アクティブなアイテムのkey
+ */
+function buildMobileNav(active) {
+  const el = document.getElementById('mobile-nav-root')
+  if (!el) return
+  const items = [
+    { key: 'dashboard', icon: '⊞',  label: 'ホーム',   href: 'dashboard.html' },
+    { key: 'chat',      icon: '✦',  label: 'チャット', href: 'chat.html?ai=all' },
+    { key: 'profile',   icon: '◎',  label: 'プロフィール', href: 'profile.html' },
+    { key: 'plan',      icon: '◈',  label: 'プラン',   href: 'plan.html' },
+  ]
+  el.innerHTML = `
+    <nav class="mobile-nav">
+      ${items.map(it => `
+        <a href="${it.href}" class="mn-item ${active === it.key ? 'active' : ''}">
+          <span class="mn-icon">${it.icon}</span>
+          ${it.label}
+        </a>`).join('')}
+    </nav>`
+}
