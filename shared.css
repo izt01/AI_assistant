@@ -588,3 +588,10 @@ table.dt{width:100%;border-collapse:collapse}
   flex-shrink: 0;
   line-height: 1;
 }
+
+
+/* ── PWA / mobile polish ── */
+html, body { min-height: 100%; }
+body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+button, a, input, textarea, select { touch-action: manipulation; }
+textarea, input, select { font-size: 16px; }
