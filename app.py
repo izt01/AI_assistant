@@ -266,6 +266,17 @@ with app.app_context():
         print("[DB] Lumina テーブル 初期化完了")
     except Exception as e:
         print(f"[DB] Lumina テーブル スキップ: {e}")
+    # カラム追加マイグレーション（既存DBへの後付け対応）
+    migrations = [
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE lu_match_scores ADD COLUMN IF NOT EXISTS gourmet_score FLOAT NOT NULL DEFAULT 0.0",
+    ]
+    for sql in migrations:
+        try:
+            db_exec(sql)
+            print(f"[DB] Migration OK: {sql[:60]}...")
+        except Exception as e:
+            print(f"[DB] Migration スキップ: {e}")
 
 
 # ══════════════════════════════════════════════════════════════
