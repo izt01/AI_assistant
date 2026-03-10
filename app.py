@@ -266,6 +266,17 @@ with app.app_context():
         print("[DB] Lumina テーブル 初期化完了")
     except Exception as e:
         print(f"[DB] Lumina テーブル スキップ: {e}")
+    # カラム追加マイグレーション（既存DBへの後付け対応）
+    migrations = [
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE lu_match_scores ADD COLUMN IF NOT EXISTS gourmet_score FLOAT NOT NULL DEFAULT 0.0",
+    ]
+    for sql in migrations:
+        try:
+            db_exec(sql)
+            print(f"[DB] Migration OK: {sql[:60]}...")
+        except Exception as e:
+            print(f"[DB] Migration スキップ: {e}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -958,6 +969,82 @@ def admin_usage_log():
         rv["created_at"] = rv["created_at"].isoformat() if rv.get("created_at") else None
         logs.append(rv)
     return jsonify({"logs": logs})
+
+@app.route("/api/setup-admin", methods=["POST"])
+def setup_admin():
+    """一時的な管理者作成エンドポイント（初期セットアップ用）"""
+    setup_key = os.getenv("SETUP_KEY", "")
+    if not setup_key:
+        return jsonify({"error": "SETUP_KEY が未設定です"}), 403
+    d = request.json or {}
+    if d.get("setup_key") != setup_key:
+        return jsonify({"error": "setup_key が違います"}), 403
+    email    = d.get("email", "").strip().lower()
+    password = d.get("password", "")
+    nickname = d.get("nickname", "Admin")
+    if not email or not password:
+        return jsonify({"error": "email と password は必須です"}), 400
+    existing = db_exec("SELECT id FROM lu_users WHERE email=%s", (email,), fetch="one")
+    if existing:
+        db_exec("UPDATE lu_users SET is_admin=TRUE, password_hash=%s, is_active=TRUE WHERE email=%s",
+                (hash_pw(password), email))
+        return jsonify({"ok": True, "action": "upgraded", "email": email})
+    db_exec("INSERT INTO lu_users(nickname,email,password_hash,plan,is_admin) VALUES(%s,%s,%s,'master',TRUE)",
+            (nickname, email, hash_pw(password)))
+    return jsonify({"ok": True, "action": "created", "email": email})
+
+@app.route("/api/admin/ai-usage", methods=["GET"])
+@admin_required
+def admin_ai_usage():
+    """AI別セッション数（当月）をDBから集計"""
+    rows = db_exec(
+        "SELECT ai_type, COUNT(*) as c FROM lu_sessions "
+        "WHERE DATE_TRUNC('month', started_at) = DATE_TRUNC('month', CURRENT_DATE) "
+        "GROUP BY ai_type", fetch="all") or []
+    counts = {r["ai_type"]: r["c"] for r in rows}
+    return jsonify({"counts": counts})
+
+@app.route("/api/admin/openai-usage", methods=["GET"])
+@admin_required
+def admin_openai_usage():
+    """OpenAI Usage APIから当月の使用量・費用を取得"""
+    import urllib.request, urllib.error
+    from datetime import date
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "OPENAI_API_KEY 未設定"}), 500
+    today = date.today()
+    start = today.replace(day=1).strftime("%Y-%m-%d")
+    end   = today.strftime("%Y-%m-%d")
+    try:
+        req = urllib.request.Request(
+            f"https://api.openai.com/v1/usage?date={start}",
+            headers={"Authorization": f"Bearer {api_key}"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            usage_data = json.loads(r.read())
+        # トークン数集計
+        total_ctx = sum(d.get("n_context_tokens_total", 0) for d in usage_data.get("data", []))
+        total_gen = sum(d.get("n_generated_tokens_total", 0) for d in usage_data.get("data", []))
+        # 簡易コスト計算（gpt-4o-mini想定: input $0.15/1M, output $0.60/1M）
+        cost_usd = (total_ctx * 0.15 + total_gen * 0.60) / 1_000_000
+        return jsonify({
+            "ok": True,
+            "period": {"start": start, "end": end},
+            "input_tokens": total_ctx,
+            "output_tokens": total_gen,
+            "cost_usd": round(cost_usd, 4),
+            "cost_jpy": round(cost_usd * 150),
+            "dashboard_url": "https://platform.openai.com/usage",
+        })
+    except Exception as e:
+        # Usage API失敗時はダッシュボードURLだけ返す
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "dashboard_url": "https://platform.openai.com/usage",
+            "note": "OpenAI Usage APIの取得に失敗しました。ダッシュボードで直接確認してください。"
+        })
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
