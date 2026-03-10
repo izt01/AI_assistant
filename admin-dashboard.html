@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>管理者ダッシュボード — Lumina AI</title>
 <script src="admin-shared.js"></script>
-<style id="admin-shared-css"></style>
+<link rel="stylesheet" href="admin.css">
 <style>
 .chart-bar-wrap{display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:8px}
 .chart-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -42,7 +42,7 @@
 </style>
 </head>
 <body>
-<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+<script>requireAdmin()</script>
 
 <div class="admin-layout">
   <div id="nav-root"></div>
@@ -130,9 +130,10 @@ const PLAN_COLORS = {free:'rgba(255,255,255,.2)',pro:'#3b82f6',master:'#c9a84c'}
 const AVATAR_COLORS = ['#6366f1','#06b6d4','#f59e0b','#10b981','#ec4899','#8b5cf6']
 
 async function loadDashboard(){
-  const [dash, users] = await Promise.all([
+  const [dash, users, openai] = await Promise.all([
     adminApi('/dashboard'),
     adminApi('/users?limit=6'),
+    adminApi('/openai-usage'),
   ])
   if(!dash) return
 
@@ -142,10 +143,12 @@ async function loadDashboard(){
 
   // KPI
   const u = dash.users, c = dash.cost
+  // OpenAI実費（取得できた場合はそちらを優先）
+  const realCost = openai?.ok ? openai.cost_usd : c.used_usd
   document.getElementById('k-users').textContent = fmtN(u.total)
   document.getElementById('k-new').textContent   = '+' + fmtN(u.new_month)
   document.getElementById('k-chats').textContent = fmtN(dash.chats.today) + '件'
-  document.getElementById('k-cost').textContent  = fmt$(c.used_usd)
+  document.getElementById('k-cost').textContent  = fmt$(realCost)
   const balEl = document.getElementById('k-balance')
   balEl.textContent = fmt$(c.balance_usd)
   balEl.className   = 'kpi-val ' + (c.balance_usd < 0 ? 'red' : c.balance_usd < 10 ? '' : 'green')
@@ -192,51 +195,47 @@ async function loadDashboard(){
         </div>`).join('')}
     </div>`
 
-  // AI別利用数（セッションのai_typeをカウント）
-  // ダッシュボードAPIから月間チャット数を使用。実際はai_type別集計APIが必要だが、
-  // ここではダミー分布で可視化（実装時はAPIを追加）
+  // AI別利用数（DBのlu_sessionsからai_type別集計）
   const aiTypes = ['gourmet','travel','cooking','shopping','diy','home','health','general']
   const aiLabels = {gourmet:'グルメ',travel:'旅行',cooking:'料理',shopping:'買い物',diy:'DIY',home:'家電',health:'健康',general:'総合'}
-  // セッション集計のAPIがない場合は全体数から等分で表示
-  const totalChats = dash.chats.total || 0
-  const aiUsage = aiTypes.map(t=>({type:t, count: Math.round(totalChats/(aiTypes.length) * (0.5+Math.random()))}))
-  const maxA = Math.max(...aiUsage.map(a=>a.count),1)
-  document.getElementById('ai-usage-list').innerHTML = aiUsage.map(a=>`
+  const aiCounts = await adminApi('/ai-usage')
+  const aiData = aiCounts?.counts || {}
+  const maxA = Math.max(...aiTypes.map(t=>aiData[t]||0), 1)
+  document.getElementById('ai-usage-list').innerHTML = aiTypes.map(a=>`
     <div class="ai-usage-row">
-      <div class="ai-usage-icon">${AI_ICONS[a.type]||'✦'}</div>
-      <div class="ai-usage-name">${aiLabels[a.type]||a.type}</div>
-      <div class="ai-usage-bar"><div class="ai-usage-fill" style="width:${Math.round(a.count/maxA*100)}%"></div></div>
-      <div class="ai-usage-count">${fmtN(a.count)}</div>
+      <div class="ai-usage-icon">${AI_ICONS[a]||'✦'}</div>
+      <div class="ai-usage-name">${aiLabels[a]||a}</div>
+      <div class="ai-usage-bar"><div class="ai-usage-fill" style="width:${Math.round((aiData[a]||0)/maxA*100)}%"></div></div>
+      <div class="ai-usage-count">${fmtN(aiData[a]||0)}</div>
     </div>`).join('')
 
-  // コスト詳細
+  // コスト詳細（OpenAI実費 + ダッシュボードリンク）
+  const oaiOk = openai?.ok
   document.getElementById('cost-detail').innerHTML = `
-    <div class="cost-meter">
-      <div class="cost-meter-label">
-        <span>使用済み <strong style="color:var(--gold2)">${fmt$(c.used_usd)}</strong></span>
-        <span style="color:var(--muted)">予算 ${fmt$(c.budget_usd)}</span>
-      </div>
-      <div class="cost-meter-bar">
-        <div class="cost-meter-fill ${c.used_pct>=90?'danger':c.used_pct>=70?'warning':''}"
-             style="background:linear-gradient(90deg,var(--gold),var(--gold2));width:${Math.min(c.used_pct,100)}%"></div>
-      </div>
+    <div style="margin-bottom:14px">
+      ${oaiOk
+        ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">📡 OpenAI Usage API から自動取得（当月）</div>
+           <div style="display:flex;flex-direction:column;gap:8px">
+             ${[
+               ['入力トークン', fmtN(openai.input_tokens)+'tok', ''],
+               ['出力トークン', fmtN(openai.output_tokens)+'tok', ''],
+               ['費用(USD)',    fmt$(openai.cost_usd,4), 'color:var(--gold2)'],
+               ['費用(円換算)', '¥'+openai.cost_jpy.toLocaleString(), 'color:var(--muted)'],
+             ].map(([l,v,st])=>`
+               <div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:8px">
+                 <span style="font-size:12px;color:var(--muted)">${l}</span>
+                 <span style="font-family:'JetBrains Mono',monospace;font-size:13px;${st}">${v}</span>
+               </div>`).join('')}
+           </div>`
+        : `<div class="alert-bar info" style="font-size:12px">⚠ OpenAI Usage APIの自動取得に失敗しました。<br>下記リンクから直接確認してください。</div>`
+      }
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
-      ${[
-        ['チャージ総額', fmt$(c.charged_usd), ''],
-        ['使用済み',     fmt$(c.used_usd),   'color:#f87171'],
-        ['推定残高',     fmt$(c.balance_usd), c.balance_usd>=0?'color:#4ade80':'color:#f87171'],
-        ['消化率',       c.used_pct+'%',      c.used_pct>=80?'color:#f97316':''],
-        ['為替換算(¥)',  fmt¥(c.used_usd),   'color:var(--muted)'],
-      ].map(([l,v,st])=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;
-          border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:10px">
-          <span style="font-size:12px;color:var(--muted)">${l}</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;${st}">${v}</span>
-        </div>`).join('')}
-    </div>
-    <a href="admin-charges.html" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:16px">
-      + チャージする
+    <a href="https://platform.openai.com/usage" target="_blank"
+       class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:8px;gap:8px">
+      ↗ OpenAI Dashboardで確認
+    </a>
+    <a href="admin-charges.html" class="btn btn-gold" style="width:100%;justify-content:center">
+      + チャージ・予算管理
     </a>`
 
   // 最近登録ユーザー

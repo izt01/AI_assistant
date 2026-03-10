@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>API費用・チャージ — Lumina AI Admin</title>
 <script src="admin-shared.js"></script>
-<style id="admin-shared-css"></style>
+<link rel="stylesheet" href="admin.css">
 <style>
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--border2);margin-bottom:24px}
 .tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;
@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+<script>requireAdmin()</script>
 
 <div class="admin-layout">
   <div id="nav-root"></div>
@@ -246,7 +246,7 @@ async function init(){
     ['チャージ総額', fmt$(c.charged_usd), ''],
     ['今月の使用', '-'+fmt$(c.used_usd), 'color:#f87171'],
     ['推定残高', fmt$(c.balance_usd), c.balance_usd>=0?'color:#4ade80':'color:#f87171'],
-    ['為替換算(¥)', fmt¥(c.balance_usd), 'color:var(--muted)'],
+    ['為替換算(¥)', fmtJPY(c.balance_usd), 'color:var(--muted)'],
   ].map(([l,v,s])=>`
     <div class="stat-row">
       <span style="color:var(--muted)">${l}</span>
@@ -326,7 +326,7 @@ async function loadHistory(){
             <tr>
               <td class="mono">${fmtDt(c.charged_at)}</td>
               <td><strong style="color:var(--gold2)">${fmt$(c.amount_usd)}</strong></td>
-              <td class="mono" style="color:var(--muted)">${fmt¥(c.amount_usd)}</td>
+              <td class="mono" style="color:var(--muted)">${fmtJPY(c.amount_usd)}</td>
               <td>${c.card_last4?`<span class="mono">•••• ${c.card_last4}</span>`:'—'}</td>
               <td style="color:var(--muted)">${c.note||'—'}</td>
             </tr>`).join('')}
@@ -359,7 +359,7 @@ async function loadCosts(){
               <td class="mono">${fmtN(r.input_tokens)}</td>
               <td class="mono">${fmtN(r.output_tokens)}</td>
               <td class="mono" style="color:var(--gold2)">${fmt$(r.cost_usd,4)}</td>
-              <td class="mono" style="color:var(--muted)">${fmt¥(r.cost_usd)}</td>
+              <td class="mono" style="color:var(--muted)">${fmtJPY(r.cost_usd)}</td>
             </tr>`)).join('')}
         </tbody>
       </table>
