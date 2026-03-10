@@ -959,6 +959,29 @@ def admin_usage_log():
         logs.append(rv)
     return jsonify({"logs": logs})
 
+@app.route("/api/setup-admin", methods=["POST"])
+def setup_admin():
+    """一時的な管理者作成エンドポイント（初期セットアップ用）"""
+    setup_key = os.getenv("SETUP_KEY", "")
+    if not setup_key:
+        return jsonify({"error": "SETUP_KEY が未設定です"}), 403
+    d = request.json or {}
+    if d.get("setup_key") != setup_key:
+        return jsonify({"error": "setup_key が違います"}), 403
+    email    = d.get("email", "").strip().lower()
+    password = d.get("password", "")
+    nickname = d.get("nickname", "Admin")
+    if not email or not password:
+        return jsonify({"error": "email と password は必須です"}), 400
+    existing = db_exec("SELECT id FROM lu_users WHERE email=%s", (email,), fetch="one")
+    if existing:
+        db_exec("UPDATE lu_users SET is_admin=TRUE, password_hash=%s, is_active=TRUE WHERE email=%s",
+                (hash_pw(password), email))
+        return jsonify({"ok": True, "action": "upgraded", "email": email})
+    db_exec("INSERT INTO lu_users(nickname,email,password_hash,plan,is_admin) VALUES(%s,%s,%s,'master',TRUE)",
+            (nickname, email, hash_pw(password)))
+    return jsonify({"ok": True, "action": "created", "email": email})
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     try: db_exec("SELECT 1"); db_ok=True
