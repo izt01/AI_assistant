@@ -34,7 +34,7 @@ async function adminApi(path, opts={}){
 
 // ── フォーマット ───────────────────────────────────────────────
 function fmt$( usd, dec=2 ){ return '$' + Number(usd||0).toFixed(dec).replace(/\B(?=(\d{3})+(?!\d))/g,',') }
-function fmt¥( usd ){ return '¥' + Math.round((usd||0)*150).toLocaleString() }
+function fmtJPY( usd ){ return '¥' + Math.round((usd||0)*150).toLocaleString() }
 function fmtN( n   ){ return Number(n||0).toLocaleString() }
 function fmtDt(iso ){
   if(!iso) return '—'

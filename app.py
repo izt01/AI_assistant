@@ -1023,8 +1023,10 @@ def admin_openai_usage():
         )
         with urllib.request.urlopen(req, timeout=8) as r:
             usage_data = json.loads(r.read())
+        # トークン数集計
         total_ctx = sum(d.get("n_context_tokens_total", 0) for d in usage_data.get("data", []))
         total_gen = sum(d.get("n_generated_tokens_total", 0) for d in usage_data.get("data", []))
+        # 簡易コスト計算（gpt-4o-mini想定: input $0.15/1M, output $0.60/1M）
         cost_usd = (total_ctx * 0.15 + total_gen * 0.60) / 1_000_000
         return jsonify({
             "ok": True,
@@ -1036,12 +1038,14 @@ def admin_openai_usage():
             "dashboard_url": "https://platform.openai.com/usage",
         })
     except Exception as e:
+        # Usage API失敗時はダッシュボードURLだけ返す
         return jsonify({
             "ok": False,
             "error": str(e),
             "dashboard_url": "https://platform.openai.com/usage",
             "note": "OpenAI Usage APIの取得に失敗しました。ダッシュボードで直接確認してください。"
         })
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     try: db_exec("SELECT 1"); db_ok=True
