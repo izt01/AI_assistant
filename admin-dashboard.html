@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>管理者ダッシュボード — Lumina AI</title>
 <script src="admin-shared.js"></script>
-<style id="admin-shared-css"></style>
+<link rel="stylesheet" href="admin.css">
 <style>
 .chart-bar-wrap{display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:8px}
 .chart-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -42,7 +42,7 @@
 </style>
 </head>
 <body>
-<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+<script>requireAdmin()</script>
 
 <div class="admin-layout">
   <div id="nav-root"></div>

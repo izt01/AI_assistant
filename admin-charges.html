@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>API費用・チャージ — Lumina AI Admin</title>
 <script src="admin-shared.js"></script>
-<style id="admin-shared-css"></style>
+<link rel="stylesheet" href="admin.css">
 <style>
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--border2);margin-bottom:24px}
 .tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;
@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+<script>requireAdmin()</script>
 
 <div class="admin-layout">
   <div id="nav-root"></div>
