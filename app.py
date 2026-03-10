@@ -993,6 +993,55 @@ def setup_admin():
             (nickname, email, hash_pw(password)))
     return jsonify({"ok": True, "action": "created", "email": email})
 
+@app.route("/api/admin/ai-usage", methods=["GET"])
+@admin_required
+def admin_ai_usage():
+    """AI別セッション数（当月）をDBから集計"""
+    rows = db_exec(
+        "SELECT ai_type, COUNT(*) as c FROM lu_sessions "
+        "WHERE DATE_TRUNC('month', started_at) = DATE_TRUNC('month', CURRENT_DATE) "
+        "GROUP BY ai_type", fetch="all") or []
+    counts = {r["ai_type"]: r["c"] for r in rows}
+    return jsonify({"counts": counts})
+
+@app.route("/api/admin/openai-usage", methods=["GET"])
+@admin_required
+def admin_openai_usage():
+    """OpenAI Usage APIから当月の使用量・費用を取得"""
+    import urllib.request, urllib.error
+    from datetime import date
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "OPENAI_API_KEY 未設定"}), 500
+    today = date.today()
+    start = today.replace(day=1).strftime("%Y-%m-%d")
+    end   = today.strftime("%Y-%m-%d")
+    try:
+        req = urllib.request.Request(
+            f"https://api.openai.com/v1/usage?date={start}",
+            headers={"Authorization": f"Bearer {api_key}"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            usage_data = json.loads(r.read())
+        total_ctx = sum(d.get("n_context_tokens_total", 0) for d in usage_data.get("data", []))
+        total_gen = sum(d.get("n_generated_tokens_total", 0) for d in usage_data.get("data", []))
+        cost_usd = (total_ctx * 0.15 + total_gen * 0.60) / 1_000_000
+        return jsonify({
+            "ok": True,
+            "period": {"start": start, "end": end},
+            "input_tokens": total_ctx,
+            "output_tokens": total_gen,
+            "cost_usd": round(cost_usd, 4),
+            "cost_jpy": round(cost_usd * 150),
+            "dashboard_url": "https://platform.openai.com/usage",
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "dashboard_url": "https://platform.openai.com/usage",
+            "note": "OpenAI Usage APIの取得に失敗しました。ダッシュボードで直接確認してください。"
+        })
 @app.route("/api/health", methods=["GET"])
 def health_check():
     try: db_exec("SELECT 1"); db_ok=True
