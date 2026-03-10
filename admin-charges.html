@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>API費用・チャージ — Lumina AI Admin</title>
+<script src="admin-shared.js"></script>
+<style id="admin-shared-css"></style>
+<style>
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border2);margin-bottom:24px}
+.tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;
+  border-left:none;border-right:none;font-family:inherit;margin-bottom:-1px}
+.tab.active{color:var(--gold2);border-bottom-color:var(--gold)}
+.tab:hover:not(.active){color:var(--cream)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+.card-item{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:12px;
+  padding:16px 18px;display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.card-item.default-card{border-color:rgba(201,168,76,.3);background:rgba(201,168,76,.04)}
+.card-brand-logo{width:42px;height:28px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:700;letter-spacing:.04em}
+.card-brand-visa{background:linear-gradient(135deg,#1a1f71,#2563eb);color:#fff}
+.card-brand-mc{background:linear-gradient(135deg,#eb001b,#f79e1b);color:#fff}
+.card-brand-amex{background:linear-gradient(135deg,#007bc1,#00aeef);color:#fff}
+.card-numbers{font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.12em}
+.card-exp{font-size:11.5px;color:var(--muted)}
+.default-badge{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);
+  color:var(--gold2);font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;letter-spacing:.04em}
+
+.charge-form{background:rgba(255,255,255,.03);border:1px solid var(--border2);
+  border-radius:14px;padding:22px 24px}
+.charge-amount-input{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:600;
+  color:var(--gold2);background:transparent;border:none;border-bottom:2px solid var(--border);
+  outline:none;width:100%;padding:6px 0;transition:border-color .18s}
+.charge-amount-input:focus{border-bottom-color:var(--gold)}
+.charge-amount-input::placeholder{color:rgba(201,168,76,.25)}
+
+.cost-month-row{display:flex;align-items:center;gap:0;padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,.04)}
+.cost-month-row:last-child{border-bottom:none}
+.model-badge{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 8px;
+  border-radius:4px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);color:#93c5fd}
+
+.history-row{display:grid;grid-template-columns:1fr auto auto auto;gap:16px;align-items:center;
+  padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.history-row:last-child{border-bottom:none}
+
+.stat-row{display:flex;justify-content:space-between;align-items:center;
+  padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12.5px}
+.stat-row:last-child{border-bottom:none}
+.stat-row .val{font-family:'JetBrains Mono',monospace;font-size:13px}
+</style>
+</head>
+<body>
+<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+
+<div class="admin-layout">
+  <div id="nav-root"></div>
+
+  <main class="admin-main">
+    <div style="position:relative;z-index:1">
+      <div class="admin-page-hdr">
+        <div class="admin-page-title">API費用・チャージ管理</div>
+        <div class="admin-page-sub">OpenAI API費用の管理とチャージ残高</div>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-grid" id="kpi-area" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi gold"><div class="kpi-label">今月の費用</div><div class="kpi-val" id="k-used">—</div><div class="kpi-icon">⬡</div></div>
+        <div class="kpi"><div class="kpi-label">チャージ残高</div><div class="kpi-val" id="k-balance">—</div><div class="kpi-icon">▣</div></div>
+        <div class="kpi"><div class="kpi-label">月間予算</div><div class="kpi-val" id="k-budget">—</div><div class="kpi-icon">△</div></div>
+        <div class="kpi"><div class="kpi-label">消化率</div><div class="kpi-val" id="k-pct">—</div>
+          <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" id="k-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- タブ -->
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('charge')">チャージ</button>
+        <button class="tab" onclick="showTab('history')">チャージ履歴</button>
+        <button class="tab" onclick="showTab('costs')">月次APIコスト</button>
+        <button class="tab" onclick="showTab('cards')">カード管理</button>
+        <button class="tab" onclick="showTab('budget')">予算設定</button>
+      </div>
+
+      <!-- チャージタブ -->
+      <div class="tab-pane active" id="pane-charge">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="charge-form">
+            <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:18px">OpenAI APIチャージ</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;letter-spacing:.04em">チャージ金額（USD）</div>
+            <input class="charge-amount-input" id="charge-amount" type="number" min="5" step="5" placeholder="50.00">
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;margin-bottom:20px">
+              ${[10,25,50,100].map(v=>`
+                <button class="btn btn-ghost btn-sm" onclick="setAmount(${v})">$${v}</button>`).join('')}
+            </div>
+            <div style="margin-bottom:16px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">使用カード</div>
+              <div id="charge-card-select">
+                <div class="spinner"></div>
+              </div>
+            </div>
+            <div style="margin-bottom:20px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">メモ（任意）</div>
+              <input class="inp" id="charge-note" style="width:100%" placeholder="例: 3月分チャージ">
+            </div>
+            <button class="btn btn-gold" style="width:100%;justify-content:center;font-size:13.5px;padding:13px"
+              onclick="doCharge()">✦ チャージを実行</button>
+            <div style="font-size:11px;color:var(--subtle);margin-top:10px;text-align:center">
+              ※ 実際の決済はStripe経由で処理されます
+            </div>
+          </div>
+
+          <div class="admin-section" style="margin-bottom:0">
+            <div class="admin-section-title" style="margin-bottom:16px">現在の残高状況</div>
+            <div id="balance-detail"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- チャージ履歴タブ -->
+      <div class="tab-pane" id="pane-history">
+        <div class="admin-section">
+          <div class="admin-section-hdr">
+            <div class="admin-section-title">チャージ履歴</div>
+          </div>
+          <div id="charge-history"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- 月次コストタブ -->
+      <div class="tab-pane" id="pane-costs">
+        <div class="admin-section">
+          <div class="admin-section-hdr">
+            <div class="admin-section-title">月次APIコスト（モデル別）</div>
+            <div style="font-size:11.5px;color:var(--muted)">※ OpenAI Dashboardから手動記録したデータ</div>
+          </div>
+          <div id="cost-list"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- カード管理タブ -->
+      <div class="tab-pane" id="pane-cards">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="admin-section-title" style="margin-bottom:14px">登録カード</div>
+            <div id="card-list"><div class="spinner"></div></div>
+            <button class="btn btn-ghost" style="margin-top:14px;width:100%;justify-content:center"
+              onclick="showAddCard()">+ 新しいカードを追加</button>
+          </div>
+          <div class="admin-section" id="add-card-form" style="display:none;margin-bottom:0">
+            <div class="admin-section-title" style="margin-bottom:16px">カードを追加</div>
+            <div class="field-g">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">カード番号（末尾4桁）</div>
+              <input class="inp" id="card-last4" maxlength="4" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:18px;letter-spacing:.2em" placeholder="•••• •••• •••• ____">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">
+              <div>
+                <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">ブランド</div>
+                <select class="inp" id="card-brand" style="width:100%">
+                  <option>Visa</option><option>Mastercard</option><option>Amex</option><option>JCB</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">月</div>
+                <input class="inp" id="card-month" type="number" min="1" max="12" placeholder="MM" style="width:100%">
+              </div>
+              <div>
+                <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">年</div>
+                <input class="inp" id="card-year" type="number" min="2024" max="2040" placeholder="YYYY" style="width:100%">
+              </div>
+            </div>
+            <button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:16px"
+              onclick="addCard()">カードを登録</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 予算設定タブ -->
+      <div class="tab-pane" id="pane-budget">
+        <div class="admin-section" style="max-width:480px">
+          <div class="admin-section-title" style="margin-bottom:20px">月間予算・アラート設定</div>
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">月間予算（USD）</div>
+              <input class="inp" id="set-budget" type="number" min="10" step="10" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:18px">
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">アラート閾値（%）</div>
+              <input class="inp" id="set-threshold" type="number" min="50" max="99" style="width:100%">
+              <div style="font-size:11px;color:var(--subtle);margin-top:4px">予算消化率がこの値を超えたらダッシュボードに警告表示</div>
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">メンテナンスモード</div>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="set-maintenance" style="width:16px;height:16px;accent-color:var(--gold)">
+                <span style="font-size:13px">有効にする（ユーザーへのサービスを一時停止）</span>
+              </label>
+            </div>
+            <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="saveSettings()">設定を保存</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+document.getElementById('nav-root').innerHTML = buildAdminNav('charges')
+
+// ── タブ切り替え ──────────────────────────────────────────────
+function showTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['charge','history','costs','cards','budget'][i]===name))
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'))
+  document.getElementById('pane-'+name).classList.add('active')
+  if(name==='history' && !_histLoaded){ loadHistory(); _histLoaded=true }
+  if(name==='costs'   && !_costsLoaded){ loadCosts(); _costsLoaded=true }
+  if(name==='cards'   && !_cardsLoaded){ loadCards(); _cardsLoaded=true }
+  if(name==='budget'  && !_budgetLoaded){ loadSettings(); _budgetLoaded=true }
+}
+let _histLoaded=false,_costsLoaded=false,_cardsLoaded=false,_budgetLoaded=false
+let _cardsData=[]
+
+// ── 初期データ読み込み ────────────────────────────────────────
+async function init(){
+  const [dash, costs] = await Promise.all([
+    adminApi('/dashboard'),
+    adminApi('/costs'),
+  ])
+  if(!dash) return
+  const c = dash.cost
+
+  document.getElementById('k-used').textContent    = fmt$(c.used_usd)
+  document.getElementById('k-balance').textContent = fmt$(c.balance_usd)
+  document.getElementById('k-budget').textContent  = fmt$(c.budget_usd)
+  document.getElementById('k-pct').textContent     = c.used_pct + '%'
+  const bar = document.getElementById('k-bar')
+  bar.style.width = Math.min(c.used_pct,100)+'%'
+  if(c.used_pct>=90) bar.classList.add('danger')
+  else if(c.used_pct>=70) bar.classList.add('warning')
+
+  // 残高詳細
+  document.getElementById('balance-detail').innerHTML = [
+    ['チャージ総額', fmt$(c.charged_usd), ''],
+    ['今月の使用', '-'+fmt$(c.used_usd), 'color:#f87171'],
+    ['推定残高', fmt$(c.balance_usd), c.balance_usd>=0?'color:#4ade80':'color:#f87171'],
+    ['為替換算(¥)', fmt¥(c.balance_usd), 'color:var(--muted)'],
+  ].map(([l,v,s])=>`
+    <div class="stat-row">
+      <span style="color:var(--muted)">${l}</span>
+      <span class="val" style="${s}">${v}</span>
+    </div>`).join('') + `
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border2)">
+      <div style="font-size:11px;color:var(--subtle);margin-bottom:8px">今月の消化率</div>
+      <div class="progress-bar" style="height:8px">
+        <div class="progress-fill ${c.used_pct>=90?'danger':c.used_pct>=70?'warning':''}"
+             style="width:${Math.min(c.used_pct,100)}%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px">
+        <span>${fmt$(c.used_usd)} 使用</span>
+        <span>${c.used_pct}%</span>
+        <span>予算 ${fmt$(c.budget_usd)}</span>
+      </div>
+    </div>`
+
+  // カード選択（チャージ用）
+  loadCardsForCharge()
+}
+
+async function loadCardsForCharge(){
+  const data = await adminApi('/cards')
+  _cardsData = data?.cards || []
+  const sel = document.getElementById('charge-card-select')
+  if(!_cardsData.length){
+    sel.innerHTML = `<div style="font-size:12px;color:var(--subtle)">カード未登録 — <a href="#" onclick="showTab('cards');return false" style="color:var(--gold)">カードを追加</a></div>`
+    return
+  }
+  sel.innerHTML = _cardsData.map(c=>`
+    <label style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:7px 0">
+      <input type="radio" name="pay-card" value="${c.id}" ${c.is_default?'checked':''} style="accent-color:var(--gold)">
+      <span class="card-brand-logo card-brand-${(c.card_brand||'').toLowerCase().replace('card','')||'visa'}">${c.card_brand||'VISA'}</span>
+      <span class="card-numbers">•••• ${c.card_last4}</span>
+      <span class="card-exp">${c.exp_month}/${c.exp_year}</span>
+      ${c.is_default?'<span class="default-badge">DEFAULT</span>':''}
+    </label>`).join('')
+}
+
+// ── チャージ実行 ──────────────────────────────────────────────
+function setAmount(v){ document.getElementById('charge-amount').value = v }
+
+async function doCharge(){
+  const amount = parseFloat(document.getElementById('charge-amount').value)
+  const note   = document.getElementById('charge-note').value.trim()
+  const sel    = document.querySelector('input[name="pay-card"]:checked')
+  const card   = _cardsData.find(c=>c.id===sel?.value)
+
+  if(!amount || amount<5){ adminToast('5ドル以上のチャージ金額を入力してください','e'); return }
+  if(!card){ adminToast('使用するカードを選択してください','e'); return }
+
+  adminModal({
+    title: `$${amount.toFixed(2)} をチャージしますか？`,
+    body: `カード: ${card.card_brand} •••• ${card.card_last4}<br>（≒ ¥${Math.round(amount*150).toLocaleString()}）`,
+    okLabel: 'チャージ実行',
+    okColor: 'linear-gradient(135deg,#c9a84c,#e8c97a)',
+    onOk: async()=>{
+      const res = await adminApi('/charges',{method:'POST',body:{amount_usd:amount,note,card_last4:card.card_last4}})
+      if(res?.ok){ adminToast(`$${amount.toFixed(2)} のチャージが完了しました ✦`,'s'); init() }
+      else adminToast('チャージに失敗しました','e')
+    }
+  })
+}
+
+// ── チャージ履歴 ──────────────────────────────────────────────
+async function loadHistory(){
+  const data = await adminApi('/costs')
+  const charges = data?.charges || []
+  document.getElementById('charge-history').innerHTML = charges.length
+    ? `<table class="admin-table" style="width:100%">
+        <thead><tr>
+          <th>日時</th><th>金額</th><th>為替換算</th><th>カード</th><th>メモ</th>
+        </tr></thead>
+        <tbody>
+          ${charges.map(c=>`
+            <tr>
+              <td class="mono">${fmtDt(c.charged_at)}</td>
+              <td><strong style="color:var(--gold2)">${fmt$(c.amount_usd)}</strong></td>
+              <td class="mono" style="color:var(--muted)">${fmt¥(c.amount_usd)}</td>
+              <td>${c.card_last4?`<span class="mono">•••• ${c.card_last4}</span>`:'—'}</td>
+              <td style="color:var(--muted)">${c.note||'—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+    : '<div style="color:var(--subtle);font-size:13px;padding:20px 0">チャージ履歴がありません</div>'
+}
+
+// ── 月次コスト ────────────────────────────────────────────────
+async function loadCosts(){
+  const data = await adminApi('/costs?months=12')
+  const costs = data?.costs || []
+  // 月ごとにグループ化
+  const byMonth = {}
+  costs.forEach(c=>{
+    if(!byMonth[c.month]) byMonth[c.month]={month:c.month,total:0,models:[]}
+    byMonth[c.month].total += c.cost_usd
+    byMonth[c.month].models.push(c)
+  })
+  const months = Object.values(byMonth).sort((a,b)=>b.month.localeCompare(a.month))
+
+  document.getElementById('cost-list').innerHTML = months.length
+    ? `<table class="admin-table">
+        <thead><tr><th>月</th><th>モデル</th><th>入力トークン</th><th>出力トークン</th><th>費用(USD)</th><th>費用(¥)</th></tr></thead>
+        <tbody>
+          ${months.flatMap(m=>m.models.map((r,i)=>`
+            <tr>
+              ${i===0?`<td rowspan="${m.models.length}" class="mono" style="font-weight:600">${m.month}</td>`:''}
+              <td><span class="model-badge">${r.model}</span></td>
+              <td class="mono">${fmtN(r.input_tokens)}</td>
+              <td class="mono">${fmtN(r.output_tokens)}</td>
+              <td class="mono" style="color:var(--gold2)">${fmt$(r.cost_usd,4)}</td>
+              <td class="mono" style="color:var(--muted)">${fmt¥(r.cost_usd)}</td>
+            </tr>`)).join('')}
+        </tbody>
+      </table>
+      <div style="font-size:11px;color:var(--subtle);margin-top:14px">
+        ※ APIコストデータはOpenAI Dashboardから手動でPOSTして記録します
+      </div>`
+    : '<div style="color:var(--subtle);font-size:13px;padding:20px 0">コストデータがありません。<br>OpenAI Dashboardで確認した費用を手動で記録してください。</div>'
+}
+
+// ── カード管理 ────────────────────────────────────────────────
+async function loadCards(){
+  const data = await adminApi('/cards')
+  _cardsData = data?.cards || []
+  renderCards()
+}
+function renderCards(){
+  document.getElementById('card-list').innerHTML = _cardsData.length
+    ? _cardsData.map(c=>`
+        <div class="card-item ${c.is_default?'default-card':''}">
+          <div class="card-brand-logo card-brand-${(c.card_brand||'').toLowerCase().replace('card','')||'visa'}">${c.card_brand||'VISA'}</div>
+          <div style="flex:1">
+            <div class="card-numbers">•••• •••• •••• ${c.card_last4}</div>
+            <div class="card-exp">${c.exp_month}/${c.exp_year}</div>
+          </div>
+          ${c.is_default?'<span class="default-badge">DEFAULT</span>':''}
+          <button class="btn btn-danger btn-xs" onclick="deleteCard('${c.id}','${c.card_last4}')">削除</button>
+        </div>`).join('')
+    : '<div style="color:var(--subtle);font-size:13px">登録カードなし</div>'
+}
+function showAddCard(){
+  const f = document.getElementById('add-card-form')
+  f.style.display = f.style.display==='none'?'block':'none'
+}
+async function addCard(){
+  const last4 = document.getElementById('card-last4').value.trim()
+  const brand = document.getElementById('card-brand').value
+  const month = parseInt(document.getElementById('card-month').value)
+  const year  = parseInt(document.getElementById('card-year').value)
+  if(!/^\d{4}$/.test(last4)){ adminToast('カード番号は末尾4桁を入力してください','e'); return }
+  if(!month||!year){ adminToast('有効期限を入力してください','e'); return }
+  const res = await adminApi('/cards',{method:'POST',body:{card_last4:last4,card_brand:brand,exp_month:month,exp_year:year}})
+  if(res?.ok){
+    adminToast('カードを登録しました','s')
+    document.getElementById('add-card-form').style.display='none'
+    loadCards(); loadCardsForCharge()
+  } else adminToast('登録に失敗しました','e')
+}
+async function deleteCard(id,last4){
+  adminModal({
+    title:`•••• ${last4} を削除しますか？`,
+    body:'この操作は取り消せません。',
+    okLabel:'削除する',
+    onOk: async()=>{
+      const res = await adminApi(`/cards/${id}`,{method:'DELETE'})
+      if(res?.ok){ adminToast('カードを削除しました','s'); loadCards(); loadCardsForCharge() }
+      else adminToast('削除に失敗しました','e')
+    }
+  })
+}
+
+// ── 予算設定 ──────────────────────────────────────────────────
+async function loadSettings(){
+  const data = await adminApi('/settings')
+  const s = data?.settings||{}
+  document.getElementById('set-budget').value    = s.monthly_budget_usd||100
+  document.getElementById('set-threshold').value = s.alert_threshold_pct||80
+  document.getElementById('set-maintenance').checked = s.maintenance_mode==='true'
+}
+async function saveSettings(){
+  const budget    = document.getElementById('set-budget').value
+  const threshold = document.getElementById('set-threshold').value
+  const maint     = document.getElementById('set-maintenance').checked
+  const res = await adminApi('/settings',{method:'PUT',body:{
+    monthly_budget_usd: budget,
+    alert_threshold_pct: threshold,
+    maintenance_mode: maint?'true':'false'
+  }})
+  if(res?.ok) adminToast('設定を保存しました ✦','s')
+  else adminToast('保存に失敗しました','e')
+}
+
+init()
+</script>
+</body>
+</html>

@@ -91,6 +91,7 @@ def db_init_lumina_tables():
         plan            VARCHAR(20)  NOT NULL DEFAULT 'free',
         usage_count     INT          NOT NULL DEFAULT 0,
         is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
+        is_admin        BOOLEAN      NOT NULL DEFAULT FALSE,
         terms_agreed_at TIMESTAMP,
         device_info     JSONB,
         created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
@@ -173,6 +174,7 @@ def db_init_lumina_tables():
         user_id           UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
         overall_score     FLOAT NOT NULL DEFAULT 0.0,
         food_score        FLOAT NOT NULL DEFAULT 0.0,
+        gourmet_score     FLOAT NOT NULL DEFAULT 0.0,
         travel_score      FLOAT NOT NULL DEFAULT 0.0,
         shopping_score    FLOAT NOT NULL DEFAULT 0.0,
         health_score      FLOAT NOT NULL DEFAULT 0.0,
@@ -202,6 +204,46 @@ def db_init_lumina_tables():
         created_at TIMESTAMP   NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_lu_sessions_user  ON lu_sessions(user_id, started_at DESC);
+    -- 管理者: OpenAI予算・チャージ管理
+    CREATE TABLE IF NOT EXISTS admin_openai_budget (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        amount_usd  NUMERIC(10,2) NOT NULL,
+        note        TEXT,
+        charged_by  UUID REFERENCES lu_users(id),
+        card_last4  VARCHAR(4),
+        charged_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    -- 管理者: 月次APIコストスナップショット
+    CREATE TABLE IF NOT EXISTS admin_cost_logs (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        month         VARCHAR(7) NOT NULL,
+        model         VARCHAR(50) NOT NULL,
+        input_tokens  BIGINT DEFAULT 0,
+        output_tokens BIGINT DEFAULT 0,
+        cost_usd      NUMERIC(10,4) DEFAULT 0,
+        recorded_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    -- 管理者: 登録カード情報（本番ではStripe連携）
+    CREATE TABLE IF NOT EXISTS admin_cards (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        card_last4  VARCHAR(4) NOT NULL,
+        card_brand  VARCHAR(20) DEFAULT 'Visa',
+        exp_month   INT,
+        exp_year    INT,
+        is_default  BOOLEAN DEFAULT FALSE,
+        added_at    TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    -- 管理者: システム設定KV
+    CREATE TABLE IF NOT EXISTS admin_settings (
+        key         VARCHAR(100) PRIMARY KEY,
+        value       TEXT,
+        updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO admin_settings(key,value) VALUES
+        ('monthly_budget_usd','100'),
+        ('alert_threshold_pct','80'),
+        ('maintenance_mode','false')
+    ON CONFLICT(key) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_lu_messages_session ON lu_messages(session_id, created_at);
     """
     conn = get_db()
@@ -262,6 +304,27 @@ def auth_required(f):
 # ══════════════════════════════════════════════════════════════
 #  ヘルパー
 # ══════════════════════════════════════════════════════════════
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        token = auth[7:] if auth.startswith("Bearer ") else None
+        if not token:
+            return jsonify({"error": "認証が必要です"}), 401
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            user = db_exec("SELECT * FROM lu_users WHERE id=%s AND is_active=TRUE AND is_admin=TRUE",
+                           (data["sub"],), fetch="one")
+            if not user:
+                return jsonify({"error": "管理者権限がありません"}), 403
+            g.current_user = dict(user)
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "セッションが期限切れです"}), 401
+        except Exception:
+            return jsonify({"error": "無効なトークンです"}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
 PLAN_LIMITS = {"free": 10, "pro": 50, "master": 200}
 
 def hash_pw(pw):   return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
@@ -305,7 +368,7 @@ def build_context_injection(user_id, ai_type):
     if p.get("monthly_budget"):  lines.append(f"月次予算目安: ¥{p['monthly_budget']:,}")
     if p.get("transport_modes"): lines.append(f"移動手段: {', '.join(p['transport_modes'])}")
 
-    if ai_type in ("recipe", "health", "general"):
+    if ai_type in ("recipe", "gourmet", "health", "general"):
         fd = ctx.get("food", {})
         if fd.get("liked_cuisines"):    lines.append(f"好きな料理: {', '.join(fd['liked_cuisines'])}")
         if fd.get("disliked_cuisines"): lines.append(f"苦手な料理: {', '.join(fd['disliked_cuisines'])}")
@@ -346,7 +409,7 @@ def build_context_injection(user_id, ai_type):
     return "\n".join(lines)
 
 def update_match_score(user_id, ai_type, rating=0):
-    col = {"recipe":"food_score","travel":"travel_score","shopping":"shopping_score",
+    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score","shopping":"shopping_score",
            "health":"health_score","appliance":"home_score","diy":"diy_score"}.get(ai_type,"overall_score")
     conn = get_db()
     with conn.cursor() as cur:
@@ -516,6 +579,8 @@ def chat():
     ai_type     = d.get("ai_type", "all")
     messages_in = d.get("messages", [])
     session_id  = d.get("session_id")
+    user_lat    = d.get("lat")
+    user_lng    = d.get("lng")
 
     if not messages_in:
         return jsonify({"error": "メッセージがありません"}), 400
@@ -525,7 +590,8 @@ def chat():
         return jsonify({"error": "usage_limit_reached", "limit": limit}), 429
 
     AI_NAME_MAP = {"all": None, "cooking": "recipe", "travel": "travel",
-                   "shopping": "shopping", "diy": "diy", "home": "appliance", "health": "health"}
+                   "shopping": "shopping", "diy": "diy", "home": "appliance", "health": "health",
+                   "gourmet": "gourmet"}
     agent_name = AI_NAME_MAP.get(ai_type)
 
     # セッション管理
@@ -550,6 +616,9 @@ def chat():
     print(f"[Router] user={uid} ai_type={ai_type} → agent={agent_name}")
 
     context_injection = build_context_injection(uid, agent_name)
+    # グルメAI: 位置情報をコンテキストに注入
+    if agent_name == "gourmet" and user_lat and user_lng:
+        context_injection += f"\n\n【ユーザーの現在地】\n緯度: {user_lat}\n経度: {user_lng}\n※ search_restaurants を呼ぶ際はこの座標を使用してください"
     agent = AGENT_MAP.get(agent_name)
 
     try:
@@ -673,6 +742,222 @@ def dashboard():
                               "limit": PLAN_LIMITS.get(user["plan"],10),
                               "pct":   round(user["usage_count"]/PLAN_LIMITS.get(user["plan"],10)*100)},
                     "recent_sessions": recent})
+
+
+# ══════════════════════════════════════════════════════════════
+#  管理者 API
+# ══════════════════════════════════════════════════════════════
+
+@app.route("/api/admin/login", methods=["POST"])
+def admin_login():
+    d = request.json or {}
+    email = d.get("email","").strip().lower()
+    pw    = d.get("password","")
+    user  = db_exec("SELECT * FROM lu_users WHERE email=%s AND is_admin=TRUE AND is_active=TRUE",
+                    (email,), fetch="one")
+    if not user or not check_pw(pw, user["password_hash"]):
+        return jsonify({"error": "メールアドレスまたはパスワードが違います"}), 401
+    token = create_token(str(user["id"]))
+    return jsonify({"token": token, "admin": {"id": str(user["id"]), "email": user["email"], "nickname": user["nickname"]}})
+
+@app.route("/api/admin/dashboard", methods=["GET"])
+@admin_required
+def admin_dashboard():
+    """管理者ダッシュボード: KPI・ユーザー統計・API費用サマリー"""
+    # ユーザー統計
+    total_users  = db_exec("SELECT COUNT(*) as c FROM lu_users WHERE is_active=TRUE AND is_admin=FALSE", fetch="one")["c"]
+    plan_counts  = db_exec("SELECT plan, COUNT(*) as c FROM lu_users WHERE is_active=TRUE AND is_admin=FALSE GROUP BY plan", fetch="all")
+    new_today    = db_exec("SELECT COUNT(*) as c FROM lu_users WHERE DATE(created_at)=CURRENT_DATE AND is_admin=FALSE", fetch="one")["c"]
+    new_month    = db_exec("SELECT COUNT(*) as c FROM lu_users WHERE DATE_TRUNC('month',created_at)=DATE_TRUNC('month',CURRENT_DATE) AND is_admin=FALSE", fetch="one")["c"]
+    # セッション統計
+    total_chats  = db_exec("SELECT COUNT(*) as c FROM lu_sessions", fetch="one")["c"]
+    chats_today  = db_exec("SELECT COUNT(*) as c FROM lu_sessions WHERE DATE(started_at)=CURRENT_DATE", fetch="one")["c"]
+    # 月間チャット数（直近6ヶ月）
+    monthly_chats = db_exec(
+        "SELECT TO_CHAR(DATE_TRUNC('month',started_at),'YYYY-MM') as month, COUNT(*) as c "
+        "FROM lu_sessions WHERE started_at >= NOW() - INTERVAL '6 months' "
+        "GROUP BY month ORDER BY month", fetch="all") or []
+    # APIコスト
+    budget_row   = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
+    budget_usd   = float(budget_row["value"]) if budget_row else 100.0
+    cost_row     = db_exec("SELECT SUM(cost_usd) as total FROM admin_cost_logs WHERE month=TO_CHAR(CURRENT_DATE,'YYYY-MM')", fetch="one")
+    cost_usd     = float(cost_row["total"] or 0) if cost_row else 0.0
+    # チャージ残高
+    charged_total = db_exec("SELECT SUM(amount_usd) as total FROM admin_openai_budget", fetch="one")
+    charged_usd   = float(charged_total["total"] or 0) if charged_total else 0.0
+    # システム設定
+    settings_rows = db_exec("SELECT key,value FROM admin_settings", fetch="all") or []
+    settings = {r["key"]: r["value"] for r in settings_rows}
+
+    plans = {r["plan"]: r["c"] for r in (plan_counts or [])}
+    return jsonify({
+        "users": {"total": total_users, "new_today": new_today, "new_month": new_month,
+                  "plans": {"free": plans.get("free",0), "pro": plans.get("pro",0), "master": plans.get("master",0)}},
+        "chats": {"total": total_chats, "today": chats_today,
+                  "monthly": [{"month": r["month"], "count": r["c"]} for r in monthly_chats]},
+        "cost":  {"budget_usd": budget_usd, "used_usd": cost_usd,
+                  "charged_usd": charged_usd, "balance_usd": charged_usd - cost_usd,
+                  "used_pct": round(cost_usd / budget_usd * 100, 1) if budget_usd else 0},
+        "settings": settings,
+    })
+
+@app.route("/api/admin/users", methods=["GET"])
+@admin_required
+def admin_list_users():
+    page  = max(1, int(request.args.get("page", 1)))
+    limit = min(int(request.args.get("limit", 20)), 100)
+    q     = request.args.get("q", "").strip()
+    plan  = request.args.get("plan", "")
+    offset = (page - 1) * limit
+    where = "WHERE u.is_admin=FALSE"
+    params = []
+    if q:
+        where += " AND (u.email ILIKE %s OR u.nickname ILIKE %s)"
+        params += [f"%{q}%", f"%{q}%"]
+    if plan:
+        where += " AND u.plan=%s"; params.append(plan)
+    total = db_exec(f"SELECT COUNT(*) as c FROM lu_users u {where}", params or None, fetch="one")["c"]
+    rows  = db_exec(
+        f"SELECT u.id,u.nickname,u.email,u.plan,u.usage_count,u.is_active,u.created_at,"
+        f" COALESCE(ms.total_sessions,0) as total_sessions"
+        f" FROM lu_users u LEFT JOIN lu_match_scores ms ON ms.user_id=u.id"
+        f" {where} ORDER BY u.created_at DESC LIMIT %s OFFSET %s",
+        (params or []) + [limit, offset], fetch="all") or []
+    users = []
+    for r in rows:
+        u = dict(r)
+        u["id"] = str(u["id"])
+        u["created_at"] = u["created_at"].isoformat() if u.get("created_at") else None
+        users.append(u)
+    return jsonify({"users": users, "total": total, "page": page, "pages": -(-total // limit)})
+
+@app.route("/api/admin/users/<uid>", methods=["GET"])
+@admin_required
+def admin_get_user(uid):
+    user = db_exec("SELECT * FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,), fetch="one")
+    if not user:
+        return jsonify({"error": "ユーザーが見つかりません"}), 404
+    u = dict(user)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    u["created_at"] = u["created_at"].isoformat() if u.get("created_at") else None
+    sessions = db_exec("SELECT id,ai_type,msg_count,started_at FROM lu_sessions WHERE user_id=%s ORDER BY started_at DESC LIMIT 10", (uid,), fetch="all") or []
+    sess = []
+    for s in sessions:
+        sv = dict(s); sv["id"] = str(sv["id"])
+        sv["started_at"] = sv["started_at"].isoformat() if sv.get("started_at") else None
+        sess.append(sv)
+    return jsonify({"user": u, "sessions": sess})
+
+@app.route("/api/admin/users/<uid>/plan", methods=["PUT"])
+@admin_required
+def admin_change_plan(uid):
+    plan = (request.json or {}).get("plan")
+    if plan not in ("free","pro","master"):
+        return jsonify({"error": "プランが無効です"}), 400
+    db_exec("UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (plan, uid))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/users/<uid>/deactivate", methods=["POST"])
+@admin_required
+def admin_deactivate_user(uid):
+    db_exec("UPDATE lu_users SET is_active=FALSE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (uid,))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/users/<uid>", methods=["DELETE"])
+@admin_required
+def admin_delete_user(uid):
+    db_exec("DELETE FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/costs", methods=["GET"])
+@admin_required
+def admin_costs():
+    months = int(request.args.get("months", 6))
+    rows   = db_exec(
+        "SELECT month, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens, SUM(cost_usd) as cost_usd "
+        "FROM admin_cost_logs WHERE recorded_at >= NOW() - INTERVAL '%s months' "
+        "GROUP BY month, model ORDER BY month DESC", (months,), fetch="all") or []
+    charges = db_exec(
+        "SELECT id, amount_usd, note, card_last4, charged_at FROM admin_openai_budget ORDER BY charged_at DESC LIMIT 30",
+        fetch="all") or []
+    ch_list = []
+    for c in charges:
+        cv = dict(c); cv["id"] = str(cv["id"])
+        cv["charged_at"] = cv["charged_at"].isoformat() if cv.get("charged_at") else None
+        ch_list.append(cv)
+    cost_list = [{"month": r["month"], "model": r["model"],
+                  "input_tokens": r["input_tokens"], "output_tokens": r["output_tokens"],
+                  "cost_usd": float(r["cost_usd"] or 0)} for r in rows]
+    return jsonify({"costs": cost_list, "charges": ch_list})
+
+@app.route("/api/admin/charges", methods=["POST"])
+@admin_required
+def admin_add_charge():
+    d = request.json or {}
+    amount = float(d.get("amount_usd", 0))
+    if amount <= 0:
+        return jsonify({"error": "金額が無効です"}), 400
+    db_exec("INSERT INTO admin_openai_budget(amount_usd,note,charged_by,card_last4) VALUES(%s,%s,%s,%s)",
+            (amount, d.get("note",""), str(g.current_user["id"]), d.get("card_last4")))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/cards", methods=["GET"])
+@admin_required
+def admin_get_cards():
+    cards = db_exec("SELECT * FROM admin_cards ORDER BY is_default DESC, added_at DESC", fetch="all") or []
+    return jsonify({"cards": [dict(c) for c in cards]})
+
+@app.route("/api/admin/cards", methods=["POST"])
+@admin_required
+def admin_add_card():
+    d = request.json or {}
+    db_exec("UPDATE admin_cards SET is_default=FALSE")
+    db_exec("INSERT INTO admin_cards(card_last4,card_brand,exp_month,exp_year,is_default) VALUES(%s,%s,%s,%s,TRUE)",
+            (d.get("card_last4"), d.get("card_brand","Visa"), d.get("exp_month"), d.get("exp_year")))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/cards/<cid>", methods=["DELETE"])
+@admin_required
+def admin_delete_card(cid):
+    db_exec("DELETE FROM admin_cards WHERE id=%s", (cid,))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/settings", methods=["GET"])
+@admin_required
+def admin_get_settings():
+    rows = db_exec("SELECT key,value,updated_at FROM admin_settings", fetch="all") or []
+    return jsonify({"settings": {r["key"]: r["value"] for r in rows}})
+
+@app.route("/api/admin/settings", methods=["PUT"])
+@admin_required
+def admin_update_settings():
+    d = request.json or {}
+    for key, val in d.items():
+        db_exec("INSERT INTO admin_settings(key,value,updated_at) VALUES(%s,%s,NOW()) "
+                "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()", (key, str(val)))
+    return jsonify({"ok": True})
+
+@app.route("/api/admin/usage-log", methods=["GET"])
+@admin_required
+def admin_usage_log():
+    limit = min(int(request.args.get("limit", 50)), 200)
+    ai_type = request.args.get("ai_type", "")
+    where = "WHERE 1=1"
+    params = []
+    if ai_type:
+        where += " AND m.ai_type=%s"; params.append(ai_type)
+    rows = db_exec(
+        f"SELECT u.email, u.plan, m.ai_type, m.role, LEFT(m.content,80) as preview, m.created_at "
+        f"FROM lu_messages m JOIN lu_users u ON u.id=m.user_id {where} "
+        f"ORDER BY m.created_at DESC LIMIT %s",
+        params + [limit], fetch="all") or []
+    logs = []
+    for r in rows:
+        rv = dict(r)
+        rv["created_at"] = rv["created_at"].isoformat() if rv.get("created_at") else None
+        logs.append(rv)
+    return jsonify({"logs": logs})
 
 @app.route("/api/health", methods=["GET"])
 def health_check():

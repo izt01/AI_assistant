@@ -98,7 +98,9 @@ const aiParam = new URLSearchParams(location.search).get('ai') || 'all'
 
 const AI_CONFIG = {
   all:      {icon:'✦',  name:'総合チャット AI',   desc:'なんでもお任せください。最適なAIへご案内します',  color:'#c9a84c', bg:'rgba(201,168,76,.12)',
-    greetings:['こんにちは！何でもお気軽にご相談ください。旅行・料理・買い物・DIY・家電・健康など、あなたのご要望に合わせて最適なAIをご案内します✨','今日はどんなことでお手伝いできますか？お気軽にどうぞ！']},
+    greetings:['こんにちは！何でもお気軽にご相談ください。グルメ・旅行・料理・買い物・DIY・家電・健康など、あなたのご要望に合わせて最適なAIをご案内します✨','今日はどんなことでお手伝いできますか？お気軽にどうぞ！']},
+  gourmet:  {icon:'🍽️', name:'グルメ AI',        desc:'食べたいものからお店を探す・飲食店提案',         color:'#f97316', bg:'rgba(249,115,22,.12)',
+    greetings:['何を食べたいですか？🍽️\nお腹のすき加減やジャンル、雰囲気を教えていただければ近くのおすすめのお店をご紹介します！','今日のランチ・ディナーはどこに行きますか？気分を教えてくれれば、ぴったりのお店を探します😊']},
   travel:   {icon:'✈️', name:'旅行 AI',           desc:'旅程作成・ホテル提案・観光スポット案内',          color:'#6495ed', bg:'rgba(100,149,237,.12)',
     greetings:['旅行の計画をお手伝いします！✈️\n行き先、旅行期間、ご予算などを教えていただければ、最適なプランを提案します。','どんな旅行をご計画ですか？国内・海外、どちらもお任せください！']},
   cooking:  {icon:'🍳', name:'料理 AI',           desc:'レシピ提案・献立作成・買い物リスト生成',          color:'#ffa500', bg:'rgba(255,165,0,.12)',
@@ -288,6 +290,10 @@ async function sendMsg() {
     // キャッシュのusage_countを更新
     if(user) { user.usage_count = resp.usage_count || (user.usage_count||0)+1; setCachedUser(user) }
 
+    // グルメAI: お店カードを描画
+    if (aiParam === 'gourmet' && resp.extra) {
+      handleGourmetExtra(resp.extra)
+    }
     addActionChips(aiParam, text)
     updateUsageBadge()
 
@@ -361,6 +367,10 @@ function generateReply(ai, text) {
     health: [
       '健康のご相談ですね💚\n\n※このAIは医療診断を行いません。生活習慣の改善アドバイスのみご提供します。\n\n現在のお悩みやご状況をもう少し教えていただけますか？\n・年代・生活スタイル\n・特に気になっていること\n・これまでに試したこと\n\nあなたに合ったアドバイスをご提案します！',
     ],
+    gourmet: [
+      '何を食べたいですか？🍽️\n\nお腹の気分を教えていただければ、近くのぴったりなお店をご紹介します。\n\n例えば…\n・がっつり系？さっぱり系？\n・和食・洋食・中華・エスニックなど\n・予算感（気軽に〜ちょっと贅沢まで）\n\n位置情報をオンにしていただけると、リアルタイムでお近くのお店を検索できます！',
+      'いいですね！どんなジャンルが気分ですか？😊\nラーメン・カフェ・焼肉・寿司・パスタ・カレー…何でも探せますよ！',
+    ],
     all: [
       'ご質問ありがとうございます！詳しくお聞きして、最適なサポートをご提供します。\nどのようなことでお役に立てますか？',
     ],
@@ -377,6 +387,7 @@ function addActionChips(ai, text) {
     diy: ['材料リストを作る','工具を調べる','別の方法は？'],
     home: ['商品を詳しく見る','他のスタイルも見る','予算内で提案して'],
     health: ['運動プランを作って','食事改善の方法','専門家に相談する'],
+    gourmet: ['もっと近くで探す 📍','別のジャンルで探す','予算を変えて探す'],
   }
   const chips = actions[ai]
   if(!chips) return
@@ -391,6 +402,9 @@ function addActionChips(ai, text) {
   }
   if(ai === 'shopping' && /買い物リスト|リスト/.test(text)) {
     setTimeout(() => { location.href = 'shopping-list.html' }, 300)
+  }
+  if(ai === 'gourmet') {
+    requestUserLocation()
   }
   scrollBottom()
 }
@@ -439,6 +453,66 @@ function clearChat() {
   document.getElementById('chat-msgs').innerHTML = ''
   init()
 }
+
+// ─── グルメAI: 位置情報取得 ─────────────────────────────────
+function requestUserLocation() {
+  if (window._locationRequested) return
+  window._locationRequested = true
+  if (!navigator.geolocation) return
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      window._userLat = pos.coords.latitude
+      window._userLng = pos.coords.longitude
+      console.log('[Gourmet] 位置情報取得:', window._userLat, window._userLng)
+      // 位置情報取得済みをチャットに通知
+      const notice = document.createElement('div')
+      notice.style.cssText = 'text-align:center;font-size:11px;color:var(--subtle);margin:6px 0'
+      notice.textContent = '📍 現在地を取得しました'
+      document.getElementById('chat-msgs').appendChild(notice)
+    },
+    err => {
+      console.warn('[Gourmet] 位置情報取得失敗:', err.message)
+    },
+    { enableHighAccuracy: false, timeout: 8000 }
+  )
+}
+
+// ─── グルメAI: お店カード描画 ───────────────────────────────
+function renderRestaurantCards(places) {
+  if (!places || !places.length) return
+  const wrap = document.createElement('div')
+  wrap.className = 'restaurant-cards'
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:10px;font-weight:600">
+      📍 近くのおすすめのお店
+    </div>
+    ${places.map((p, i) => `
+      <div class="rest-card" onclick="window.open('${p.maps_url}','_blank')">
+        <div class="rest-rank">${i + 1}</div>
+        <div class="rest-body">
+          <div class="rest-name">${p.name}</div>
+          <div class="rest-meta">
+            ${p.rating ? `<span class="rest-rating">⭐ ${p.rating}</span>` : ''}
+            ${p.open_now === true  ? '<span class="rest-open">営業中</span>' : ''}
+            ${p.open_now === false ? '<span class="rest-closed">営業時間外</span>' : ''}
+          </div>
+          <div class="rest-addr">📍 ${p.address || '住所情報なし'}</div>
+        </div>
+        <div class="rest-arrow">›</div>
+      </div>
+    `).join('')}
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+
+// ─── グルメAI: chat.htmlのextra処理でお店を描画 ─────────────
+function handleGourmetExtra(extra) {
+  if (extra && extra._places && extra._places.places) {
+    renderRestaurantCards(extra._places.places)
+  }
+}
+
 </script>
 <div id="mobile-nav-root"></div>
 </body>

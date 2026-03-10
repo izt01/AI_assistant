@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Lumina AI — 管理者ログイン</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,400&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0a0b0f;--ink2:#12141a;--ink3:#1c1f28;
+  --cream:#e8e4dc;--muted:rgba(232,228,220,.45);--subtle:rgba(232,228,220,.25);
+  --gold:#c9a84c;--gold2:#e8c97a;
+  --border:rgba(201,168,76,.15);--border2:rgba(255,255,255,.07);
+  --red:#ef4444;--green:#22c55e;
+  --r:10px;
+}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--ink);color:var(--cream);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  -webkit-font-smoothing:antialiased;position:relative;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse 80% 60% at 20% 30%,rgba(201,168,76,.07) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 80% at 80% 70%,rgba(100,80,200,.05) 0%,transparent 60%);
+  pointer-events:none}
+
+/* Grid bg */
+body::after{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(201,168,76,.03) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(201,168,76,.03) 1px,transparent 1px);
+  background-size:48px 48px;pointer-events:none}
+
+.wrap{position:relative;z-index:2;width:100%;max-width:400px;padding:24px}
+
+/* Logo */
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:36px;justify-content:center}
+.logo-gem{width:32px;height:32px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:14px;box-shadow:0 4px 20px rgba(201,168,76,.3)}
+.logo-name{font-family:'Fraunces',serif;font-size:22px;font-weight:900;letter-spacing:-.03em}
+
+/* Card */
+.card{background:rgba(255,255,255,.03);border:1px solid var(--border2);
+  border-radius:18px;padding:32px 28px;backdrop-filter:blur(12px)}
+.card-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;
+  margin-bottom:4px;letter-spacing:-.02em}
+.card-sub{font-size:12px;color:var(--muted);margin-bottom:28px}
+.admin-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
+  border-radius:99px;padding:3px 12px;font-size:10.5px;font-weight:600;
+  color:#f87171;letter-spacing:.06em;margin-bottom:20px}
+
+/* Form */
+.field{margin-bottom:16px}
+.lbl{font-size:11.5px;font-weight:500;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:.04em}
+.inp{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border2);
+  border-radius:9px;padding:11px 14px;font-size:13.5px;font-family:inherit;
+  color:var(--cream);outline:none;transition:border-color .18s}
+.inp:focus{border-color:rgba(201,168,76,.45);background:rgba(255,255,255,.07)}
+.inp::placeholder{color:var(--subtle)}
+
+.pw-wrap{position:relative}
+.pw-wrap .inp{padding-right:42px}
+.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;font-size:15px;color:var(--subtle);
+  transition:color .18s}
+.pw-eye:hover{color:var(--muted)}
+
+.btn{width:100%;padding:13px;border-radius:10px;font-size:13.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:all .2s;border:none;margin-top:8px}
+.btn-admin{background:linear-gradient(135deg,#c9a84c,#e8c97a);color:var(--ink);
+  box-shadow:0 4px 20px rgba(201,168,76,.2)}
+.btn-admin:hover{box-shadow:0 6px 28px rgba(201,168,76,.35);transform:translateY(-1px)}
+.btn-admin:disabled{opacity:.5;transform:none;cursor:not-allowed}
+
+.err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
+  border-radius:8px;padding:10px 14px;font-size:12px;color:#f87171;
+  margin-top:12px;display:none}
+.err.show{display:block}
+
+.back{text-align:center;margin-top:20px;font-size:12px;color:var(--subtle)}
+.back a{color:var(--gold);text-decoration:none}
+.back a:hover{color:var(--gold2)}
+
+/* Mono accent */
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--gold);background:rgba(201,168,76,.08);
+  border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="logo-gem">✦</div>
+    <span class="logo-name">Lumina</span>
+  </div>
+
+  <div class="card">
+    <div class="admin-badge">⚙ ADMIN PORTAL</div>
+    <div class="card-title">管理者ログイン</div>
+    <div class="card-sub">管理者アカウントでログインしてください</div>
+
+    <div class="field">
+      <label class="lbl">メールアドレス</label>
+      <input class="inp" id="email" type="email" placeholder="admin@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label class="lbl">パスワード</label>
+      <div class="pw-wrap">
+        <input class="inp" id="pw" type="password" placeholder="パスワードを入力" autocomplete="current-password">
+        <button class="pw-eye" type="button" onclick="togglePw()">👁</button>
+      </div>
+    </div>
+
+    <button class="btn btn-admin" id="login-btn" onclick="doLogin()">ログイン</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="back"><a href="index.html">← サイトトップへ戻る</a></div>
+</div>
+
+<script>
+function togglePw(){
+  const el = document.getElementById('pw')
+  el.type = el.type === 'password' ? 'text' : 'password'
+}
+
+async function doLogin(){
+  const email = document.getElementById('email').value.trim()
+  const pw    = document.getElementById('pw').value
+  const err   = document.getElementById('err')
+  const btn   = document.getElementById('login-btn')
+
+  err.classList.remove('show')
+  if(!email || !pw){ err.textContent='メールとパスワードを入力してください'; err.classList.add('show'); return }
+
+  btn.disabled = true; btn.textContent = 'ログイン中...'
+  try {
+    const res = await fetch('/api/admin/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password: pw})
+    })
+    const data = await res.json()
+    if(!res.ok){ err.textContent = data.error || 'ログインに失敗しました'; err.classList.add('show'); return }
+    localStorage.setItem('admin_token', data.token)
+    localStorage.setItem('admin_user', JSON.stringify(data.admin))
+    location.href = 'admin-dashboard.html'
+  } catch(e) {
+    err.textContent = 'サーバーエラーが発生しました'
+    err.classList.add('show')
+  } finally {
+    btn.disabled = false; btn.textContent = 'ログイン'
+  }
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Enter') doLogin() })
+
+// 既にログイン済みなら飛ばす
+if(localStorage.getItem('admin_token')) location.href = 'admin-dashboard.html'
+</script>
+</body>
+</html>
