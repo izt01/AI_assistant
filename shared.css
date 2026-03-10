@@ -254,7 +254,6 @@ table.dt{width:100%;border-collapse:collapse}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .w100{width:100%}
 .plan-pill{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px}
-</style>
 
 /* ══════════════════════════════════════════════
    MOBILE RESPONSIVE  (スマホ対応)
@@ -588,10 +587,3 @@ table.dt{width:100%;border-collapse:collapse}
   flex-shrink: 0;
   line-height: 1;
 }
-
-
-/* ── PWA / mobile polish ── */
-html, body { min-height: 100%; }
-body { padding-bottom: env(safe-area-inset-bottom, 0px); }
-button, a, input, textarea, select { touch-action: manipulation; }
-textarea, input, select { font-size: 16px; }

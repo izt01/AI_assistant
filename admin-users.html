@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ユーザー管理 — Lumina AI Admin</title>
+<script src="admin-shared.js"></script>
+<style id="admin-shared-css"></style>
+<style>
+.search-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center}
+.search-bar .inp{flex:1;min-width:200px}
+.filter-tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.filter-tab{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:20px;
+  padding:4px 14px;font-size:12px;cursor:pointer;transition:all .18s;color:var(--muted);font-family:inherit}
+.filter-tab.active{background:rgba(201,168,76,.1);border-color:rgba(201,168,76,.3);color:var(--gold2)}
+.filter-tab:hover:not(.active){border-color:rgba(255,255,255,.15);color:var(--cream)}
+
+.user-table-wrap{overflow-x:auto}
+.user-row td{vertical-align:middle}
+.avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
+
+/* ユーザー詳細パネル */
+.user-detail-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);
+  backdrop-filter:blur(4px);display:none;align-items:flex-start;justify-content:flex-end;padding:0}
+.user-detail-overlay.open{display:flex}
+.user-detail-panel{width:420px;height:100vh;background:var(--ink3);border-left:1px solid var(--border2);
+  overflow-y:auto;animation:slideIn .2s ease}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.udp-hdr{padding:22px 22px 16px;border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--ink3);z-index:10}
+.udp-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:17px;font-weight:700;color:var(--ink);flex-shrink:0}
+.udp-body{padding:20px 22px}
+.udp-section{margin-bottom:20px}
+.udp-section-title{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.08em;
+  text-transform:uppercase;margin-bottom:10px}
+.udp-row{display:flex;justify-content:space-between;align-items:flex-start;
+  padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12.5px}
+.udp-row:last-child{border-bottom:none}
+.udp-key{color:var(--muted);flex:1}
+.udp-val{flex:1;text-align:right;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:11.5px}
+
+.session-mini{background:rgba(255,255,255,.03);border:1px solid var(--border2);
+  border-radius:8px;padding:9px 12px;margin-bottom:7px;font-size:12px}
+.session-mini-ai{font-size:11px;color:var(--gold);margin-bottom:2px}
+
+.action-btns{display:flex;flex-direction:column;gap:8px;padding:20px 22px;
+  border-top:1px solid var(--border2)}
+
+.pagination{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:16px}
+.page-btn{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:7px;
+  padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:var(--muted);transition:all .18s}
+.page-btn.active{background:rgba(201,168,76,.1);border-color:rgba(201,168,76,.3);color:var(--gold2)}
+.page-btn:disabled{opacity:.3;cursor:not-allowed}
+.page-btn:hover:not(:disabled):not(.active){border-color:rgba(255,255,255,.2);color:var(--cream)}
+
+.empty-state{text-align:center;padding:48px 0;color:var(--subtle)}
+.empty-state .icon{font-size:36px;margin-bottom:12px;opacity:.3}
+</style>
+</head>
+<body>
+<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+
+<div class="admin-layout">
+  <div id="nav-root"></div>
+
+  <main class="admin-main">
+    <div style="position:relative;z-index:1">
+      <div class="admin-page-hdr">
+        <div class="admin-page-title">ユーザー管理</div>
+        <div class="admin-page-sub" id="page-sub">読み込み中...</div>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-grid" id="kpi-area" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px">
+        <div class="kpi"><div class="kpi-label">総ユーザー</div><div class="kpi-val" id="k-total">—</div></div>
+        <div class="kpi"><div class="kpi-label">Free</div><div class="kpi-val" id="k-free">—</div></div>
+        <div class="kpi blue"><div class="kpi-label">Pro</div><div class="kpi-val" id="k-pro">—</div></div>
+        <div class="kpi gold"><div class="kpi-label">Master</div><div class="kpi-val" id="k-master">—</div></div>
+        <div class="kpi green"><div class="kpi-label">今日の新規</div><div class="kpi-val" id="k-today">—</div></div>
+      </div>
+
+      <!-- 検索・フィルター -->
+      <div class="search-bar">
+        <input class="inp" id="search-input" placeholder="🔍 メール・ニックネームで検索..."
+          style="min-width:260px" oninput="debounceSearch()">
+        <button class="btn btn-ghost" onclick="loadUsers()">検索</button>
+        <button class="btn btn-ghost" onclick="clearSearch()">リセット</button>
+      </div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="filterPlan('')">すべて</button>
+        <button class="filter-tab" onclick="filterPlan('free')">Free のみ</button>
+        <button class="filter-tab" onclick="filterPlan('pro')">Pro のみ</button>
+        <button class="filter-tab" onclick="filterPlan('master')">Master のみ</button>
+      </div>
+
+      <!-- テーブル -->
+      <div class="admin-section">
+        <div class="admin-section-hdr">
+          <div class="admin-section-title">ユーザー一覧</div>
+          <div style="font-size:12px;color:var(--muted)" id="result-count"></div>
+        </div>
+        <div class="user-table-wrap">
+          <table class="admin-table" style="width:100%">
+            <thead>
+              <tr>
+                <th>ユーザー</th>
+                <th>プラン</th>
+                <th>使用回数</th>
+                <th>総セッション</th>
+                <th>ステータス</th>
+                <th>登録日</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="user-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--subtle)"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ユーザー詳細パネル -->
+<div class="user-detail-overlay" id="detail-overlay" onclick="closeDetail(event)">
+  <div class="user-detail-panel" id="detail-panel">
+    <div class="udp-hdr">
+      <div class="udp-avatar" id="d-avatar">?</div>
+      <div>
+        <div id="d-name" style="font-size:15px;font-weight:700"></div>
+        <div id="d-email" style="font-size:11.5px;color:var(--muted)"></div>
+      </div>
+      <button onclick="closeDetailPanel()" style="margin-left:auto;background:none;border:none;
+        color:var(--muted);font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+
+    <div class="udp-body">
+      <div class="udp-section">
+        <div class="udp-section-title">アカウント情報</div>
+        <div class="udp-row"><span class="udp-key">プラン</span><span id="d-plan"></span></div>
+        <div class="udp-row"><span class="udp-key">使用回数(今月)</span><span class="udp-val" id="d-usage"></span></div>
+        <div class="udp-row"><span class="udp-key">総セッション</span><span class="udp-val" id="d-sessions"></span></div>
+        <div class="udp-row"><span class="udp-key">ステータス</span><span id="d-status"></span></div>
+        <div class="udp-row"><span class="udp-key">登録日</span><span class="udp-val" id="d-created"></span></div>
+      </div>
+
+      <div class="udp-section">
+        <div class="udp-section-title">プラン変更</div>
+        <div style="display:flex;gap:7px">
+          <select class="inp" id="d-plan-select" style="flex:1">
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="master">Master</option>
+          </select>
+          <button class="btn btn-gold btn-sm" onclick="changePlan()">変更</button>
+        </div>
+      </div>
+
+      <div class="udp-section">
+        <div class="udp-section-title">最近のセッション</div>
+        <div id="d-session-list"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <div class="action-btns">
+      <button class="btn btn-ghost" style="justify-content:center" onclick="deactivateUser()">
+        ⚠ アカウントを無効化
+      </button>
+      <button class="btn btn-danger" style="justify-content:center;width:100%" onclick="deleteUser()">
+        🗑 アカウントを完全削除
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('nav-root').innerHTML = buildAdminNav('users')
+
+const AVATAR_COLORS = ['#6366f1','#06b6d4','#f59e0b','#10b981','#ec4899','#8b5cf6','#0ea5e9','#84cc16']
+const AI_ICONS = {all:'✦',gourmet:'🍽️',travel:'✈️',cooking:'🍳',shopping:'🛍️',diy:'🔨',home:'📺',health:'💚',general:'💬'}
+
+let _currentPage=1, _currentPlan='', _searchQ='', _selectedUid=null, _debounceTimer=null
+
+// ── 初期ロード ────────────────────────────────────────────────
+async function init(){
+  const dash = await adminApi('/dashboard')
+  if(!dash) return
+  const u = dash.users
+  document.getElementById('k-total').textContent  = fmtN(u.total)
+  document.getElementById('k-free').textContent   = fmtN(u.plans.free)
+  document.getElementById('k-pro').textContent    = fmtN(u.plans.pro)
+  document.getElementById('k-master').textContent = fmtN(u.plans.master)
+  document.getElementById('k-today').textContent  = '+' + fmtN(u.new_today)
+  document.getElementById('page-sub').textContent = `総ユーザー数: ${fmtN(u.total)}名`
+  loadUsers()
+}
+
+// ── ユーザー一覧 ──────────────────────────────────────────────
+async function loadUsers(page=1){
+  _currentPage = page
+  const params = new URLSearchParams({page, limit:20, q:_searchQ, plan:_currentPlan})
+  const data = await adminApi('/users?' + params)
+  if(!data) return
+
+  document.getElementById('result-count').textContent =
+    `${fmtN(data.total)}件中 ${(_currentPage-1)*20+1}〜${Math.min(_currentPage*20,data.total)}件を表示`
+
+  const tbody = document.getElementById('user-tbody')
+  if(!data.users.length){
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <div class="icon">👤</div><div>ユーザーが見つかりません</div></div></td></tr>`
+    return
+  }
+
+  tbody.innerHTML = data.users.map((u,i)=>{
+    const color = AVATAR_COLORS[i%AVATAR_COLORS.length]
+    const initial = (u.nickname||u.email||'?')[0].toUpperCase()
+    return `
+    <tr class="user-row" style="cursor:pointer" onclick="openDetail('${u.id}')">
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="background:${color}">${initial}</div>
+          <div>
+            <div style="font-size:13px;font-weight:600">${u.nickname||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${u.email}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="badge badge-${u.plan}">${u.plan.toUpperCase()}</span></td>
+      <td class="mono">${fmtN(u.usage_count)}</td>
+      <td class="mono">${fmtN(u.total_sessions)}</td>
+      <td><span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効'}</span></td>
+      <td style="font-size:11.5px;color:var(--muted)">${fmtDate(u.created_at)}</td>
+      <td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openDetail('${u.id}')">詳細</button></td>
+    </tr>`
+  }).join('')
+
+  // ページネーション
+  const pages = data.pages
+  let pager = ''
+  if(pages > 1){
+    pager += `<button class="page-btn" onclick="loadUsers(${page-1})" ${page<=1?'disabled':''}>‹ 前</button>`
+    for(let p=Math.max(1,page-2);p<=Math.min(pages,page+2);p++){
+      pager += `<button class="page-btn ${p===page?'active':''}" onclick="loadUsers(${p})">${p}</button>`
+    }
+    pager += `<button class="page-btn" onclick="loadUsers(${page+1})" ${page>=pages?'disabled':''}>次 ›</button>`
+  }
+  document.getElementById('pagination').innerHTML = pager
+}
+
+// ── 検索・フィルター ──────────────────────────────────────────
+function debounceSearch(){
+  clearTimeout(_debounceTimer)
+  _debounceTimer = setTimeout(()=>{ _searchQ=document.getElementById('search-input').value.trim(); loadUsers() }, 400)
+}
+function clearSearch(){
+  document.getElementById('search-input').value=''
+  _searchQ=''; loadUsers()
+}
+function filterPlan(plan){
+  _currentPlan = plan
+  document.querySelectorAll('.filter-tab').forEach((t,i)=>
+    t.classList.toggle('active', ['','free','pro','master'][i]===plan))
+  loadUsers()
+}
+
+// ── ユーザー詳細パネル ────────────────────────────────────────
+async function openDetail(uid){
+  _selectedUid = uid
+  document.getElementById('detail-overlay').classList.add('open')
+  document.getElementById('d-session-list').innerHTML = '<div class="spinner"></div>'
+
+  const data = await adminApi(`/users/${uid}`)
+  if(!data) return
+  const u = data.user
+  const color = AVATAR_COLORS[Math.abs(uid.charCodeAt(0)) % AVATAR_COLORS.length]
+  const initial = (u.nickname||u.email||'?')[0].toUpperCase()
+
+  document.getElementById('d-avatar').style.background = color
+  document.getElementById('d-avatar').textContent = initial
+  document.getElementById('d-name').textContent   = u.nickname||'—'
+  document.getElementById('d-email').textContent  = u.email
+  document.getElementById('d-plan').innerHTML     = `<span class="badge badge-${u.plan}">${u.plan.toUpperCase()}</span>`
+  document.getElementById('d-usage').textContent  = fmtN(u.usage_count) + ' 回'
+  document.getElementById('d-sessions').textContent = fmtN(data.sessions?.length||0) + ' 件'
+  document.getElementById('d-status').innerHTML   = `<span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効'}</span>`
+  document.getElementById('d-created').textContent = fmtDate(u.created_at)
+  document.getElementById('d-plan-select').value  = u.plan
+
+  const sessions = data.sessions||[]
+  document.getElementById('d-session-list').innerHTML = sessions.length
+    ? sessions.map(s=>`
+        <div class="session-mini">
+          <div class="session-mini-ai">${AI_ICONS[s.ai_type]||'✦'} ${s.ai_type||'general'}</div>
+          <div style="display:flex;justify-content:space-between;color:var(--muted)">
+            <span>${fmtN(s.msg_count)}メッセージ</span>
+            <span>${fmtDate(s.started_at)}</span>
+          </div>
+        </div>`).join('')
+    : '<div style="color:var(--subtle);font-size:12px">セッションなし</div>'
+}
+
+function closeDetail(e){
+  if(e.target===document.getElementById('detail-overlay')) closeDetailPanel()
+}
+function closeDetailPanel(){
+  document.getElementById('detail-overlay').classList.remove('open')
+}
+
+// ── プラン変更 ────────────────────────────────────────────────
+async function changePlan(){
+  const plan = document.getElementById('d-plan-select').value
+  adminModal({
+    title:'プランを変更しますか？',
+    body:`→ <strong>${plan.toUpperCase()}</strong> に変更されます`,
+    okLabel:'変更する',
+    okColor:'linear-gradient(135deg,#c9a84c,#e8c97a)',
+    onOk: async()=>{
+      const res = await adminApi(`/users/${_selectedUid}/plan`,{method:'PUT',body:{plan}})
+      if(res?.ok){ adminToast('プランを変更しました','s'); loadUsers(); openDetail(_selectedUid) }
+      else adminToast('変更に失敗しました','e')
+    }
+  })
+}
+
+// ── 無効化・削除 ──────────────────────────────────────────────
+async function deactivateUser(){
+  adminModal({
+    title:'アカウントを無効化しますか？',
+    body:'ユーザーはログインできなくなります。後から再有効化できます。',
+    okLabel:'無効化する',
+    okColor:'#f97316',
+    onOk: async()=>{
+      const res = await adminApi(`/users/${_selectedUid}/deactivate`,{method:'POST'})
+      if(res?.ok){ adminToast('アカウントを無効化しました','s'); closeDetailPanel(); loadUsers() }
+      else adminToast('無効化に失敗しました','e')
+    }
+  })
+}
+
+async function deleteUser(){
+  adminModal({
+    title:'⚠ 完全削除しますか？',
+    body:'この操作は<strong style="color:#f87171">取り消せません</strong>。会話履歴・プロフィールを含む全データが削除されます。',
+    okLabel:'完全に削除する',
+    okColor:'#ef4444',
+    onOk: async()=>{
+      const res = await adminApi(`/users/${_selectedUid}`,{method:'DELETE'})
+      if(res?.ok){ adminToast('アカウントを削除しました','s'); closeDetailPanel(); loadUsers(); init() }
+      else adminToast('削除に失敗しました','e')
+    }
+  })
+}
+
+init()
+</script>
+</body>
+</html>
