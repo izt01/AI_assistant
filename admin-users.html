@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>ユーザー管理 — Lumina AI Admin</title>
 <script src="admin-shared.js"></script>
-<style id="admin-shared-css"></style>
+<link rel="stylesheet" href="admin.css">
 <style>
 .search-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center}
 .search-bar .inp{flex:1;min-width:200px}
@@ -60,7 +60,7 @@
 </style>
 </head>
 <body>
-<script>document.getElementById('admin-shared-css').textContent = ADMIN_CSS; requireAdmin()</script>
+<script>requireAdmin()</script>
 
 <div class="admin-layout">
   <div id="nav-root"></div>
