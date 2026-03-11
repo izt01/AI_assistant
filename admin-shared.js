@@ -101,11 +101,13 @@ function buildAdminNav(active='dashboard'){
   const user = getAdminUser()
   return `
   <nav class="admin-nav">
-    <div class="admin-logo">
-      <div class="admin-logo-gem">⚙</div>
-      <div>
-        <div class="admin-logo-name">Lumina</div>
-        <div class="admin-logo-sub">ADMIN</div>
+    <div class="admin-nav-header">
+      <div class="admin-logo">
+        <div class="admin-logo-gem">⚙</div>
+        <div>
+          <div class="admin-logo-name admin-nav-brand">Lumina</div>
+          <div class="admin-logo-sub">ADMIN</div>
+        </div>
       </div>
     </div>
     <ul class="admin-nav-list">

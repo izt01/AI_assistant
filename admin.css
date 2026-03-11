@@ -139,7 +139,56 @@ select.inp option{background:var(--ink3);color:var(--cream)}
 .alert-bar.info{background:var(--blue-bg);border:1px solid var(--blue-border);color:#93c5fd}
 
 @media(max-width:768px){
-  .admin-nav{width:100%;height:auto;position:static;flex-direction:row;border-right:none;border-bottom:1px solid var(--border2)}
-  .admin-main{margin-left:0;padding:20px 16px}
-  .kpi-grid{grid-template-columns:1fr 1fr}
+  /* ── レイアウト ── */
+  .admin-layout{flex-direction:column}
+  .admin-nav{
+    width:100%;height:auto;position:sticky;top:0;z-index:100;
+    flex-direction:column;border-right:none;
+    border-bottom:1px solid var(--border2);
+  }
+  .admin-nav-header{padding:12px 14px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .admin-nav-brand{font-size:15px}
+  .admin-nav-list{
+    flex-direction:row;padding:8px 10px;gap:4px;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .admin-nav-list::-webkit-scrollbar{display:none}
+  .admin-nav-link{
+    flex-direction:column;gap:3px;padding:7px 10px;
+    font-size:10px;white-space:nowrap;min-width:56px;
+    justify-content:center;text-align:center;border-radius:8px;
+  }
+  .admin-nav-icon{width:auto;font-size:16px}
+  .admin-nav-footer{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 14px;border-top:1px solid rgba(255,255,255,.06);
+  }
+  .admin-nav-user{margin-bottom:0}
+  .admin-nav-logout{width:auto;padding:5px 12px;font-size:11px}
+  .admin-main{margin-left:0;padding:16px 14px}
+  .admin-main::before{display:none}
+
+  /* ── KPI ── */
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:14px 12px}
+  .kpi-label{font-size:10px}
+  .kpi-val{font-size:20px}
+  .kpi-icon{font-size:18px}
+
+  /* ── テーブル ── */
+  .admin-table{font-size:12px}
+  .admin-table th,.admin-table td{padding:8px 10px}
+
+  /* ── カード・パネル ── */
+  .admin-card{padding:16px 14px}
+  .admin-page-hdr{margin-bottom:16px}
+  .admin-page-title{font-size:20px}
+
+  /* ── グリッド系 ── */
+  .two-col{grid-template-columns:1fr !important}
+  .three-col{grid-template-columns:1fr !important}
+
+  /* ── スライドパネル（ユーザー詳細） ── */
+  .detail-panel{width:100% !important;left:0 !important}
 }
