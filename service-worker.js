@@ -1,5 +1,7 @@
-const CACHE_NAME = "lumina-pwa-v1";
+const CACHE_NAME = "lumina-pwa-v2";
 const OFFLINE_URL = "/offline.html";
+// admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
+const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];
 const PRECACHE_URLS = [
   "/",
   "/index.html",
@@ -35,7 +37,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
 
-  if (url.pathname.startsWith("/api/")) {
+  // admin系・API系は常にネットワークから取得（キャッシュしない）
+  if (NO_CACHE_PATTERNS.some(p => p.test(url.pathname))) {
     event.respondWith(fetch(request));
     return;
   }
