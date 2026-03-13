@@ -8,7 +8,8 @@ import os, requests
 
 def _app_id() -> str:
     """毎回環境変数から取得（Railway追加後も再デプロイ不要）"""
-    return os.getenv("RAKUTEN_APP_ID", "")
+    val = os.getenv("RAKUTEN_APP_ID", "").strip()
+    return val
 
 
 def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_results: int = 4) -> dict:
@@ -72,9 +73,13 @@ def search_products(keyword: str, max_results: int = 6, min_price: int = None, m
             timeout=10
         )
         data = r.json()
-        print(f"[Rakuten] keyword={keyword} count={data.get('count',0)} error={data.get('error','none')}")
-        if data.get("error"):
-            return {"available": False, "reason": data.get("error_description", data["error"])}
+        err  = data.get("error", "")
+        desc = data.get("error_description", "")
+        app_id_masked = app_id[:8] + "..." if len(app_id) > 8 else app_id
+        print(f"[Rakuten] keyword={keyword} status={r.status_code} count={data.get('count',0)} error={err or 'none'} desc={desc} appId={app_id_masked} len={len(app_id)}")
+        print(f"[Rakuten] full_response={str(data)[:300]}")
+        if err:
+            return {"available": False, "reason": f"{err}: {desc}"}
 
         items = []
         for item in data.get("Items", []):
