@@ -121,6 +121,7 @@
 buildMobileHeader("プラン"); buildMobileNav("plan");</script>
 <script>
 const user = requireAuth()
+const planRank = {free:0, pro:1, master:2}
 if(user) init()
 
 function init() {
@@ -142,26 +143,38 @@ function init() {
   document.getElementById('plan-cards').innerHTML = planOrder.map(p => {
     const info = PLANS[p]
     const isCurrent = user.plan === p
-    const isRec = p === 'pro' && user.plan === 'free'
+    const currentRank = planRank[user.plan] ?? 0
+    const targetRank  = planRank[p] ?? 0
+    const isUpgrade   = targetRank > currentRank
+    const isDowngrade = targetRank < currentRank
+    // おすすめ：freeならpro、proならmaster
+    const isRec = (user.plan === 'free' && p === 'pro') || (user.plan === 'pro' && p === 'master')
     const feats = {
-      free: [{ok:true,t:'月10回の会話'},{ok:true,t:'全AIアシスタント'},{ok:false,t:'ホテル・決済連携'},{ok:false,t:'会話履歴保存'}],
-      pro:  [{ok:true,t:'月50回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'ホテル・決済連携'},{ok:true,t:'会話履歴保存'},{ok:false,t:'優先サポート'}],
-      master:[{ok:true,t:'月200回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'全機能アンロック'},{ok:true,t:'優先サポート'},{ok:true,t:'従量課金対応'}],
+      free:   [{ok:true,t:'月10回の会話'},{ok:true,t:'全AIアシスタント'},{ok:false,t:'ホテル・決済連携'},{ok:false,t:'会話履歴保存'},{ok:false,t:'優先サポート'}],
+      pro:    [{ok:true,t:'月50回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'ホテル・決済連携'},{ok:true,t:'会話履歴保存'},{ok:false,t:'優先サポート'}],
+      master: [{ok:true,t:'月200回の会話'},{ok:true,t:'全AIアシスタント'},{ok:true,t:'全機能アンロック'},{ok:true,t:'優先サポート'},{ok:true,t:'従量課金対応'}],
+    }
+    let btnHtml
+    if (isCurrent) {
+      btnHtml = `<button class="btn btn-g btn-w" disabled>現在のプラン</button>`
+    } else if (isUpgrade) {
+      const cls = p === 'master' ? 'btn-gold' : 'btn-p'
+      btnHtml = `<button class="btn ${cls} btn-w" onclick="changePlan('${p}')">⬆ アップグレード</button>`
+    } else {
+      // ダウングレード（freeへの変更含む）
+      btnHtml = `<button class="btn btn-g btn-w" onclick="changePlan('${p}')" style="color:var(--subtle)">↓ ダウングレード</button>`
     }
     return `
       <div class="plan-card${isCurrent?' current':isRec?' recommended':''}">
-        ${isCurrent?'<div class="plan-badge-top curr">現在のプラン</div>':isRec?'<div class="plan-badge-top rec">おすすめ</div>':''}
+        ${isCurrent ? '<div class="plan-badge-top curr">現在のプラン</div>'
+                    : isRec ? '<div class="plan-badge-top rec">おすすめ</div>' : ''}
         <div class="plan-name">${info.name}</div>
         <div class="plan-price">¥${info.price.toLocaleString()}<span>/月</span></div>
         <div style="font-size:11px;color:var(--subtle)">月${info.limit}回まで</div>
         <ul class="feat-list">
           ${feats[p].map(f=>`<li><span class="feat-check ${f.ok?'ok':'no'}">${f.ok?'✓':'—'}</span>${f.t}</li>`).join('')}
         </ul>
-        ${isCurrent
-          ? `<button class="btn btn-g btn-w" disabled>現在のプラン</button>`
-          : user.plan !== 'free' && p === 'free'
-          ? `<button class="btn btn-g btn-w" onclick="changePlan('${p}')">ダウングレード</button>`
-          : `<button class="btn btn-${p==='pro'?'p':'gold'} btn-w" onclick="changePlan('${p}')">${PLANS[user.plan].price < info.price ? 'アップグレード' : 'プランを変更'}</button>`}
+        ${btnHtml}
       </div>`
   }).join('')
 
@@ -210,29 +223,45 @@ function showTab(id, btn) {
 }
 
 function changePlan(plan) {
-  const info = PLANS[plan]
-  const isUp = info.price > PLANS[user.plan].price
+  const info   = PLANS[plan]
+  const isUp   = (planRank[plan] ?? 0) > (planRank[user.plan] ?? 0)
+  const notice = isUp
+    ? '✅ 今すぐ適用されます。追加の会話が可能になります。'
+    : '⚠️ 次回更新日（月末）から適用されます。現在の請求期間はそのまま利用できます。'
   showModal({
-    title: isUp ? `${info.name}にアップグレード` : `${info.name}にダウングレード`,
-    body: `<p style="font-size:12.5px;color:var(--muted);line-height:1.7">
-      <strong>${PLANS[user.plan].name}</strong> → <strong>${info.name}</strong>へのプラン変更です。<br>
-      月額: ¥${info.price.toLocaleString()} · 月${info.limit}回まで会話可能<br>
-      ${isUp?'即日適用されます。':'次回更新日より適用されます。'}
+    title: isUp ? `⬆ ${info.name}にアップグレード` : `↓ ${info.name}にダウングレード`,
+    body: `<p style="font-size:12.5px;color:var(--muted);line-height:1.8">
+      <strong>${PLANS[user.plan].name}</strong> → <strong>${info.name}</strong> へのプラン変更<br>
+      月額: <strong>¥${info.price.toLocaleString()}</strong> · 月<strong>${info.limit}回</strong>まで会話可能<br><br>
+      <span style="font-size:12px">${notice}</span>
     </p>`,
     actions: [
       {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
-      {label:`${info.name}に変更`, cls:'btn-gold', fn:`applyPlan('${plan}')`},
+      {label:`${info.name}に変更する`, cls:'btn-gold', fn:`applyPlan('${plan}')`},
     ]
   })
 }
 
-function applyPlan(plan) {
+async function applyPlan(plan) {
   const info = PLANS[plan]
-  user.plan = plan; user.limit = info.limit
-  setUser(user)
-  closeModal()
-  toast(`${info.name}プランに変更しました！`, 's')
-  setTimeout(()=>location.reload(), 800)
+  const btn = document.querySelector('.m-foot .btn-gold')
+  if (btn) { btn.disabled = true; btn.textContent = '処理中...' }
+  try {
+    const res = await apiRequest('/user/plan', { method: 'PUT', body: { plan } })
+    // キャッシュ更新
+    const u = getCachedUser() || {}
+    u.plan  = res.plan
+    u.limit = res.limit
+    u.usage_limit = res.limit
+    setCachedUser({ ...u, ...res.user })
+    closeModal()
+    const dir = res.direction === 'upgrade' ? 'アップグレード' : 'プラン変更'
+    toast(`${info.name}プランへの${dir}が完了しました！`, 's')
+    setTimeout(() => location.reload(), 900)
+  } catch (e) {
+    closeModal()
+    toast(e.error || 'プラン変更に失敗しました', 'd')
+  }
 }
 
 function enablePayG() {
