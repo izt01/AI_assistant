@@ -134,6 +134,15 @@ class BaseAgent:
 
         parsed["ai"] = self.AI_TYPE
 
+        # messageフィールドの正規化（message / reply どちらでも受け取れるように）
+        if "message" in parsed and "reply" not in parsed:
+            parsed["reply"] = parsed.pop("message")
+
+        # search_keyword が含まれていればフロントに渡す（楽天ブラウザ検索用）
+        if parsed.get("search_keyword"):
+            parsed["_search_keyword"] = parsed["search_keyword"]
+            print(f"[Shopping] search_keyword={parsed['_search_keyword']}")
+
         # ツール結果をパース済みdictに追加
         for m in msgs:
             if isinstance(m, dict) and m.get("role") == "tool":

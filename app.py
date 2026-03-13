@@ -887,9 +887,9 @@ def chat():
         return jsonify({"error": f"AI応答エラー: {str(e)}"}), 500
 
     result["ai"]  = ai_type
-    reply_text    = result.get("message", "")
+    reply_text    = result.get("reply") or result.get("message", "")
     suggestions   = result.get("suggestions", [])
-    extra         = {k:v for k,v in result.items() if k not in ("ai","message","suggestions")}
+    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions")}
     msg_id_ai     = str(uuid.uuid4())
 
     with conn.cursor() as cur:
