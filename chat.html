@@ -59,6 +59,29 @@
 .rest-card{position:relative}
 .rest-fav{position:absolute;top:8px;right:30px;background:rgba(255,255,255,.9);border:1px solid var(--border);border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;transition:all .14s;color:var(--muted)}
 .rest-fav:hover,.rest-fav.saved{color:#dc2626;border-color:rgba(220,38,38,.3);background:rgba(220,38,38,.06)}
+/* 商品カード */
+.product-cards{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.product-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;cursor:pointer;transition:all .15s;position:relative}
+.product-card:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.product-img{width:60px;height:60px;object-fit:cover;border-radius:7px;background:var(--cream2);flex-shrink:0}
+.product-img-placeholder{width:60px;height:60px;border-radius:7px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.product-body{flex:1;min-width:0}
+.product-name{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:4px}
+.product-shop{font-size:11px;color:var(--muted);margin-bottom:4px}
+.product-price{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold)}
+.product-review{font-size:11px;color:var(--muted);margin-left:6px}
+.product-fav{position:absolute;top:8px;right:8px;background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--muted);transition:all .14s;padding:2px}
+.product-fav:hover,.product-fav.saved{color:#dc2626}
+/* ホテルカード */
+.hotel-cards{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.hotel-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;cursor:pointer;transition:all .15s;position:relative}
+.hotel-card:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.hotel-name{font-family:'Fraunces',serif;font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:5px}
+.hotel-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted);margin-bottom:6px}
+.hotel-price{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--gold)}
+.hotel-access{font-size:11px;color:var(--subtle);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hotel-fav{position:absolute;top:10px;right:10px;background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--muted);transition:all .14s;padding:2px}
+.hotel-fav:hover,.hotel-fav.saved{color:#dc2626}
 </style>
 </head>
 <body>
@@ -313,9 +336,11 @@ async function sendMsg() {
     // キャッシュのusage_countを更新
     if(user) { user.usage_count = resp.usage_count || (user.usage_count||0)+1; setCachedUser(user) }
 
-    // グルメAI: お店カードを描画
-    if (aiParam === 'gourmet' && resp.extra) {
-      handleGourmetExtra(resp.extra)
+    // AIカード描画（extra内のtool結果を種別ごとに描画）
+    if (resp.extra) {
+      if (aiParam === 'gourmet' && resp.extra._places) handleGourmetExtra(resp.extra)
+      if (resp.extra._products) renderProductCards(resp.extra._products.items || [])
+      if (resp.extra._hotels)   renderHotelCards(resp.extra._hotels.hotels || [])
     }
     addActionChips(aiParam, text)
     updateUsageBadge()
@@ -562,6 +587,32 @@ async function submitDoneAction() {
 }
 
 // ── お気に入り保存 ──────────────────────────────────────────
+async function saveProdAsFavorite(btn, name, url, price, shop) {
+  if(btn.classList.contains('saved')) return
+  btn.classList.add('saved'); btn.textContent = '♥'
+  try {
+    await apiRequest('/favorites', { method:'POST', body:{
+      ai_type:'shopping', category:'product',
+      title: name, subtitle: shop ? `${shop} ¥${price.toLocaleString()}` : `¥${price.toLocaleString()}`,
+      detail:{ price, shop, url }, source_url: url,
+    }})
+    toast('♥ お気に入りに追加しました','s')
+  } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
+}
+
+async function saveHotelAsFavorite(btn, name, url, price, area) {
+  if(btn.classList.contains('saved')) return
+  btn.classList.add('saved'); btn.textContent = '♥'
+  try {
+    await apiRequest('/favorites', { method:'POST', body:{
+      ai_type:'travel', category:'hotel',
+      title: name, subtitle: area ? `${area}・¥${price.toLocaleString()}〜` : `¥${price.toLocaleString()}〜`,
+      detail:{ price, area, url }, source_url: url,
+    }})
+    toast('♥ お気に入りに追加しました','s')
+  } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
+}
+
 async function saveRestAsFavorite(btn, name, address, mapsUrl, rating) {
   if(btn.classList.contains('saved')) return
   btn.classList.add('saved')
@@ -677,6 +728,60 @@ function handleGourmetExtra(extra) {
   if (extra && extra._places && extra._places.places) {
     renderRestaurantCards(extra._places.places)
   }
+}
+
+// ─── 商品カード描画（買い物AI・家電AI）───────────────────────
+function renderProductCards(items) {
+  if (!items || !items.length) return
+  const wrap = document.createElement('div')
+  wrap.className = 'product-cards'
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:6px;font-weight:600">🛍️ 楽天市場の商品</div>
+    ${items.map((p, i) => `
+      <div class="product-card" onclick="window.open('${p.url}','_blank')">
+        ${p.image
+          ? `<img class="product-img" src="${p.image}" alt="${p.name}" onerror="this.style.display='none'">`
+          : `<div class="product-img-placeholder">🛍️</div>`}
+        <div class="product-body">
+          <div class="product-name">${p.name}</div>
+          <div class="product-shop">${p.shop || ''}</div>
+          <div>
+            <span class="product-price">¥${(p.price||0).toLocaleString()}</span>
+            ${p.review ? `<span class="product-review">⭐ ${p.review}</span>` : ''}
+          </div>
+        </div>
+        <button class="product-fav" title="お気に入りに追加"
+          onclick="event.stopPropagation();saveProdAsFavorite(this,'${(p.name||'').replace(/'/g,'&apos;').slice(0,60)}','${p.url}',${p.price||0},'${p.shop||''}')">♡</button>
+      </div>
+    `).join('')}
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+
+// ─── ホテルカード描画（旅行AI）──────────────────────────────
+function renderHotelCards(hotels) {
+  if (!hotels || !hotels.length) return
+  const wrap = document.createElement('div')
+  wrap.className = 'hotel-cards'
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:6px;font-weight:600">🏨 楽天トラベルのホテル</div>
+    ${hotels.map(h => `
+      <div class="hotel-card" onclick="window.open('${h.url}','_blank')">
+        <div class="hotel-name">${h.name}</div>
+        <div class="hotel-meta">
+          ${h.review ? `<span>⭐ ${h.review}（${h.review_count}件）</span>` : ''}
+          ${h.area   ? `<span>📍 ${h.area}</span>` : ''}
+        </div>
+        ${h.price ? `<div class="hotel-price">¥${Number(h.price).toLocaleString()}〜 / 泊</div>` : ''}
+        ${h.access ? `<div class="hotel-access">🚉 ${h.access}</div>` : ''}
+        <button class="hotel-fav" title="お気に入りに追加"
+          onclick="event.stopPropagation();saveHotelAsFavorite(this,'${(h.name||'').replace(/'/g,'&apos;')}','${h.url}',${h.price||0},'${(h.area||'').replace(/'/g,'&apos;')}')">♡</button>
+      </div>
+    `).join('')}
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
 }
 
 </script>
