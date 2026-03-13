@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>お気に入り — Lumina AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700;900&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+.fav-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.fav-filter{background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:5px 14px;font-size:12px;color:var(--muted);cursor:pointer;transition:all .14s;font-family:inherit}
+.fav-filter:hover{border-color:var(--gold2);color:var(--ink)}
+.fav-filter.active{background:var(--gold2);border-color:var(--gold2);color:var(--ink);font-weight:600}
+.fav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.fav-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;position:relative;transition:all .18s;animation:fadeUp .25s ease both}
+.fav-card:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.fav-cat{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:99px;margin-bottom:10px}
+.fav-cat.restaurant{background:rgba(249,115,22,.1);color:#c2410c}
+.fav-cat.hotel,.fav-cat.travel{background:rgba(100,149,237,.1);color:#1d4ed8}
+.fav-cat.product,.fav-cat.appliance{background:rgba(50,205,50,.1);color:#166534}
+.fav-cat.recipe{background:rgba(255,165,0,.1);color:#92400e}
+.fav-cat.diy{background:rgba(255,99,71,.1);color:#9f1239}
+.fav-cat.health{background:rgba(5,150,105,.1);color:#065f46}
+.fav-cat.general{background:rgba(201,168,76,.1);color:#92400e}
+.fav-title{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--ink);line-height:1.4;margin-bottom:5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.fav-subtitle{font-size:11.5px;color:var(--muted);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fav-note{background:var(--cream2);border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--ink3);margin-bottom:10px;cursor:pointer;min-height:32px;border:1px solid transparent;transition:all .14s}
+.fav-note:hover{border-color:var(--border)}
+.fav-note.editing{border-color:var(--gold2);outline:none;background:var(--surface)}
+.fav-note-placeholder{color:var(--subtle);font-size:11px}
+.fav-footer{display:flex;align-items:center;justify-content:space-between}
+.fav-date{font-size:10.5px;color:var(--subtle)}
+.fav-actions{display:flex;gap:6px}
+.fav-open-btn{font-size:11px;color:var(--accent);font-weight:600;padding:3px 8px;border-radius:6px;transition:all .14s;font-family:inherit}
+.fav-open-btn:hover{background:rgba(37,99,235,.07)}
+.fav-del-btn{font-size:11px;color:var(--subtle);padding:3px 8px;border-radius:6px;transition:all .14s;font-family:inherit}
+.fav-del-btn:hover{color:var(--danger);background:var(--dangerbg)}
+.fav-empty{text-align:center;padding:60px 20px;color:var(--subtle)}
+.fav-empty-icon{font-size:48px;margin-bottom:16px;opacity:.4}
+.fav-count{font-size:12px;color:var(--muted);margin-bottom:16px}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.pt{font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--ink);letter-spacing:-.03em}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:20px}
+</style>
+</head>
+<body>
+<div id="sidebar-root"></div>
+<div class="app-layout">
+  <div class="main-wrap">
+    <div id="header-root"></div>
+    <div class="page-body" style="animation:fadeUp .3s ease both;max-width:1100px">
+
+      <div class="ph">
+        <div class="pt">♥ お気に入り</div>
+        <div id="fav-count" class="fav-count"></div>
+      </div>
+
+      <!-- フィルター -->
+      <div class="fav-filters" id="fav-filters">
+        <button class="fav-filter active" data-cat="" onclick="setFilter(this,'')">すべて</button>
+        <button class="fav-filter" data-cat="restaurant" onclick="setFilter(this,'restaurant')">🍽️ グルメ</button>
+        <button class="fav-filter" data-cat="hotel"      onclick="setFilter(this,'hotel')">🏨 ホテル</button>
+        <button class="fav-filter" data-cat="travel"     onclick="setFilter(this,'travel')">✈️ 旅行</button>
+        <button class="fav-filter" data-cat="product"    onclick="setFilter(this,'product')">🛍️ 商品</button>
+        <button class="fav-filter" data-cat="recipe"     onclick="setFilter(this,'recipe')">🍳 レシピ</button>
+        <button class="fav-filter" data-cat="diy"        onclick="setFilter(this,'diy')">🔨 DIY</button>
+        <button class="fav-filter" data-cat="health"     onclick="setFilter(this,'health')">💚 健康</button>
+        <button class="fav-filter" data-cat="appliance"  onclick="setFilter(this,'appliance')">📺 家電</button>
+      </div>
+
+      <!-- カード一覧 -->
+      <div class="fav-grid" id="fav-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--subtle)">読み込み中...</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<div id="modal-root"></div>
+<div id="mobile-nav-root"></div>
+<script src="shared.js"></script>
+<script>
+buildSidebar('favorites')
+buildHeader('お気に入り')
+buildMobileNav('favorites')
+
+const CAT_LABEL = {
+  restaurant:'🍽️ グルメ', hotel:'🏨 ホテル', travel:'✈️ 旅行',
+  product:'🛍️ 商品', recipe:'🍳 レシピ', diy:'🔨 DIY',
+  health:'💚 健康', appliance:'📺 家電', general:'✦ その他'
+}
+
+let allFavorites = []
+let currentFilter = ''
+
+async function loadFavorites() {
+  try {
+    const d = await apiRequest('/favorites?limit=100')
+    allFavorites = d.favorites || []
+    renderFavorites()
+  } catch(e) {
+    document.getElementById('fav-grid').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">読み込みに失敗しました</div>'
+  }
+}
+
+function setFilter(btn, cat) {
+  document.querySelectorAll('.fav-filter').forEach(b => b.classList.remove('active'))
+  btn.classList.add('active')
+  currentFilter = cat
+  renderFavorites()
+}
+
+function renderFavorites() {
+  const items = currentFilter
+    ? allFavorites.filter(f => f.category === currentFilter)
+    : allFavorites
+
+  const countEl = document.getElementById('fav-count')
+  countEl.textContent = items.length > 0 ? `${items.length}件` : ''
+
+  if(items.length === 0) {
+    document.getElementById('fav-grid').innerHTML = `
+      <div class="fav-empty" style="grid-column:1/-1">
+        <div class="fav-empty-icon">♡</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink3);margin-bottom:6px">お気に入りがまだありません</div>
+        <div style="font-size:12px">チャット画面で「♡ お気に入り」ボタンを押すと<br>ここに保存されます</div>
+      </div>`
+    return
+  }
+
+  document.getElementById('fav-grid').innerHTML = items.map((f, i) => {
+    const cat = f.category || 'general'
+    const label = CAT_LABEL[cat] || '✦ その他'
+    const dt = new Date(f.created_at)
+    const dateStr = `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`
+    const hasUrl = f.source_url && f.source_url !== 'null'
+    const noteText = f.note || ''
+
+    return `<div class="fav-card" id="fav-${f.id}" style="animation-delay:${i*0.04}s">
+      <div class="fav-cat ${cat}">${label}</div>
+      <div class="fav-title">${escHtml(f.title)}</div>
+      ${f.subtitle ? `<div class="fav-subtitle">📍 ${escHtml(f.subtitle)}</div>` : ''}
+      <div class="fav-note" id="note-${f.id}"
+        contenteditable="false"
+        onclick="startEditNote(this,'${f.id}')"
+        onblur="saveNote(this,'${f.id}')"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur()}"
+      >${noteText ? escHtml(noteText) : '<span class="fav-note-placeholder">📝 メモを追加...</span>'}</div>
+      <div class="fav-footer">
+        <div class="fav-date">${dateStr}</div>
+        <div class="fav-actions">
+          ${hasUrl ? `<button class="fav-open-btn" onclick="window.open('${f.source_url}','_blank')">地図を見る →</button>` : ''}
+          <button class="fav-del-btn" onclick="deleteFavorite('${f.id}')">削除</button>
+        </div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function escHtml(s) {
+  if(!s) return ''
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function startEditNote(el, id) {
+  if(el.contentEditable === 'true') return
+  // プレースホルダーをクリア
+  if(el.querySelector('.fav-note-placeholder')) el.textContent = ''
+  el.contentEditable = 'true'
+  el.classList.add('editing')
+  el.focus()
+  // カーソルを末尾に
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  range.collapse(false)
+  window.getSelection().removeAllRanges()
+  window.getSelection().addRange(range)
+}
+
+async function saveNote(el, id) {
+  el.contentEditable = 'false'
+  el.classList.remove('editing')
+  const note = el.textContent.trim()
+  if(!note) {
+    el.innerHTML = '<span class="fav-note-placeholder">📝 メモを追加...</span>'
+  }
+  try {
+    await apiRequest(`/favorites/${id}/note`, { method:'PUT', body:{ note } })
+    // allFavoritesも更新
+    const f = allFavorites.find(x => x.id === id)
+    if(f) f.note = note
+  } catch(e) {
+    toast('メモの保存に失敗しました','d')
+  }
+}
+
+async function deleteFavorite(id) {
+  if(!confirm('お気に入りから削除しますか？')) return
+  try {
+    await apiRequest(`/favorites/${id}`, { method:'DELETE' })
+    allFavorites = allFavorites.filter(f => f.id !== id)
+    const card = document.getElementById(`fav-${id}`)
+    if(card) { card.style.opacity='0'; card.style.transform='scale(.95)'; setTimeout(()=>renderFavorites(),200) }
+    toast('削除しました','s')
+  } catch(e) {
+    toast('削除に失敗しました','d')
+  }
+}
+
+requireAuth().then(u => { if(u) loadFavorites() })
+</script>
+</body>
+</html>
