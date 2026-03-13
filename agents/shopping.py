@@ -11,9 +11,12 @@ class ShoppingAgent(BaseAgent):
     TOOLS = [
         {"type": "function", "function": {
             "name": "search_products",
-            "description": "楽天市場で商品を価格順で検索する",
+            "description": "楽天市場で商品を検索する。必ず呼び出すこと。",
             "parameters": {"type": "object", "properties": {
-                "keyword": {"type": "string"},
+                "keyword":   {"type": "string",  "description": "検索キーワード（日本語OK）"},
+                "max_results":{"type": "integer","description": "取得件数（デフォルト6）"},
+                "min_price": {"type": "integer", "description": "最低価格（円）"},
+                "max_price": {"type": "integer", "description": "最高価格（円）"},
             }, "required": ["keyword"]},
         }},
         {"type": "function", "function": {
