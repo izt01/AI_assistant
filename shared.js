@@ -256,3 +256,42 @@ function buildMobileNav(active) {
         </a>`).join('')}
     </nav>`
 }
+
+
+// ══════════════════════════════════════════════
+//  PWA
+// ══════════════════════════════════════════════
+let deferredInstallPrompt = null
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault()
+  deferredInstallPrompt = event
+  window.dispatchEvent(new CustomEvent('lumina-install-available'))
+})
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null
+  try { toast('Lumina AI をホーム画面に追加しました','s') } catch {}
+})
+
+async function registerPWA() {
+  if (!('serviceWorker' in navigator)) return
+  try {
+    await navigator.serviceWorker.register('/service-worker.js')
+  } catch (e) {
+    console.warn('Service worker registration failed:', e)
+  }
+}
+
+async function promptInstallApp() {
+  if (!deferredInstallPrompt) {
+    toast('ブラウザの共有メニューから「ホーム画面に追加」を選んでください','w')
+    return false
+  }
+  deferredInstallPrompt.prompt()
+  const choice = await deferredInstallPrompt.userChoice
+  deferredInstallPrompt = null
+  return choice?.outcome === 'accepted'
+}
+
+document.addEventListener('DOMContentLoaded', registerPWA)
