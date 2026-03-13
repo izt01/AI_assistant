@@ -1,15 +1,41 @@
 """
 Google Maps Places API ツール
 - 現在地周辺の店舗・施設を検索する
+- 住所テキストをlat/lngに変換する
 """
 import os, requests
 
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+
+def _api_key() -> str:
+    """起動後に設定された環境変数も拾えるよう毎回取得する"""
+    return os.getenv("GOOGLE_MAPS_API_KEY", "")
+
+
+def geocode_address(address: str) -> dict:
+    """住所テキスト → lat/lng に変換する（Geocoding API）"""
+    key = _api_key()
+    if not key:
+        return {"ok": False, "reason": "GOOGLE_MAPS_API_KEY が未設定です"}
+    try:
+        r = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"address": address, "language": "ja", "key": key},
+            timeout=5
+        )
+        results = r.json().get("results", [])
+        if not results:
+            return {"ok": False, "reason": f"住所が見つかりませんでした: {address}"}
+        loc = results[0]["geometry"]["location"]
+        return {"ok": True, "lat": loc["lat"], "lng": loc["lng"],
+                "formatted": results[0].get("formatted_address", address)}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
 
 
 def search_nearby(lat: float, lng: float, keyword: str, radius: int = 1000) -> dict:
     """現在地周辺の店舗・観光スポットを検索する"""
-    if not GOOGLE_MAPS_API_KEY:
+    key = _api_key()
+    if not key:
         return {"available": False, "reason": "GOOGLE_MAPS_API_KEY が未設定です"}
     try:
         r = requests.get(
@@ -19,7 +45,7 @@ def search_nearby(lat: float, lng: float, keyword: str, radius: int = 1000) -> d
                 "radius":   radius,
                 "keyword":  keyword,
                 "language": "ja",
-                "key":      GOOGLE_MAPS_API_KEY,
+                "key":      key,
             },
             timeout=5
         )

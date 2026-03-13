@@ -27,18 +27,59 @@ class BaseAgent:
             return f"あなたは{self.AI_TYPE}の専門家AIです。日本語で丁寧に答えてください。"
 
     def build_system(self, user_id: str) -> str:
-        """記憶を注入したシステムプロンプトを生成する"""
-        memory     = load_memory(user_id, self.AI_TYPE)
-        mem_text   = build_memory_prompt(memory, self.AI_TYPE)
+        """記憶とスコアを注入したシステムプロンプトを生成する"""
+        from memory.db import get_conn
+        import psycopg2.extras
+
+        # overall_scoreを取得してbuild_memory_promptに渡す
+        overall_score = 0.0
+        try:
+            with get_conn() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT overall_score FROM lu_match_scores WHERE user_id=%s",
+                        (user_id,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        overall_score = float(row["overall_score"] or 0)
+        except Exception:
+            pass
+
+        memory   = load_memory(user_id, self.AI_TYPE)
+        mem_text = build_memory_prompt(memory, self.AI_TYPE, overall_score=overall_score)
 
         if mem_text:
+            # スコアが高いほど記憶の活用指示を強化する
+            if overall_score >= 50:
+                usage_instruction = (
+                    "上記の記憶をすべて前提として使い、このユーザー専用に最適化された提案をすること。"
+                    "★印の好みは確認なしで即採用。却下済みの提案（✕印）は絶対に繰り返さないこと。"
+                    "好評履歴（✓印）に近い提案を優先的に出すこと。"
+                )
+            elif overall_score >= 25:
+                usage_instruction = (
+                    "上記の記憶を最大限活用し、このユーザーに最適化された提案をすること。"
+                    "確実な好みは確認なしで前提として使う。却下済みの提案（✕印）は絶対に繰り返さないこと。"
+                )
+            elif overall_score >= 8:
+                usage_instruction = (
+                    "上記の記憶を参考にしながら提案すること。"
+                    "「確実」の好みは前提として使ってよい。「推測」は一言確認してから使うこと。"
+                    "却下された提案は繰り返さないこと。"
+                )
+            else:
+                usage_instruction = (
+                    "記憶はまだ少ないため参考程度に使い、足りない情報は質問して補うこと。"
+                    "却下された提案は繰り返さないこと。"
+                )
+
             return (
                 self.get_system_prompt()
                 + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 + mem_text
                 + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                + "上記の記憶を最大限活用し、このユーザーに最適化された提案をしてください。"
-                + "却下された提案は絶対に繰り返さないこと。"
+                + usage_instruction
             )
         return self.get_system_prompt()
 
