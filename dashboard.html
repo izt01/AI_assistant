@@ -71,6 +71,15 @@
         <div class="ai-shortcut-grid" id="ai-shortcuts"></div>
       </div>
 
+      <!-- Favorites preview -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="ph" style="margin-bottom:12px">
+          <div class="st">♥ お気に入り</div>
+          <button class="btn btn-g btn-sm" onclick="location.href='favorites.html'">すべて見る</button>
+        </div>
+        <div id="fav-preview"></div>
+      </div>
+
       <!-- Recent chats -->
       <div class="card">
         <div class="ph" style="margin-bottom:12px">
@@ -202,6 +211,33 @@ async function init() {
       document.getElementById('recent-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--subtle);font-size:13px">まだ会話がありません。AIに話しかけてみましょう！</div>'
     }
   } catch { /* セッション取得失敗時はデフォルト表示 */ }
+
+  // お気に入りプレビュー（最新3件）
+  try {
+    const fd = await apiRequest('/favorites?limit=3')
+    const favs = fd.favorites || []
+    const CAT_ICON = {restaurant:'🍽️',hotel:'🏨',travel:'✈️',product:'🛍️',recipe:'🍳',diy:'🔨',health:'💚',appliance:'📺',general:'✦'}
+    const favEl = document.getElementById('fav-preview')
+    if(favs.length > 0) {
+      favEl.innerHTML = favs.map(f => `
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer"
+             onclick="location.href='favorites.html'">
+          <div style="width:32px;height:32px;background:var(--cream2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">
+            ${CAT_ICON[f.category]||'✦'}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.title}</div>
+            ${f.subtitle ? `<div style="font-size:11px;color:var(--subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${f.subtitle}</div>` : ''}
+          </div>
+          <span style="color:var(--subtle);font-size:13px">›</span>
+        </div>`).join('').replace(/border-bottom[^;]+;([^"]+)"([^>]+>(?!.*border-bottom))/g, (m) => m)
+        // 最後の要素のborder-bottomを消す
+        .replace(/border-bottom:1px solid var\(--border\)([^<]*<\/div>\s*<\/div>\s*<\/div>)/g,
+          (m,rest) => 'border-bottom:none'+rest)
+    } else {
+      favEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--subtle);font-size:12px">まだお気に入りがありません。<br>チャットで気に入った提案を♡ボタンで保存できます！</div>'
+    }
+  } catch { /* お気に入り取得失敗時はスキップ */ }
 }
 
 const tips = [

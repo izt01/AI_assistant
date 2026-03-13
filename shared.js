@@ -135,17 +135,18 @@ async function tryChat(aiType, fn){
 }
 
 const NAV_ITEMS=[
-  {id:'dashboard',icon:'⊞',label:'ダッシュボード',href:'dashboard.html'},
-  {id:'all',      icon:'✦',label:'総合チャット',   href:'chat.html?ai=all'},
-  {id:'gourmet',  icon:'🍽️',label:'グルメ AI',       href:'chat.html?ai=gourmet'},
-  {id:'travel',   icon:'✈️',label:'旅行 AI',        href:'chat.html?ai=travel'},
-  {id:'cooking',  icon:'🍳',label:'料理 AI',        href:'chat.html?ai=cooking'},
-  {id:'shopping', icon:'🛍️',label:'買い物 AI',      href:'chat.html?ai=shopping'},
-  {id:'diy',      icon:'🔨',label:'DIY AI',         href:'chat.html?ai=diy'},
-  {id:'home',     icon:'📺',label:'家電・インテリア',href:'chat.html?ai=home'},
-  {id:'health',   icon:'💚',label:'健康 AI',         href:'chat.html?ai=health'},
-  {id:'plan',     icon:'◈', label:'プラン',          href:'plan.html'},
-  {id:'profile',  icon:'◉', label:'プロフィール',    href:'profile.html'},
+  {id:'dashboard',  icon:'⊞', label:'ダッシュボード',   href:'dashboard.html'},
+  {id:'all',        icon:'✦', label:'総合チャット',     href:'chat.html?ai=all'},
+  {id:'gourmet',    icon:'🍽️',label:'グルメ AI',        href:'chat.html?ai=gourmet'},
+  {id:'travel',     icon:'✈️',label:'旅行 AI',          href:'chat.html?ai=travel'},
+  {id:'cooking',    icon:'🍳',label:'料理 AI',          href:'chat.html?ai=cooking'},
+  {id:'shopping',   icon:'🛍️',label:'買い物 AI',        href:'chat.html?ai=shopping'},
+  {id:'diy',        icon:'🔨',label:'DIY AI',           href:'chat.html?ai=diy'},
+  {id:'home',       icon:'📺',label:'家電・インテリア', href:'chat.html?ai=home'},
+  {id:'health',     icon:'💚',label:'健康 AI',          href:'chat.html?ai=health'},
+  {id:'favorites',  icon:'♥', label:'お気に入り',       href:'favorites.html'},
+  {id:'plan',       icon:'◈', label:'プラン',           href:'plan.html'},
+  {id:'profile',    icon:'◉', label:'プロフィール',     href:'profile.html'},
 ]
 
 function buildSidebar(activeId){

@@ -308,6 +308,21 @@ def db_init_lumina_tables():
     );
     CREATE INDEX IF NOT EXISTS idx_lu_usage_stats_user ON lu_usage_stats(user_id, date DESC);
 
+    -- lu_favorites: お気に入り保存
+    CREATE TABLE IF NOT EXISTS lu_favorites (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id     UUID        NOT NULL REFERENCES lu_users(id) ON DELETE CASCADE,
+        ai_type     VARCHAR(30) NOT NULL,
+        category    VARCHAR(50) NOT NULL DEFAULT 'general',
+        title       TEXT        NOT NULL,
+        subtitle    TEXT,
+        detail      JSONB,
+        source_url  TEXT,
+        note        TEXT,
+        created_at  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_favorites_user ON lu_favorites(user_id, ai_type, created_at DESC);
+
     -- lu_action_logs: ユーザーの実行動記録（提案を実際に実行したか）
     CREATE TABLE IF NOT EXISTS lu_action_logs (
         id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1251,7 +1266,71 @@ def get_usage_stats():
     return jsonify({"stats": result, "days": days})
 
 
+# ══════════════════════════════════════════════════════════════
+#  lu_favorites: お気に入り登録・一覧・削除
+# ══════════════════════════════════════════════════════════════
+@app.route("/api/favorites", methods=["POST"])
+@auth_required
+def add_favorite():
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    if not d.get("title"):
+        return jsonify({"error": "title は必須です"}), 400
+    fid = str(uuid.uuid4())
+    db_exec(
+        "INSERT INTO lu_favorites (id,user_id,ai_type,category,title,subtitle,detail,source_url,note) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (fid, uid,
+         d.get("ai_type","general"), d.get("category","general"),
+         d["title"], d.get("subtitle"),
+         json.dumps(d["detail"], ensure_ascii=False) if d.get("detail") else None,
+         d.get("source_url"), d.get("note"))
+    )
+    return jsonify({"ok": True, "favorite_id": fid})
 
+@app.route("/api/favorites", methods=["GET"])
+@auth_required
+def list_favorites():
+    uid = str(g.current_user["id"])
+    ai_type  = request.args.get("ai_type")
+    category = request.args.get("category")
+    limit    = min(int(request.args.get("limit", 50)), 200)
+    where, params = ["user_id=%s"], [uid]
+    if ai_type:  where.append("ai_type=%s");  params.append(ai_type)
+    if category: where.append("category=%s"); params.append(category)
+    params.append(limit)
+    rows = db_exec(
+        f"SELECT id,ai_type,category,title,subtitle,detail,source_url,note,created_at "
+        f"FROM lu_favorites WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT %s",
+        params, fetch="all"
+    ) or []
+    result = []
+    for r in rows:
+        rec = dict(r); rec["id"] = str(rec["id"])
+        rec["created_at"] = rec["created_at"].isoformat() if rec.get("created_at") else None
+        if rec.get("detail") and isinstance(rec["detail"], str):
+            try: rec["detail"] = json.loads(rec["detail"])
+            except: pass
+        result.append(rec)
+    return jsonify({"favorites": result})
+
+@app.route("/api/favorites/<fid>", methods=["DELETE"])
+@auth_required
+def delete_favorite(fid):
+    uid = str(g.current_user["id"])
+    db_exec("DELETE FROM lu_favorites WHERE id=%s AND user_id=%s", (fid, uid))
+    return jsonify({"ok": True})
+
+@app.route("/api/favorites/<fid>/note", methods=["PUT"])
+@auth_required
+def update_favorite_note(fid):
+    uid  = str(g.current_user["id"])
+    note = (request.json or {}).get("note","")
+    db_exec("UPDATE lu_favorites SET note=%s WHERE id=%s AND user_id=%s", (note, fid, uid))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/chat/sessions", methods=["GET"])
 @auth_required
 def list_sessions():
     uid   = str(g.current_user["id"])
