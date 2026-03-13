@@ -180,7 +180,51 @@ let lastProposalId = null
 let lastReactionDone = false
 
 // 非同期で認証してから初期化
+loadConfig()
 requireAuth().then(u => { if(u){ user=u; init() } })
+
+// 楽天AppIDをバックエンドから取得（ブラウザから直接楽天APIを叩くため）
+let _rakutenAppId = ''
+async function loadConfig() {
+  try {
+    const d = await fetch('/api/config').then(r=>r.json())
+    _rakutenAppId = d.rakuten_app_id || ''
+    console.log('[Config] rakutenAppId取得:', _rakutenAppId ? '✓' : '未設定')
+  } catch(e) { console.warn('[Config] 取得失敗', e) }
+}
+
+// 楽天市場をブラウザから直接検索
+async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPrice=null) {
+  if(!_rakutenAppId) { console.warn('[Rakuten] AppID未設定'); return null }
+  try {
+    const params = new URLSearchParams({
+      applicationId: _rakutenAppId,
+      keyword:       keyword,
+      hits:          maxResults,
+      sort:          'standard',
+      availability:  1,
+      imageFlag:     1,
+      formatVersion: 2,
+    })
+    if(minPrice) params.append('minPrice', minPrice)
+    if(maxPrice) params.append('maxPrice', maxPrice)
+    const r = await fetch('https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706?' + params)
+    const data = await r.json()
+    console.log('[Rakuten Direct] keyword='+keyword+' count='+(data.count||0)+' items='+(data.Items||[]).length)
+    if(data.error) { console.warn('[Rakuten Direct] error:', data.error, data.error_description); return null }
+    return (data.Items || []).map(item => ({
+      name:         (item.itemName||'').slice(0,80),
+      price:        item.itemPrice,
+      shop:         item.shopName,
+      url:          item.itemUrl,
+      image:        (item.mediumImageUrls||[])[0] || '',
+      review:       item.reviewAverage,
+      review_count: item.reviewCount,
+      catchcopy:    (item.catchcopy||'').slice(0,60),
+      point:        item.pointRate,
+    }))
+  } catch(e) { console.error('[Rakuten Direct] エラー:', e); return null }
+}
 
 function init() {
   buildSidebar('chat-'+aiParam)
@@ -362,9 +406,25 @@ async function sendMsg() {
     // AIカード描画（extra内のtool結果を種別ごとに描画）
     if (resp.extra) {
       if (aiParam === 'gourmet' && resp.extra._places) handleGourmetExtra(resp.extra)
-      if (resp.extra._products) renderProductCards(resp.extra._products.items || [])
       if (resp.extra._hotels)   renderHotelCards(resp.extra._hotels.hotels || [])
     }
+
+    // 買い物AI・家電AI: ブラウザから楽天を直接検索して商品カード表示
+    if ((aiParam === 'shopping' || aiParam === 'home') && _rakutenAppId) {
+      // AIの返答からキーワードを抽出してフロントから検索
+      const kw = extractShoppingKeyword(text, reply)
+      if(kw) {
+        ;(async () => {
+          const items = await searchRakutenDirect(kw, 6)
+          if(items && items.length > 0) {
+            renderProductCards(items)
+          }
+        })()
+      }
+    } else if (resp.extra && resp.extra._products) {
+      renderProductCards(resp.extra._products.items || [])
+    }
+
     addActionChips(aiParam, text)
     updateUsageBadge()
 
@@ -381,6 +441,17 @@ async function sendMsg() {
     isTyping = false
     document.getElementById('send-btn').disabled = false
   }
+}
+
+// ショッピング検索キーワードを抽出（ユーザーの発言から）
+function extractShoppingKeyword(userText, aiReply) {
+  // まずユーザーテキストをそのまま使う（シンプルが最善）
+  // 不要な語を除いてキーワード化
+  const cleaned = userText
+    .replace(/を?買い?替えたい|を?探して|を?教えて|ください|おすすめ|比較|安い|高い|コスパ/g, '')
+    .replace(/[。、！？!?]/g, '')
+    .trim()
+  return cleaned.length >= 2 ? cleaned : null
 }
 
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
