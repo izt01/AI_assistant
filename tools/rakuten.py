@@ -5,16 +5,20 @@
 """
 import os, requests
 
-RAKUTEN_APP_ID = os.getenv("RAKUTEN_APP_ID", "")
+
+def _app_id() -> str:
+    """毎回環境変数から取得（Railway追加後も再デプロイ不要）"""
+    return os.getenv("RAKUTEN_APP_ID", "")
 
 
 def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_results: int = 4) -> dict:
     """楽天トラベルでホテルを検索する"""
-    if not RAKUTEN_APP_ID:
+    app_id = _app_id()
+    if not app_id:
         return {"available": False, "reason": "RAKUTEN_APP_ID が未設定です"}
     try:
         params = {
-            "applicationId": RAKUTEN_APP_ID,
+            "applicationId": app_id,
             "keyword":        keyword,
             "hits":           max_results,
             "responseType":   "small",
@@ -47,13 +51,14 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_resul
 
 def search_products(keyword: str, max_results: int = 5) -> dict:
     """楽天市場で商品を価格順で検索する"""
-    if not RAKUTEN_APP_ID:
+    app_id = _app_id()
+    if not app_id:
         return {"available": False, "reason": "RAKUTEN_APP_ID が未設定です"}
     try:
         r = requests.get(
             "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706",
             params={
-                "applicationId": RAKUTEN_APP_ID,
+                "applicationId": app_id,
                 "keyword":       keyword,
                 "hits":          max_results,
                 "sort":          "+itemPrice",
