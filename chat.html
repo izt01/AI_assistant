@@ -457,8 +457,7 @@ function extractShoppingKeyword(userText, aiReply) {
   const cleaned = userText
     .replace(/を?(買い?替え|探し|見つけ|教え)?(たい|て|ほしい|ください)/g, '')
     .replace(/(おすすめ|比較|安い|高い|コスパ|良い|いい)(の|な|に)?/g, '')
-    .replace(/[。、！？!?
-]/g, ' ')
+    .replace(/[。、！？!?]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   if(cleaned.length >= 2) return cleaned
