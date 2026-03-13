@@ -411,11 +411,19 @@ async function sendMsg() {
 
     // 買い物AI・家電AI: ブラウザから楽天を直接検索して商品カード表示
     if ((aiParam === 'shopping' || aiParam === 'home') && _rakutenAppId) {
-      // AIの返答からキーワードを抽出してフロントから検索
       const kw = extractShoppingKeyword(text, reply)
       if(kw) {
+        // カード表示領域を先に確保（ローディング）
+        const loadingEl = document.createElement('div')
+        loadingEl.id = 'product-loading'
+        loadingEl.style.cssText = 'text-align:center;padding:16px;color:var(--subtle);font-size:12px'
+        loadingEl.textContent = '🛍️ 楽天市場を検索中...'
+        document.getElementById('chat-msgs').appendChild(loadingEl)
+        scrollBottom()
         ;(async () => {
           const items = await searchRakutenDirect(kw, 6)
+          const el = document.getElementById('product-loading')
+          if(el) el.remove()
           if(items && items.length > 0) {
             renderProductCards(items)
           }
@@ -443,15 +451,21 @@ async function sendMsg() {
   }
 }
 
-// ショッピング検索キーワードを抽出（ユーザーの発言から）
+// ショッピング検索キーワードを抽出
 function extractShoppingKeyword(userText, aiReply) {
-  // まずユーザーテキストをそのまま使う（シンプルが最善）
-  // 不要な語を除いてキーワード化
+  // ユーザーテキストから商品名を抽出
   const cleaned = userText
-    .replace(/を?買い?替えたい|を?探して|を?教えて|ください|おすすめ|比較|安い|高い|コスパ/g, '')
-    .replace(/[。、！？!?]/g, '')
+    .replace(/を?(買い?替え|探し|見つけ|教え)?(たい|て|ほしい|ください)/g, '')
+    .replace(/(おすすめ|比較|安い|高い|コスパ|良い|いい)(の|な|に)?/g, '')
+    .replace(/[。、！？!?
+]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
-  return cleaned.length >= 2 ? cleaned : null
+  if(cleaned.length >= 2) return cleaned
+
+  // AIの返答から商品名らしき語を探す（フォールバック）
+  const match = aiReply.match(/「([^」]{2,20})」/)
+  return match ? match[1] : null
 }
 
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
