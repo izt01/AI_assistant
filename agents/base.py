@@ -89,20 +89,24 @@ class BaseAgent:
         system     = self.build_system(user_id)
         msgs       = [{"role": "system", "content": system}] + messages
 
-        for _ in range(3):
+        last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
+
+        for i in range(3):
             kwargs = {
                 "model":      "gpt-4o",
                 "max_tokens": 1500,
                 "messages":   msgs,
             }
             if self.TOOLS:
-                kwargs["tools"]       = self.TOOLS
-                kwargs["tool_choice"] = "auto"
+                kwargs["tools"] = self.TOOLS
+                # 1回目はtool呼び出しを強制、2回目以降はauto
+                kwargs["tool_choice"] = "required" if i == 0 else "auto"
 
             res = client.chat.completions.create(**kwargs)
             msg = res.choices[0].message
 
             if not getattr(msg, "tool_calls", None):
+                last_assistant_msg = msg
                 break
 
             msgs.append(msg)
@@ -110,13 +114,19 @@ class BaseAgent:
                 args   = json.loads(tc.function.arguments)
                 fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
                 result = fn(args)
+                print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
                 msgs.append({
                     "role":         "tool",
                     "tool_call_id": tc.id,
                     "content":      json.dumps(result, ensure_ascii=False),
                 })
+        else:
+            last_assistant_msg = msg
 
-        text = msg.content or "{}"
+        if last_assistant_msg is None:
+            last_assistant_msg = msg
+
+        text = last_assistant_msg.content or "{}"
         try:
             parsed = json.loads(text.replace("```json", "").replace("```", "").strip())
         except Exception:
