@@ -192,52 +192,11 @@ let lastMessageId  = null
 let lastProposalId = null
 let lastReactionDone = false
 
-// 楽天AppIDをバックエンドから取得（ブラウザから直接楽天APIを叩くため）
-let _rakutenAppId = ''
-async function loadConfig() {
-  try {
-    const d = await fetch('/api/config').then(r=>r.json())
-    _rakutenAppId = d.rakuten_app_id || ''
-    console.log('[Config] rakutenAppId取得:', _rakutenAppId ? '✓' : '未設定')
-  } catch(e) { console.warn('[Config] 取得失敗', e) }
-}
+// 楽天商品検索はバックエンド（Python）で行うため、ブラウザ直接呼び出しは不要
+// → CORSエラー・applicationId漏洩を防ぎ、サーバー側で安全に処理する
 
 // 非同期で認証してから初期化
-loadConfig()
 requireAuth().then(u => { if(u){ user=u; init() } })
-
-// 楽天市場をブラウザから直接検索
-async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPrice=null) {
-  if(!_rakutenAppId) { console.warn('[Rakuten] AppID未設定'); return null }
-  try {
-    const params = new URLSearchParams({
-      applicationId: _rakutenAppId,
-      keyword:       keyword,
-      hits:          maxResults,
-      sort:          'standard',
-      availability:  1,
-      imageFlag:     1,
-      formatVersion: 2,
-    })
-    if(minPrice) params.append('minPrice', minPrice)
-    if(maxPrice) params.append('maxPrice', maxPrice)
-    const r = await fetch('https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706?' + params)
-    const data = await r.json()
-    console.log('[Rakuten Direct] keyword='+keyword+' count='+(data.count||0)+' items='+(data.Items||[]).length)
-    if(data.error) { console.warn('[Rakuten Direct] error:', data.error, data.error_description); return null }
-    return (data.Items || []).map(item => ({
-      name:         (item.itemName||'').slice(0,80),
-      price:        item.itemPrice,
-      shop:         item.shopName,
-      url:          item.itemUrl,
-      image:        (item.mediumImageUrls||[])[0] || '',
-      review:       item.reviewAverage,
-      review_count: item.reviewCount,
-      catchcopy:    (item.catchcopy||'').slice(0,60),
-      point:        item.pointRate,
-    }))
-  } catch(e) { console.error('[Rakuten Direct] エラー:', e); return null }
-}
 
 function init() {
   buildSidebar('chat-'+aiParam)
@@ -422,32 +381,16 @@ async function sendMsg() {
       if (resp.extra._hotels)   renderHotelCards(resp.extra._hotels.hotels || [])
     }
 
-    // 買い物AI・家電AI: ブラウザから楽天を直接検索して商品カード表示
-    if ((aiParam === 'shopping' || aiParam === 'home') && _rakutenAppId) {
-      // AIがsearch_keywordを返した場合はそれを優先、なければユーザーテキストから抽出
-      const kwFromAI = resp.extra && resp.extra._search_keyword
-      const kw = kwFromAI || (resp.extra && resp.extra.needs_more_info ? null : extractShoppingKeyword(text, reply))
-      console.log('[Shopping] needs_more_info=', resp.extra?.needs_more_info, 'kw=', kw)
-      if(kw) {
-        const loadingEl = document.createElement('div')
-        loadingEl.id = 'product-loading'
-        loadingEl.style.cssText = 'text-align:center;padding:16px;color:var(--subtle);font-size:12px'
-        loadingEl.textContent = '🛍️ 楽天市場を検索中...'
-        document.getElementById('chat-msgs').appendChild(loadingEl)
-        scrollBottom()
-        ;(async () => {
-          const items = await searchRakutenDirect(kw, 6)
-          const el = document.getElementById('product-loading')
-          if(el) el.remove()
-          if(items && items.length > 0) {
-            renderProductCards(items)
-          } else {
-            console.warn('[Shopping] 商品0件 kw='+kw)
-          }
-        })()
+    // 買い物AI・家電AI: バックエンド（Python）が search_products を呼んだ結果を表示
+    // ※ ブラウザから楽天APIを直接叩くとCORSエラーになるため、必ずバックエンド経由
+    if (resp.extra && resp.extra._products) {
+      const items = resp.extra._products.items || []
+      console.log('[Shopping] バックエンドから商品取得:', items.length, '件')
+      if (items.length > 0) {
+        renderProductCards(items)
+      } else {
+        console.warn('[Shopping] 商品0件')
       }
-    } else if (resp.extra && resp.extra._products) {
-      renderProductCards(resp.extra._products.items || [])
     }
 
     addActionChips(aiParam, text)
@@ -468,21 +411,7 @@ async function sendMsg() {
   }
 }
 
-// ショッピング検索キーワードを抽出
-function extractShoppingKeyword(userText, aiReply) {
-  // ユーザーテキストから商品名を抽出
-  const cleaned = userText
-    .replace(/を?(買い?替え|探し|見つけ|教え)?(たい|て|ほしい|ください)/g, '')
-    .replace(/(おすすめ|比較|安い|高い|コスパ|良い|いい)(の|な|に)?/g, '')
-    .replace(/[。、！？!?\n]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if(cleaned.length >= 2) return cleaned
-
-  // AIの返答から商品名らしき語を探す（フォールバック）
-  const match = aiReply.match(/「([^」]{2,20})」/)
-  return match ? match[1] : null
-}
+// extractShoppingKeyword は削除（バックエンド検索に移行）
 
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
 
