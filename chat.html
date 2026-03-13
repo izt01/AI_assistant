@@ -51,10 +51,16 @@
 .usage-badge.warn{background:var(--warningbg);border-color:rgba(217,119,6,.25);color:#92400e}
 .usage-badge.dngr{background:var(--dangerbg);border-color:rgba(220,38,38,.25);color:#991b1b}
 /* Feedback */
-.fb-row{display:flex;gap:6px;margin-top:8px}
+.fb-row{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;align-items:center}
 .fb-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .14s;font-family:inherit}
 .fb-btn:hover{background:var(--cream2)}
 .fb-btn.active{background:var(--successbg);border-color:rgba(5,150,105,.2);color:var(--success)}
+.fb-btn.reaction-love.active{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#dc2626}
+.fb-btn.reaction-helpful.active{background:var(--successbg);border-color:rgba(5,150,105,.2);color:var(--success)}
+.fb-btn.reaction-neg.active{background:var(--warningbg);border-color:rgba(217,119,6,.25);color:#92400e}
+.fb-done-btn{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;border-radius:8px;padding:4px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .14s}
+.fb-done-btn:hover{opacity:.88}
+.fb-sep{width:1px;height:16px;background:var(--border);margin:0 2px}
 </style>
 </head>
 <body>
@@ -128,7 +134,9 @@ let messages = []   // {role, content}
 let isTyping = false
 let fbPending = null
 let currentSessionId = null
-let lastMessageId = null
+let lastMessageId  = null
+let lastProposalId = null
+let lastReactionDone = false
 
 // 非同期で認証してから初期化
 requireAuth().then(u => { if(u){ user=u; init() } })
@@ -190,8 +198,11 @@ function addMessage(role, text) {
       <div>
         <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
         <div class="fb-row">
-          <button class="fb-btn" onclick="giveFeedback(this,'good')">👍 良かった</button>
-          <button class="fb-btn" onclick="giveFeedback(this,'bad')">👎 改善が必要</button>
+          <button class="fb-btn reaction-love"   onclick="giveReaction(this,'love')">🩷 最高</button>
+          <button class="fb-btn reaction-helpful" onclick="giveReaction(this,'helpful')">👍 役立った</button>
+          <button class="fb-btn reaction-neg"     onclick="showNegReactionModal(this)">👎 改善点</button>
+          <div class="fb-sep"></div>
+          <button class="fb-done-btn"             onclick="showDoneModal(this)">✓ やってみた</button>
         </div>
       </div>`
   } else {
@@ -280,12 +291,16 @@ async function sendMsg() {
         ai_type:    aiParam,
         messages:   messages,
         session_id: currentSessionId,
+        lat:        window._userLat || null,
+        lng:        window._userLng || null,
       }
     })
 
     hideTyping()
     currentSessionId = resp.session_id
     lastMessageId    = resp.message_id
+    lastProposalId   = resp.proposal_id || null
+    lastReactionDone = false
 
     const reply = resp.reply || ''
     messages.push({ role:'assistant', content:reply })
@@ -417,43 +432,139 @@ function addActionChips(ai, text) {
   scrollBottom()
 }
 
-function giveFeedback(btn, type) {
-  btn.closest('.fb-row').querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('active'))
+// ── Reaction（5種別フィードバック）──────────────────────────────
+const REACTION_LABELS = {
+  love:      '🩷 最高',
+  helpful:   '👍 役立った',
+  boring:    '😐 普通',
+  wrong:     '❌ 内容が違う',
+  too_long:  '📜 長すぎ',
+  too_short: '📝 短すぎ',
+  off_topic: '🔀 的外れ',
+}
+
+async function giveReaction(btn, reaction) {
+  if(lastReactionDone) return
+  const row = btn.closest('.fb-row')
+  row.querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('active'))
   btn.classList.add('active')
-  if(type==='bad') showFeedbackModal()
-  else {
-    if(lastMessageId) {
-      apiRequest('/chat/feedback',{method:'POST',body:{message_id:lastMessageId,rating:1,ai_type:aiParam}}).catch(()=>{})
+  lastReactionDone = true
+  if(lastMessageId) {
+    try {
+      await apiRequest('/chat/reaction',{method:'POST',body:{
+        message_id: lastMessageId,
+        reaction,
+        ai_type: aiParam
+      }})
+      toast('フィードバックありがとうございます！','s')
+    } catch(e) {
+      toast('送信に失敗しました','d')
     }
-    toast('フィードバックありがとうございます！','s')
   }
 }
 
-function showFeedbackModal() {
+function showNegReactionModal(btn) {
   showModal({
-    title: 'フィードバックを教えてください',
+    title: '改善点を教えてください',
     body: `
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">改善点を教えていただけると、より良いサービスに役立てます。</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">詳しく教えていただくとAIがより賢くなります。</p>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${['回答が不正確だった','情報が古い・不足している','質問の意図を理解していない','回答が長すぎる・短すぎる','その他'].map((opt,i)=>`
+        ${[
+          ['wrong',    '❌ 内容が違う・不正確'],
+          ['too_long', '📜 回答が長すぎる'],
+          ['too_short','📝 回答が短すぎる'],
+          ['off_topic','🔀 質問の意図を理解していない'],
+          ['boring',   '😐 その他・普通'],
+        ].map(([val,label])=>`
           <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
-            <input type="checkbox" id="fbo${i}" style="accent-color:var(--gold2)">${opt}
+            <input type="radio" name="neg_reaction" value="${val}" style="accent-color:var(--gold2)">${label}
           </label>`).join('')}
+        <textarea id="neg_detail" rows="2" placeholder="詳細コメント（任意）"
+          style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:none;background:var(--cream2)"></textarea>
       </div>`,
     actions: [
-      {label:'キャンセル',cls:'btn-g',fn:'closeModal()'},
-      {label:'送信',cls:'btn-gold',fn:'submitFeedback()'},
+      {label:'キャンセル', cls:'btn-g',    fn:'closeModal()'},
+      {label:'送信',       cls:'btn-gold', fn:`submitNegReaction(${JSON.stringify(btn.closest('.fb-row').id||'')})` },
+    ]
+  })
+  // btn参照を保持
+  window._negReactionBtn = btn
+}
+
+async function submitNegReaction() {
+  const selected = document.querySelector('input[name="neg_reaction"]:checked')
+  const reaction = selected?.value || 'boring'
+  const detail   = document.getElementById('neg_detail')?.value || ''
+  closeModal()
+  if(window._negReactionBtn) {
+    await giveReaction(window._negReactionBtn, reaction)
+    if(detail && lastMessageId) {
+      apiRequest('/chat/reaction',{method:'POST',body:{
+        message_id: lastMessageId, reaction, detail, ai_type: aiParam
+      }}).catch(()=>{})
+    }
+  }
+}
+
+// ── 「やってみた」ボタン ─────────────────────────────────────
+const ACTION_TYPE_MAP = {
+  gourmet:   [{v:'visited',   l:'🍽️ 行ってきた'},   {v:'other', l:'✍️ その他'}],
+  recipe:    [{v:'cooked',    l:'🍳 作ってみた'},    {v:'other', l:'✍️ その他'}],
+  travel:    [{v:'booked',    l:'✈️ 予約した'},      {v:'visited', l:'🏨 行ってきた'},{v:'other',l:'✍️ その他'}],
+  shopping:  [{v:'purchased', l:'🛒 購入した'},      {v:'other', l:'✍️ その他'}],
+  diy:       [{v:'diy_done',  l:'🔨 作った・直した'},{v:'other', l:'✍️ その他'}],
+  health:    [{v:'exercised', l:'💪 やってみた'},    {v:'other', l:'✍️ その他'}],
+  appliance: [{v:'purchased', l:'🛒 購入した'},      {v:'other', l:'✍️ その他'}],
+  general:   [{v:'other',     l:'✍️ 実行した'}],
+}
+
+function showDoneModal(btn) {
+  const types = ACTION_TYPE_MAP[aiParam] || ACTION_TYPE_MAP.general
+  showModal({
+    title: '✓ やってみた！',
+    body: `
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">実際にやってみた内容を教えてください。AIの学習に役立ちます🎉</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${types.map(({v,l})=>`
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="radio" name="action_type" value="${v}" style="accent-color:var(--gold2)">${l}
+          </label>`).join('')}
+        <textarea id="action_note" rows="2" placeholder="一言メモ（任意）例：美味しかった、また行きたい"
+          style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:none;background:var(--cream2)"></textarea>
+      </div>`,
+    actions: [
+      {label:'キャンセル', cls:'btn-g',    fn:'closeModal()'},
+      {label:'記録する',   cls:'btn-gold', fn:'submitDoneAction()'},
     ]
   })
 }
 
-async function submitFeedback() {
-  const labels=['not_relevant','wrong_info','misunderstood','wrong_length','other']
-  const reason = labels.find((_,i)=>document.getElementById(`fbo${i}`)?.checked) || 'other'
-  if(lastMessageId) {
-    await apiRequest('/chat/feedback',{method:'POST',body:{message_id:lastMessageId,rating:-1,reason,ai_type:aiParam}}).catch(()=>{})
+async function submitDoneAction() {
+  const selected = document.querySelector('input[name="action_type"]:checked')
+  const action_type = selected?.value || 'other'
+  const note        = document.getElementById('action_note')?.value || ''
+  closeModal()
+  try {
+    await apiRequest('/actions',{method:'POST',body:{
+      action_type,
+      ai_type:     aiParam,
+      proposal_id: lastProposalId,
+      note:        note || undefined
+    }})
+    toast('🎉 記録しました！AIの学習に反映されます','s')
+    // 「やってみた」ボタンをdone状態に
+    document.querySelectorAll('.fb-done-btn').forEach(b=>{
+      b.textContent='✓ 記録済み'; b.style.opacity='0.55'; b.disabled=true
+    })
+  } catch(e) {
+    toast('記録に失敗しました','d')
   }
-  toast('フィードバックを送信しました','s'); closeModal()
+}
+
+// 旧giveFeedback互換（念のため残す）
+function giveFeedback(btn, type) {
+  if(type==='good') giveReaction(btn,'helpful')
+  else showNegReactionModal(btn)
 }
 
 function clearChat() {

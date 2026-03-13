@@ -47,20 +47,37 @@ def load_memory(user_id: str, ai_type: str) -> dict:
                         "confidence": row["confidence"]
                     }
 
-                # 提案履歴（直近10件）
+                # 提案履歴 — lu_proposals（新）+ proposal_history（旧互換）を統合
+                cur.execute("""
+                    SELECT item_name AS proposal, outcome, reject_reason AS reason, created_at
+                    FROM lu_proposals
+                    WHERE user_id = %s AND ai_type = %s
+                    ORDER BY created_at DESC LIMIT 15
+                """, (user_id, ai_type))
+                lu_rows = cur.fetchall()
+
                 cur.execute("""
                     SELECT proposal, outcome, reason, created_at FROM proposal_history
                     WHERE user_id = %s AND ai_type = %s
                     ORDER BY created_at DESC LIMIT 10
                 """, (user_id, ai_type))
-                for row in cur.fetchall():
+                old_rows = cur.fetchall()
+
+                # 両テーブルをマージ（created_atで降順、最大20件）
+                all_rows = sorted(
+                    list(lu_rows) + list(old_rows),
+                    key=lambda r: r["created_at"],
+                    reverse=True
+                )[:20]
+
+                for row in all_rows:
                     entry = {
                         "proposal": row["proposal"],
                         "outcome":  row["outcome"],
                         "date":     str(row["created_at"])[:10],
                     }
                     if row["outcome"] == "rejected":
-                        memory["rejections"].append({**entry, "reason": row["reason"]})
+                        memory["rejections"].append({**entry, "reason": row.get("reason")})
                     else:
                         memory["history"].append(entry)
 
