@@ -61,13 +61,16 @@ def search_products(keyword: str, max_results: int = 5) -> dict:
                 "applicationId": app_id,
                 "keyword":       keyword,
                 "hits":          max_results,
-                "sort":          "+itemPrice",
+                "sort":          "standard",
                 "format":        "json",
+                "availability":  1,
             },
-            timeout=5
+            timeout=8
         )
+        data = r.json()
+        print(f"[Rakuten] keyword={keyword} count={data.get('count',0)} error={data.get('error','none')}")
         items = []
-        for item in r.json().get("Items", []):
+        for item in data.get("Items", []):
             i = item["Item"]
             items.append({
                 "name":      i.get("itemName"),
