@@ -498,6 +498,52 @@ def logout():
 
 
 # ══════════════════════════════════════════════════════════════
+#  プラン変更（ユーザー自身）
+# ══════════════════════════════════════════════════════════════
+PLAN_PRICES = {"free": 0, "pro": 980, "master": 2980}
+
+@app.route("/api/user/plan", methods=["PUT"])
+@auth_required
+def change_user_plan():
+    uid  = str(g.current_user["id"])
+    data = request.json or {}
+    plan = data.get("plan", "")
+    if plan not in ("free", "pro", "master"):
+        return jsonify({"error": "無効なプランです"}), 400
+
+    current_plan = g.current_user["plan"]
+    if plan == current_plan:
+        return jsonify({"error": "現在と同じプランです"}), 400
+
+    # ダウングレード時は usage_count をリセットしない（次回更新日まで現プランを維持）
+    # アップグレード時は即時適用（usage_count は据え置き）
+    new_limit = PLAN_LIMITS[plan]
+    db_exec(
+        "UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s",
+        (plan, uid)
+    )
+
+    # 課金ログ（本番ではStripe連携に置き換える）
+    direction = "upgrade" if PLAN_PRICES.get(plan, 0) > PLAN_PRICES.get(current_plan, 0) else "downgrade"
+    try:
+        db_exec(
+            "INSERT INTO admin_cost_logs (user_id, month, model, input_tokens, output_tokens, cost_usd, recorded_at) "
+            "VALUES (%s, to_char(NOW(),'YYYY-MM'), 'plan_change', 0, 0, %s, NOW())",
+            (uid, PLAN_PRICES.get(plan, 0) / 150)  # 円→USD概算
+        )
+    except Exception:
+        pass  # ログ失敗は無視
+
+    updated_user = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    return jsonify({
+        "ok": True,
+        "direction": direction,
+        "plan": plan,
+        "limit": new_limit,
+        "user": serialize_user(dict(updated_user))
+    })
+
+# ══════════════════════════════════════════════════════════════
 #  プロフィール・好み
 # ══════════════════════════════════════════════════════════════
 @app.route("/api/profile", methods=["GET"])
