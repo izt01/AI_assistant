@@ -412,9 +412,59 @@ def build_context_injection(user_id, ai_type):
         lines.append("⚠️ 以下は絶対に守ること（除外ルール）:")
         for x in cl: lines.append(f"   - {x}")
 
-    sc = ctx.get("match_score", {})
-    if sc.get("total_sessions", 0) > 0:
-        lines.append(f"（会話実績: {sc['total_sessions']}回 / マッチ度: {round(sc.get('overall_score',0))}%）")
+    sc           = ctx.get("match_score", {})
+    overall      = sc.get("overall_score", 0)
+    ai_score_col = {
+        "recipe": "food_score", "gourmet": "food_score",
+        "travel": "travel_score", "shopping": "shopping_score",
+        "health": "health_score", "appliance": "home_score", "diy": "diy_score",
+    }.get(ai_type, "overall_score")
+    ai_score     = sc.get(ai_score_col, overall)
+    sessions     = sc.get("total_sessions", 0)
+    nickname     = ctx.get("nickname", "ユーザー")
+
+    if sessions > 0:
+        lines.append(f"（会話実績: {sessions}回 / 総合マッチ度: {round(overall)}% / AI固有スコア: {round(ai_score)}%）")
+
+    # ── スコアに応じた行動モードを注入 ──────────────────────────
+    lines.append("")
+    lines.append("【AIの行動モード】")
+
+    if overall < 8:
+        # ── フェーズ1: 初対面（情報収集優先）──
+        lines.append("モード: 初対面（情報収集フェーズ）")
+        lines.append(f"・{nickname}さんの好みがまだ不明なため、提案前に1〜2つだけ質問して好みを引き出すこと")
+        lines.append("・質問は「ジャンル」「予算感」「シチュエーション」の中から最も重要な1つを選ぶ")
+        lines.append("・提案する場合は「いくつかご質問してもいいですか？」と一言断ってから行う")
+        lines.append("・まだ記憶がないので、一般的な人気店・定番を提案するにとどめる")
+
+    elif overall < 25:
+        # ── フェーズ2: 学習フェーズ（確認しながら提案）──
+        lines.append("モード: 学習フェーズ（好み蓄積中）")
+        lines.append(f"・{nickname}さんの好みが少し蓄積されてきた。蓄積された好みを必ず参照して提案すること")
+        lines.append("・「確実」フラグの好みは確認なしで前提として使ってよい")
+        lines.append("・「推測」フラグの好みは「〇〇がお好みでしたね？」と一言確認してから使う")
+        lines.append("・却下された提案は絶対に繰り返さないこと")
+        lines.append(f"・返答の冒頭で「{nickname}さんの好みを踏まえると〜」と一言添えるとよい")
+
+    elif overall < 50:
+        # ── フェーズ3: パーソナライズフェーズ（確認なしで即提案）──
+        lines.append("モード: パーソナライズフェーズ（常連モード）")
+        lines.append(f"・{nickname}さんの好みは十分に把握済み。確認は一切不要。即提案に移ること")
+        lines.append("・蓄積された好み情報をすべて前提として使い、「なぜこれを勧めるか」を必ず一言添える")
+        lines.append("・却下された提案・店・商品は絶対に出さないこと（リストを必ず確認すること）")
+        lines.append(f"・「{nickname}さんのいつもの感じだと〜」「{nickname}さんには〇〇が合いそうです」のような表現を使う")
+        lines.append("・好評だった過去の提案に近いものを優先的に出す")
+
+    else:
+        # ── フェーズ4: 専属AIフェーズ（先回り提案・パターン参照）──
+        lines.append("モード: 専属AIフェーズ（深い個別最適化）")
+        lines.append(f"・{nickname}さんの好み・行動パターンが深く蓄積されている。先回りした提案を積極的に行うこと")
+        lines.append("・好みをすべて既知として扱い、「確認」は一切行わない")
+        lines.append(f"・「{nickname}さんといえば〜」「いつものパターンだと〜」のように個人の傾向を自然に言語化する")
+        lines.append("・却下履歴・好評履歴の両方を参照し、ユーザーが言わなくても自動的に除外・優先する")
+        lines.append("・提案理由を「なぜこれがあなたに合うか」まで具体的に説明する")
+        lines.append("・会話の最後に次回につながる一言（新情報・関連情報）を添えるとよい")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
@@ -496,6 +546,52 @@ def me():
 def logout():
     return jsonify({"message": "ログアウトしました"})
 
+
+# ══════════════════════════════════════════════════════════════
+#  プラン変更（ユーザー自身）
+# ══════════════════════════════════════════════════════════════
+PLAN_PRICES = {"free": 0, "pro": 980, "master": 2980}
+
+@app.route("/api/user/plan", methods=["PUT"])
+@auth_required
+def change_user_plan():
+    uid  = str(g.current_user["id"])
+    data = request.json or {}
+    plan = data.get("plan", "")
+    if plan not in ("free", "pro", "master"):
+        return jsonify({"error": "無効なプランです"}), 400
+
+    current_plan = g.current_user["plan"]
+    if plan == current_plan:
+        return jsonify({"error": "現在と同じプランです"}), 400
+
+    # ダウングレード時は usage_count をリセットしない（次回更新日まで現プランを維持）
+    # アップグレード時は即時適用（usage_count は据え置き）
+    new_limit = PLAN_LIMITS[plan]
+    db_exec(
+        "UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s",
+        (plan, uid)
+    )
+
+    # 課金ログ（本番ではStripe連携に置き換える）
+    direction = "upgrade" if PLAN_PRICES.get(plan, 0) > PLAN_PRICES.get(current_plan, 0) else "downgrade"
+    try:
+        db_exec(
+            "INSERT INTO admin_cost_logs (user_id, month, model, input_tokens, output_tokens, cost_usd, recorded_at) "
+            "VALUES (%s, to_char(NOW(),'YYYY-MM'), 'plan_change', 0, 0, %s, NOW())",
+            (uid, PLAN_PRICES.get(plan, 0) / 150)  # 円→USD概算
+        )
+    except Exception:
+        pass  # ログ失敗は無視
+
+    updated_user = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    return jsonify({
+        "ok": True,
+        "direction": direction,
+        "plan": plan,
+        "limit": new_limit,
+        "user": serialize_user(dict(updated_user))
+    })
 
 # ══════════════════════════════════════════════════════════════
 #  プロフィール・好み
