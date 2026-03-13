@@ -127,9 +127,27 @@ class BaseAgent:
             last_assistant_msg = msg
 
         text = last_assistant_msg.content or "{}"
-        try:
-            parsed = json.loads(text.replace("```json", "").replace("```", "").strip())
-        except Exception:
+        # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
+        def extract_json(s):
+            # コードブロック除去
+            s = s.replace("```json", "").replace("```", "").strip()
+            # 純粋JSONなら直接パース
+            try:
+                return json.loads(s)
+            except Exception:
+                pass
+            # 最初の { から最後の } を抽出
+            start = s.find("{")
+            end   = s.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(s[start:end+1])
+                except Exception:
+                    pass
+            return None
+
+        parsed = extract_json(text)
+        if parsed is None:
             parsed = {"ai": self.AI_TYPE, "message": text, "suggestions": []}
 
         parsed["ai"] = self.AI_TYPE

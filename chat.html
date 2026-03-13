@@ -92,6 +92,19 @@
 .compare-table tr:hover td{background:var(--cream2)}
 .compare-table .best{color:var(--success);font-weight:700}
 .compare-table .rank1{background:rgba(201,168,76,.06)}
+/* 商品カード改善 */
+.product-card-inner{display:flex;gap:0;align-items:stretch}
+.product-badge-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px}
+.product-badge{font-size:9.5px;padding:2px 7px;border-radius:99px;font-weight:600;white-space:nowrap}
+.badge-cheap{background:rgba(220,38,38,.1);color:#dc2626}
+.badge-popular{background:rgba(201,168,76,.12);color:#a07c20}
+.badge-new{background:rgba(59,130,246,.1);color:#2563eb}
+.badge-point{background:rgba(16,185,129,.1);color:#059669}
+/* 詳細モーダル改善 */
+.prod-detail-section{margin-bottom:14px}
+.prod-detail-section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.prod-feature-list{display:flex;flex-direction:column;gap:4px}
+.prod-feature-item{font-size:12px;color:var(--ink3);display:flex;gap:6px;align-items:flex-start}
 /* ホテルカード */
 .hotel-cards{margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .hotel-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;cursor:pointer;transition:all .15s;position:relative}
@@ -844,7 +857,21 @@ function handleGourmetExtra(extra) {
 // ─── 商品カード描画（買い物AI・家電AI）───────────────────────
 let _lastProducts = []  // 比較表用に保持
 
-function renderProductCards(items, userLat, userLng) {
+function getProductBadges(p, isBest) {
+  const badges = []
+  if(isBest) badges.push('<span class="product-badge badge-cheap">💰 最安値</span>')
+  if(p.review >= 4.5 && p.review_count >= 50) badges.push('<span class="product-badge badge-popular">⭐ 人気</span>')
+  if(p.point >= 5) badges.push(`<span class="product-badge badge-point">🎁 ${p.point}倍P</span>`)
+  // catchcopyから特徴バッジ
+  const cc = p.catchcopy || ''
+  if(/軽量|軽い/.test(cc)) badges.push('<span class="product-badge badge-new">🪶 軽量</span>')
+  if(/IH|ih/.test(cc+p.name)) badges.push('<span class="product-badge badge-new">🔥 IH対応</span>')
+  if(/長持|耐久|丈夫/.test(cc)) badges.push('<span class="product-badge badge-popular">💪 長持ち</span>')
+  if(/送料無料/.test(cc)) badges.push('<span class="product-badge badge-point">🚚 送料無料</span>')
+  return badges.slice(0,3).join('')
+}
+
+function renderProductCards(items) {
   if (!items || !items.length) return
   _lastProducts = items
   const wrap = document.createElement('div')
@@ -855,16 +882,17 @@ function renderProductCards(items, userLat, userLng) {
   wrap.innerHTML = `
     <div style="font-size:12px;color:var(--subtle);margin-bottom:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between">
       <span>🛍️ 楽天市場の商品 ${items.length}件</span>
-      <button onclick="showCompareTable()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:inherit">比較表を見る →</button>
+      <button onclick="showCompareTable()" style="font-size:11px;color:var(--gold);background:none;border:none;cursor:pointer;font-family:inherit">比較表を見る →</button>
     </div>
     ${items.map((p, i) => {
       const isBest = p.price === minPrice
-      const safeName = (p.name||'').replace(/'/g,"'").replace(/"/g,'&quot;').slice(0,80)
-      const safeShop = (p.shop||'').replace(/'/g,"'")
+      const safeName = (p.name||'').replace(/'/g,"'").replace(/"/g,'&quot;').slice(0,70)
+      const safeShop = (p.shop||'').replace(/'/g,"'").slice(0,25)
       const safeUrl  = p.url||''
       const safeImg  = p.image||''
+      const badges   = getProductBadges(p, isBest)
       return `
-      <div class="product-card${isBest?' best-price':''}" onclick="showProductDetail(${i})">
+      <div class="product-card" onclick="showProductDetail(${i})" style="${isBest?'border-color:rgba(201,168,76,.4);':''}" >
         <div class="product-card-inner">
           <div class="product-img-wrap">
             ${safeImg
@@ -873,14 +901,14 @@ function renderProductCards(items, userLat, userLng) {
           </div>
           <div class="product-body">
             <div class="product-rank">${i+1}</div>
+            ${badges ? `<div class="product-badge-row">${badges}</div>` : ''}
             <div class="product-name">${safeName}</div>
-            ${p.catchcopy ? `<div class="product-catch">${p.catchcopy}</div>` : ''}
+            ${p.catchcopy ? `<div class="product-catch" style="color:var(--muted);font-size:10.5px;margin-bottom:5px">${p.catchcopy.slice(0,55)}</div>` : ''}
             <div class="product-meta">
               <span class="product-price">¥${(p.price||0).toLocaleString()}</span>
-              ${isBest ? '<span class="product-point">最安値</span>' : ''}
-              ${p.review ? `<span class="product-review">⭐ ${p.review}(${p.review_count||0}件)</span>` : ''}
-              ${p.shop ? `<span class="product-shop">${safeShop}</span>` : ''}
+              ${p.review ? `<span class="product-review">⭐${p.review}<span style="font-size:9.5px;color:var(--subtle)">(${(p.review_count||0).toLocaleString()}件)</span></span>` : ''}
             </div>
+            <div style="margin-top:4px;font-size:10.5px;color:var(--subtle)">🏪 ${safeShop||'楽天市場'}</div>
           </div>
         </div>
         <button class="product-fav" title="お気に入りに追加"
@@ -892,21 +920,79 @@ function renderProductCards(items, userLat, userLng) {
   scrollBottom()
 }
 
+function extractFeatures(p) {
+  // catchcopy・商品名から特徴を抽出
+  const src = (p.name||'') + ' ' + (p.catchcopy||'')
+  const features = []
+  if(/軽量|軽い/.test(src))       features.push({icon:'🪶', text:'軽量設計'})
+  if(/IH|ih/.test(src))           features.push({icon:'🔥', text:'IH対応'})
+  if(/食洗機|dishwasher/.test(src))features.push({icon:'🍽️', text:'食洗機対応'})
+  if(/長持|耐久|丈夫/.test(src))   features.push({icon:'💪', text:'高耐久'})
+  if(/省エネ|節電/.test(src))      features.push({icon:'⚡', text:'省エネ'})
+  if(/日本製|国産/.test(src))      features.push({icon:'🇯🇵', text:'日本製'})
+  if(/送料無料/.test(src))         features.push({icon:'🚚', text:'送料無料'})
+  if(/コーティング/.test(src))     features.push({icon:'✨', text:'コーティング加工'})
+  return features
+}
+
 function showProductDetail(idx) {
   const p = _lastProducts[idx]
   if(!p) return
+  const features = extractFeatures(p)
+  const minPrice = Math.min(..._lastProducts.map(q=>q.price||Infinity))
+  const isBest   = p.price === minPrice
+
   showModal({
     title: '商品詳細',
+    wide: true,
     body: `
-      ${p.image ? `<img class="prod-detail-img" src="${p.image}" alt="">` : ''}
-      <div style="font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:8px">${p.name||''}</div>
-      <div class="prod-detail-price">¥${(p.price||0).toLocaleString()}</div>
-      <div class="prod-detail-meta">
-        ${p.shop ? `<span class="prod-detail-tag">🏪 ${p.shop}</span>` : ''}
-        ${p.review ? `<span class="prod-detail-tag">⭐ ${p.review}（${p.review_count||0}件のレビュー）</span>` : ''}
-        ${p.point ? `<span class="prod-detail-tag" style="color:#dc2626">🎁 ${p.point}倍ポイント</span>` : ''}
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
+        ${p.image
+          ? `<img src="${p.image}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--cream2)">`
+          : `<div style="width:100px;height:100px;border-radius:8px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🛍️</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:6px">${p.name||''}</div>
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--gold)">¥${(p.price||0).toLocaleString()}
+            ${isBest ? '<span style="font-family:inherit;font-size:11px;background:rgba(220,38,38,.1);color:#dc2626;border-radius:4px;padding:2px 6px;margin-left:4px">最安値</span>' : ''}
+          </div>
+          ${p.point ? `<div style="font-size:11.5px;color:#059669;margin-top:2px">🎁 ${p.point}倍ポイント還元</div>` : ''}
+        </div>
       </div>
-      ${p.catchcopy ? `<div style="font-size:12px;color:var(--muted);margin-bottom:14px">${p.catchcopy}</div>` : ''}
+
+      ${p.catchcopy ? `
+      <div class="prod-detail-section">
+        <div class="prod-detail-section-title">キャッチコピー</div>
+        <div style="font-size:12.5px;color:var(--ink3);line-height:1.6;padding:8px 12px;background:var(--cream2);border-radius:8px">${p.catchcopy}</div>
+      </div>` : ''}
+
+      ${features.length ? `
+      <div class="prod-detail-section">
+        <div class="prod-detail-section-title">✨ 特徴</div>
+        <div class="prod-feature-list">
+          ${features.map(f=>`<div class="prod-feature-item"><span>${f.icon}</span><span>${f.text}</span></div>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="prod-detail-section">
+        <div class="prod-detail-section-title">取り扱い店舗情報</div>
+        <div style="background:var(--cream2);border-radius:8px;padding:10px 12px">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:4px">🏪 ${p.shop||'楽天市場店舗'}</div>
+          ${p.shop_url ? `<a href="${p.shop_url}" target="_blank" style="font-size:11px;color:var(--gold)">店舗ページを見る →</a>` : ''}
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">※ オンラインショップ（楽天市場）</div>
+        </div>
+      </div>
+
+      ${p.review ? `
+      <div class="prod-detail-section">
+        <div class="prod-detail-section-title">📊 レビュー</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)">${p.review}</div>
+          <div>
+            <div style="font-size:13px">⭐⭐⭐⭐⭐</div>
+            <div style="font-size:11px;color:var(--muted)">${(p.review_count||0).toLocaleString()}件のレビュー</div>
+          </div>
+        </div>
+      </div>` : ''}
     `,
     actions:[
       {label:'閉じる', cls:'btn-g', fn:'closeModal()'},
