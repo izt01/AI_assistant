@@ -245,6 +245,96 @@ def db_init_lumina_tables():
         ('maintenance_mode','false')
     ON CONFLICT(key) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_lu_messages_session ON lu_messages(session_id, created_at);
+
+    -- ════════════════════════════════════════════════
+    --  成長AI用テーブル群（DB_今後 実装）
+    -- ════════════════════════════════════════════════
+
+    -- lu_reactions: 感情・満足度の詳細フィードバック
+    CREATE TABLE IF NOT EXISTS lu_reactions (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        message_id  UUID        NOT NULL REFERENCES lu_messages(id) ON DELETE CASCADE,
+        user_id     UUID        NOT NULL REFERENCES lu_users(id)    ON DELETE CASCADE,
+        reaction    VARCHAR(20) NOT NULL
+                    CHECK (reaction IN ('love','helpful','boring','wrong','too_long','too_short','off_topic')),
+        detail      TEXT,
+        created_at  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_reactions_user    ON lu_reactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_lu_reactions_message ON lu_reactions(message_id);
+
+    -- lu_proposals: 提案の構造化保存（proposal_historyを統合・拡張）
+    CREATE TABLE IF NOT EXISTS lu_proposals (
+        id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id    UUID        REFERENCES lu_sessions(id) ON DELETE SET NULL,
+        user_id       UUID        NOT NULL REFERENCES lu_users(id) ON DELETE CASCADE,
+        ai_type       VARCHAR(30) NOT NULL,
+        category      VARCHAR(50) NOT NULL DEFAULT 'general',
+        item_name     TEXT        NOT NULL,
+        item_data     JSONB,
+        outcome       VARCHAR(20) DEFAULT 'unknown'
+                      CHECK (outcome IN ('accepted','rejected','ignored','unknown')),
+        reject_reason TEXT,
+        created_at    TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_proposals_user    ON lu_proposals(user_id, ai_type);
+    CREATE INDEX IF NOT EXISTS idx_lu_proposals_outcome ON lu_proposals(user_id, outcome);
+
+    -- lu_learning_log: AI学習イベントの追跡ログ
+    CREATE TABLE IF NOT EXISTS lu_learning_log (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      UUID        NOT NULL REFERENCES lu_users(id) ON DELETE CASCADE,
+        ai_type      VARCHAR(30) NOT NULL,
+        learned_key  TEXT        NOT NULL,
+        learned_val  TEXT        NOT NULL,
+        source       VARCHAR(30) NOT NULL DEFAULT 'conversation'
+                     CHECK (source IN ('conversation','feedback','profile','reaction')),
+        confidence   FLOAT       NOT NULL DEFAULT 1.0,
+        created_at   TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_learning_user ON lu_learning_log(user_id, ai_type);
+
+    -- lu_usage_stats: 使用パターンの日別集計
+    CREATE TABLE IF NOT EXISTS lu_usage_stats (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id     UUID        NOT NULL REFERENCES lu_users(id) ON DELETE CASCADE,
+        ai_type     VARCHAR(30) NOT NULL,
+        date        DATE        NOT NULL,
+        msg_count   INT         NOT NULL DEFAULT 0,
+        avg_rating  FLOAT,
+        topics      TEXT[]      DEFAULT '{}',
+        created_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, ai_type, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_usage_stats_user ON lu_usage_stats(user_id, date DESC);
+
+    -- lu_favorites: お気に入り保存
+    CREATE TABLE IF NOT EXISTS lu_favorites (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id     UUID        NOT NULL REFERENCES lu_users(id) ON DELETE CASCADE,
+        ai_type     VARCHAR(30) NOT NULL,
+        category    VARCHAR(50) NOT NULL DEFAULT 'general',
+        title       TEXT        NOT NULL,
+        subtitle    TEXT,
+        detail      JSONB,
+        source_url  TEXT,
+        note        TEXT,
+        created_at  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_favorites_user ON lu_favorites(user_id, ai_type, created_at DESC);
+
+    -- lu_action_logs: ユーザーの実行動記録（提案を実際に実行したか）
+    CREATE TABLE IF NOT EXISTS lu_action_logs (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      UUID        NOT NULL REFERENCES lu_users(id)    ON DELETE CASCADE,
+        ai_type      VARCHAR(30) NOT NULL,
+        proposal_id  UUID        REFERENCES lu_proposals(id) ON DELETE SET NULL,
+        action_type  VARCHAR(30) NOT NULL
+                     CHECK (action_type IN ('visited','cooked','purchased','booked','diy_done','exercised','other')),
+        note         TEXT,
+        actioned_at  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lu_action_logs_user ON lu_action_logs(user_id, ai_type);
     """
     conn = get_db()
     with conn.cursor() as cur:
@@ -268,8 +358,15 @@ with app.app_context():
         print(f"[DB] Lumina テーブル スキップ: {e}")
     # カラム追加マイグレーション（既存DBへの後付け対応）
     migrations = [
+        # 既存マイグレーション
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE lu_match_scores ADD COLUMN IF NOT EXISTS gourmet_score FLOAT NOT NULL DEFAULT 0.0",
+        # lu_users への成長追跡カラム追加（DB_今後）
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS onboarding_done BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS first_chat_at TIMESTAMP",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS total_sessions INT DEFAULT 0",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS favorite_ai VARCHAR(30)",
     ]
     for sql in migrations:
         try:
@@ -412,9 +509,59 @@ def build_context_injection(user_id, ai_type):
         lines.append("⚠️ 以下は絶対に守ること（除外ルール）:")
         for x in cl: lines.append(f"   - {x}")
 
-    sc = ctx.get("match_score", {})
-    if sc.get("total_sessions", 0) > 0:
-        lines.append(f"（会話実績: {sc['total_sessions']}回 / マッチ度: {round(sc.get('overall_score',0))}%）")
+    sc           = ctx.get("match_score", {})
+    overall      = sc.get("overall_score", 0)
+    ai_score_col = {
+        "recipe": "food_score", "gourmet": "food_score",
+        "travel": "travel_score", "shopping": "shopping_score",
+        "health": "health_score", "appliance": "home_score", "diy": "diy_score",
+    }.get(ai_type, "overall_score")
+    ai_score     = sc.get(ai_score_col, overall)
+    sessions     = sc.get("total_sessions", 0)
+    nickname     = ctx.get("nickname", "ユーザー")
+
+    if sessions > 0:
+        lines.append(f"（会話実績: {sessions}回 / 総合マッチ度: {round(overall)}% / AI固有スコア: {round(ai_score)}%）")
+
+    # ── スコアに応じた行動モードを注入 ──────────────────────────
+    lines.append("")
+    lines.append("【AIの行動モード】")
+
+    if overall < 8:
+        # ── フェーズ1: 初対面（情報収集優先）──
+        lines.append("モード: 初対面（情報収集フェーズ）")
+        lines.append(f"・{nickname}さんの好みがまだ不明なため、提案前に1〜2つだけ質問して好みを引き出すこと")
+        lines.append("・質問は「ジャンル」「予算感」「シチュエーション」の中から最も重要な1つを選ぶ")
+        lines.append("・提案する場合は「いくつかご質問してもいいですか？」と一言断ってから行う")
+        lines.append("・まだ記憶がないので、一般的な人気店・定番を提案するにとどめる")
+
+    elif overall < 25:
+        # ── フェーズ2: 学習フェーズ（確認しながら提案）──
+        lines.append("モード: 学習フェーズ（好み蓄積中）")
+        lines.append(f"・{nickname}さんの好みが少し蓄積されてきた。蓄積された好みを必ず参照して提案すること")
+        lines.append("・「確実」フラグの好みは確認なしで前提として使ってよい")
+        lines.append("・「推測」フラグの好みは「〇〇がお好みでしたね？」と一言確認してから使う")
+        lines.append("・却下された提案は絶対に繰り返さないこと")
+        lines.append(f"・返答の冒頭で「{nickname}さんの好みを踏まえると〜」と一言添えるとよい")
+
+    elif overall < 50:
+        # ── フェーズ3: パーソナライズフェーズ（確認なしで即提案）──
+        lines.append("モード: パーソナライズフェーズ（常連モード）")
+        lines.append(f"・{nickname}さんの好みは十分に把握済み。確認は一切不要。即提案に移ること")
+        lines.append("・蓄積された好み情報をすべて前提として使い、「なぜこれを勧めるか」を必ず一言添える")
+        lines.append("・却下された提案・店・商品は絶対に出さないこと（リストを必ず確認すること）")
+        lines.append(f"・「{nickname}さんのいつもの感じだと〜」「{nickname}さんには〇〇が合いそうです」のような表現を使う")
+        lines.append("・好評だった過去の提案に近いものを優先的に出す")
+
+    else:
+        # ── フェーズ4: 専属AIフェーズ（先回り提案・パターン参照）──
+        lines.append("モード: 専属AIフェーズ（深い個別最適化）")
+        lines.append(f"・{nickname}さんの好み・行動パターンが深く蓄積されている。先回りした提案を積極的に行うこと")
+        lines.append("・好みをすべて既知として扱い、「確認」は一切行わない")
+        lines.append(f"・「{nickname}さんといえば〜」「いつものパターンだと〜」のように個人の傾向を自然に言語化する")
+        lines.append("・却下履歴・好評履歴の両方を参照し、ユーザーが言わなくても自動的に除外・優先する")
+        lines.append("・提案理由を「なぜこれがあなたに合うか」まで具体的に説明する")
+        lines.append("・会話の最後に次回につながる一言（新情報・関連情報）を添えるとよい")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
@@ -496,6 +643,52 @@ def me():
 def logout():
     return jsonify({"message": "ログアウトしました"})
 
+
+# ══════════════════════════════════════════════════════════════
+#  プラン変更（ユーザー自身）
+# ══════════════════════════════════════════════════════════════
+PLAN_PRICES = {"free": 0, "pro": 980, "master": 2980}
+
+@app.route("/api/user/plan", methods=["PUT"])
+@auth_required
+def change_user_plan():
+    uid  = str(g.current_user["id"])
+    data = request.json or {}
+    plan = data.get("plan", "")
+    if plan not in ("free", "pro", "master"):
+        return jsonify({"error": "無効なプランです"}), 400
+
+    current_plan = g.current_user["plan"]
+    if plan == current_plan:
+        return jsonify({"error": "現在と同じプランです"}), 400
+
+    # ダウングレード時は usage_count をリセットしない（次回更新日まで現プランを維持）
+    # アップグレード時は即時適用（usage_count は据え置き）
+    new_limit = PLAN_LIMITS[plan]
+    db_exec(
+        "UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s",
+        (plan, uid)
+    )
+
+    # 課金ログ（本番ではStripe連携に置き換える）
+    direction = "upgrade" if PLAN_PRICES.get(plan, 0) > PLAN_PRICES.get(current_plan, 0) else "downgrade"
+    try:
+        db_exec(
+            "INSERT INTO admin_cost_logs (user_id, month, model, input_tokens, output_tokens, cost_usd, recorded_at) "
+            "VALUES (%s, to_char(NOW(),'YYYY-MM'), 'plan_change', 0, 0, %s, NOW())",
+            (uid, PLAN_PRICES.get(plan, 0) / 150)  # 円→USD概算
+        )
+    except Exception:
+        pass  # ログ失敗は無視
+
+    updated_user = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    return jsonify({
+        "ok": True,
+        "direction": direction,
+        "plan": plan,
+        "limit": new_limit,
+        "user": serialize_user(dict(updated_user))
+    })
 
 # ══════════════════════════════════════════════════════════════
 #  プロフィール・好み
@@ -627,9 +820,46 @@ def chat():
     print(f"[Router] user={uid} ai_type={ai_type} → agent={agent_name}")
 
     context_injection = build_context_injection(uid, agent_name)
+
     # グルメAI: 位置情報をコンテキストに注入
-    if agent_name == "gourmet" and user_lat and user_lng:
-        context_injection += f"\n\n【ユーザーの現在地】\n緯度: {user_lat}\n経度: {user_lng}\n※ search_restaurants を呼ぶ際はこの座標を使用してください"
+    if agent_name == "gourmet":
+        geocoded_address = None
+
+        # ① フロントから座標が来た場合はそのまま使う
+        if user_lat and user_lng:
+            context_injection += (
+                f"\n\n【ユーザーの現在地】\n緯度: {user_lat}\n経度: {user_lng}\n"
+                "※ search_restaurants を呼ぶ際はこの座標を使用してください"
+            )
+
+        # ② 座標がない場合は最新メッセージから住所テキストを抽出してGeocodingする
+        else:
+            last_msg = messages_in[-1]["content"] if messages_in else ""
+            import re
+            # 都道府県・市区町村・番地などを含む文字列を住所候補として抽出
+            addr_pattern = re.search(
+                r'(東京都|北海道|(?:京都|大阪)府|.{2,3}県)?'
+                r'[^\s、。！？\n]*(?:市|区|町|村|丁目|番地|号)[^\s、。！？\n]*',
+                last_msg
+            )
+            if addr_pattern:
+                candidate = addr_pattern.group(0).strip()
+                if len(candidate) >= 4:  # 短すぎる誤検出を除外
+                    from tools.maps import geocode_address
+                    geo = geocode_address(candidate)
+                    if geo.get("ok"):
+                        user_lat = geo["lat"]
+                        user_lng = geo["lng"]
+                        geocoded_address = geo.get("formatted", candidate)
+                        context_injection += (
+                            f"\n\n【ユーザーの現在地（住所から変換）】\n"
+                            f"住所: {geocoded_address}\n"
+                            f"緯度: {user_lat}\n経度: {user_lng}\n"
+                            "※ search_restaurants を呼ぶ際はこの座標を使用してください"
+                        )
+                    else:
+                        print(f"[Geocode] 変換失敗: {candidate} → {geo.get('reason')}")
+
     agent = AGENT_MAP.get(agent_name)
 
     try:
@@ -671,10 +901,64 @@ def chat():
         cur.execute("UPDATE lu_users SET usage_count=usage_count+1 WHERE id=%s", (uid,))
     conn.commit()
 
+    # lu_proposals に提案を自動保存（gourmet/travel/shopping等でitem情報がある場合）
+    proposal_id = None
+    try:
+        ai_name = agent_name or "general"
+        # extraにお店・商品・ホテルなどのアイテム情報があれば構造化保存
+        item_name = None
+        item_data = {}
+        category  = ai_name
+
+        if ai_name == "gourmet" and extra.get("restaurants"):
+            top = extra["restaurants"][0] if extra["restaurants"] else None
+            if top:
+                item_name = top.get("name", reply_text[:60])
+                item_data = {k:v for k,v in top.items() if k != "name"}
+                category  = "restaurant"
+        elif ai_name == "travel" and extra.get("hotels"):
+            top = extra["hotels"][0] if extra["hotels"] else None
+            if top:
+                item_name = top.get("name", reply_text[:60])
+                item_data = {k:v for k,v in top.items() if k != "name"}
+                category  = "hotel"
+        elif ai_name == "shopping" and extra.get("products"):
+            top = extra["products"][0] if extra["products"] else None
+            if top:
+                item_name = top.get("name", reply_text[:60])
+                item_data = {k:v for k,v in top.items() if k != "name"}
+                category  = "product"
+        elif ai_name == "recipe":
+            # レシピ名はreply_textの先頭から推測
+            item_name = reply_text[:80]
+            category  = "recipe"
+        elif ai_name in ("diy","appliance","health"):
+            item_name = reply_text[:80]
+            category  = ai_name
+
+        if item_name:
+            proposal_id = str(uuid.uuid4())
+            db_exec(
+                "INSERT INTO lu_proposals (id,session_id,user_id,ai_type,category,item_name,item_data,outcome) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,'unknown')",
+                (proposal_id, session_id, uid, ai_name, category, item_name,
+                 json.dumps(item_data, ensure_ascii=False) if item_data else None)
+            )
+    except Exception as e:
+        print(f"[Proposals] 保存スキップ: {e}")
+
     update_match_score(uid, agent_name or "general")
+    _upsert_usage_stats(uid, agent_name or "general")
+
+    # 初回チャット時刻を記録
+    db_exec(
+        "UPDATE lu_users SET first_chat_at=COALESCE(first_chat_at,NOW()), last_active_at=NOW() WHERE id=%s",
+        (uid,)
+    )
 
     return jsonify({"reply": reply_text, "suggestions": suggestions, "extra": extra,
                     "session_id": session_id, "message_id": msg_id_ai,
+                    "proposal_id": proposal_id,
                     "usage_count": user["usage_count"] + 1, "agent": agent_name or "general"})
 
 
@@ -695,6 +979,356 @@ def feedback():
         print(f"[Feedback] {e}")
     update_match_score(uid, d.get("ai_type","general"), rating)
     return jsonify({"ok": True})
+
+
+# ══════════════════════════════════════════════════════════════
+#  lu_reactions: 感情フィードバック（5種別）
+# ══════════════════════════════════════════════════════════════
+REACTION_SCORE_MAP = {
+    "love":      {"overall": 2.0, "ai": 3.5},   # 最高評価
+    "helpful":   {"overall": 1.5, "ai": 2.5},   # 役立った
+    "boring":    {"overall": 0.0, "ai": -0.3},  # 普通〜微妙
+    "wrong":     {"overall": 0.0, "ai": -1.0},  # 内容が違う
+    "too_long":  {"overall": 0.2, "ai":  0.3},  # 長すぎ（情報は有用）
+    "too_short": {"overall": 0.2, "ai":  0.3},  # 短すぎ（改善余地）
+    "off_topic": {"overall": 0.0, "ai": -0.5},  # 的外れ
+}
+
+@app.route("/api/chat/reaction", methods=["POST"])
+@auth_required
+def post_reaction():
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    message_id = d.get("message_id")
+    reaction   = d.get("reaction")
+    detail     = d.get("detail", "")
+    ai_type    = d.get("ai_type", "general")
+
+    if not message_id:
+        return jsonify({"error": "message_id は必須です"}), 400
+    if reaction not in REACTION_SCORE_MAP:
+        return jsonify({"error": f"reaction は {list(REACTION_SCORE_MAP.keys())} のいずれかです"}), 400
+
+    # lu_reactions に保存
+    rid = str(uuid.uuid4())
+    db_exec(
+        "INSERT INTO lu_reactions (id, message_id, user_id, reaction, detail) VALUES (%s,%s,%s,%s,%s)",
+        (rid, message_id, uid, reaction, detail or None)
+    )
+
+    # スコアを更新（reaction種別ごとに加算値が異なる）
+    score_delta = REACTION_SCORE_MAP[reaction]
+    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score",
+           "shopping":"shopping_score","health":"health_score",
+           "appliance":"home_score","diy":"diy_score"}.get(ai_type, "overall_score")
+    if score_delta["overall"] != 0 or score_delta["ai"] != 0:
+        db_exec(
+            f"UPDATE lu_match_scores SET "
+            f"overall_score = LEAST(100, GREATEST(0, overall_score + %s)), "
+            f"{col} = LEAST(100, GREATEST(0, {col} + %s)), "
+            f"last_updated = NOW() WHERE user_id=%s",
+            (score_delta["overall"], score_delta["ai"], uid)
+        )
+
+    # lu_learning_log に学習イベントとして記録
+    _log_learning(uid, ai_type, f"reaction_{reaction}", reaction, source="reaction",
+                  confidence=abs(score_delta["ai"]))
+
+    # lu_usage_stats の avg_rating を更新
+    _upsert_usage_stats(uid, ai_type)
+
+    return jsonify({"ok": True, "reaction": reaction})
+
+
+# ══════════════════════════════════════════════════════════════
+#  lu_proposals: 提案の構造化保存
+# ══════════════════════════════════════════════════════════════
+@app.route("/api/proposals", methods=["POST"])
+@auth_required
+def save_proposal():
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    required = ["ai_type", "item_name"]
+    for k in required:
+        if not d.get(k):
+            return jsonify({"error": f"{k} は必須です"}), 400
+
+    pid = str(uuid.uuid4())
+    db_exec(
+        "INSERT INTO lu_proposals (id, session_id, user_id, ai_type, category, item_name, item_data, outcome) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+        (pid,
+         d.get("session_id"),
+         uid,
+         d["ai_type"],
+         d.get("category", "general"),
+         d["item_name"],
+         json.dumps(d["item_data"], ensure_ascii=False) if d.get("item_data") else None,
+         d.get("outcome", "unknown"))
+    )
+    return jsonify({"ok": True, "proposal_id": pid})
+
+
+@app.route("/api/proposals/<pid>/outcome", methods=["PUT"])
+@auth_required
+def update_proposal_outcome(pid):
+    uid     = str(g.current_user["id"])
+    d       = request.json or {}
+    outcome = d.get("outcome")
+    if outcome not in ("accepted", "rejected", "ignored"):
+        return jsonify({"error": "outcome は accepted/rejected/ignored のいずれかです"}), 400
+    db_exec(
+        "UPDATE lu_proposals SET outcome=%s, reject_reason=%s WHERE id=%s AND user_id=%s",
+        (outcome, d.get("reject_reason"), pid, uid)
+    )
+    # proposal_historyと同様にuser_preferencesにも反映
+    if outcome == "rejected":
+        row = db_exec("SELECT ai_type, item_name FROM lu_proposals WHERE id=%s", (pid,), fetch="one")
+        if row:
+            try:
+                save_feedback(user_id=uid, ai_type=row["ai_type"],
+                              session_id="", proposal=row["item_name"],
+                              outcome="rejected", reason=d.get("reject_reason",""))
+            except Exception:
+                pass
+    return jsonify({"ok": True})
+
+
+@app.route("/api/proposals", methods=["GET"])
+@auth_required
+def list_proposals():
+    uid     = str(g.current_user["id"])
+    ai_type = request.args.get("ai_type")
+    outcome = request.args.get("outcome")
+    limit   = min(int(request.args.get("limit", 20)), 100)
+
+    where, params = ["user_id=%s"], [uid]
+    if ai_type: where.append("ai_type=%s"); params.append(ai_type)
+    if outcome: where.append("outcome=%s"); params.append(outcome)
+    params.append(limit)
+
+    rows = db_exec(
+        f"SELECT id,ai_type,category,item_name,item_data,outcome,reject_reason,created_at "
+        f"FROM lu_proposals WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT %s",
+        params, fetch="all"
+    ) or []
+    result = []
+    for r in rows:
+        p = dict(r); p["id"] = str(p["id"])
+        p["created_at"] = p["created_at"].isoformat() if p.get("created_at") else None
+        if p.get("item_data") and isinstance(p["item_data"], str):
+            try: p["item_data"] = json.loads(p["item_data"])
+            except: pass
+        result.append(p)
+    return jsonify({"proposals": result})
+
+
+# ══════════════════════════════════════════════════════════════
+#  lu_action_logs: ユーザーの実行動記録
+# ══════════════════════════════════════════════════════════════
+VALID_ACTION_TYPES = ("visited","cooked","purchased","booked","diy_done","exercised","other")
+
+@app.route("/api/actions", methods=["POST"])
+@auth_required
+def log_action():
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    if not d.get("action_type") or d["action_type"] not in VALID_ACTION_TYPES:
+        return jsonify({"error": f"action_type は {VALID_ACTION_TYPES} のいずれかです"}), 400
+    if not d.get("ai_type"):
+        return jsonify({"error": "ai_type は必須です"}), 400
+
+    aid = str(uuid.uuid4())
+    db_exec(
+        "INSERT INTO lu_action_logs (id, user_id, ai_type, proposal_id, action_type, note, actioned_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s, NOW())",
+        (aid, uid, d["ai_type"], d.get("proposal_id"), d["action_type"], d.get("note"))
+    )
+
+    # 実際に行動した = 提案が「役立った」証拠 → スコアを加算
+    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score",
+           "shopping":"shopping_score","health":"health_score",
+           "appliance":"home_score","diy":"diy_score"}.get(d["ai_type"], "overall_score")
+    db_exec(
+        f"UPDATE lu_match_scores SET "
+        f"overall_score=LEAST(100,overall_score+1.0), {col}=LEAST(100,{col}+2.0), "
+        f"last_updated=NOW() WHERE user_id=%s",
+        (uid,)
+    )
+
+    # 行動ログを学習イベントとして記録
+    _log_learning(uid, d["ai_type"], f"action_{d['action_type']}",
+                  d.get("note","実行"), source="feedback", confidence=2.0)
+
+    # proposal が存在すれば accepted に更新
+    if d.get("proposal_id"):
+        db_exec("UPDATE lu_proposals SET outcome='accepted' WHERE id=%s AND user_id=%s",
+                (d["proposal_id"], uid))
+
+    return jsonify({"ok": True, "action_id": aid})
+
+
+@app.route("/api/actions", methods=["GET"])
+@auth_required
+def list_actions():
+    uid     = str(g.current_user["id"])
+    ai_type = request.args.get("ai_type")
+    limit   = min(int(request.args.get("limit", 20)), 100)
+    where, params = ["a.user_id=%s"], [uid]
+    if ai_type: where.append("a.ai_type=%s"); params.append(ai_type)
+    params.append(limit)
+    rows = db_exec(
+        f"SELECT a.id,a.ai_type,a.action_type,a.note,a.actioned_at,"
+        f"p.item_name as proposal_name "
+        f"FROM lu_action_logs a LEFT JOIN lu_proposals p ON a.proposal_id=p.id "
+        f"WHERE {' AND '.join(where)} ORDER BY a.actioned_at DESC LIMIT %s",
+        params, fetch="all"
+    ) or []
+    result = []
+    for r in rows:
+        rec = dict(r); rec["id"] = str(rec["id"])
+        rec["actioned_at"] = rec["actioned_at"].isoformat() if rec.get("actioned_at") else None
+        result.append(rec)
+    return jsonify({"actions": result})
+
+
+# ══════════════════════════════════════════════════════════════
+#  lu_usage_stats / lu_learning_log ヘルパー
+# ══════════════════════════════════════════════════════════════
+def _upsert_usage_stats(user_id: str, ai_type: str):
+    """日次集計を更新（会話数・平均評価）"""
+    try:
+        db_exec(
+            "INSERT INTO lu_usage_stats (id, user_id, ai_type, date, msg_count) "
+            "VALUES (gen_random_uuid(), %s, %s, CURRENT_DATE, 1) "
+            "ON CONFLICT (user_id, ai_type, date) DO UPDATE SET "
+            "msg_count = lu_usage_stats.msg_count + 1",
+            (user_id, ai_type)
+        )
+        # avg_rating を lu_reactions から再計算
+        db_exec(
+            "UPDATE lu_usage_stats us SET avg_rating = ("
+            "  SELECT AVG(CASE reaction "
+            "    WHEN 'love' THEN 5 WHEN 'helpful' THEN 4 "
+            "    WHEN 'boring' THEN 2 WHEN 'wrong' THEN 1 "
+            "    WHEN 'off_topic' THEN 1 ELSE 3 END) "
+            "  FROM lu_reactions r JOIN lu_messages m ON r.message_id=m.id "
+            "  WHERE r.user_id=%s AND m.ai_type=%s "
+            "    AND DATE(r.created_at)=CURRENT_DATE"
+            ") WHERE us.user_id=%s AND us.ai_type=%s AND us.date=CURRENT_DATE",
+            (user_id, ai_type, user_id, ai_type)
+        )
+        # lu_users.last_active_at / favorite_ai を更新
+        db_exec(
+            "UPDATE lu_users SET last_active_at=NOW(), "
+            "first_chat_at=COALESCE(first_chat_at, NOW()), "
+            "total_sessions=COALESCE(total_sessions,0)+1, "
+            "favorite_ai=("
+            "  SELECT ai_type FROM lu_usage_stats "
+            "  WHERE user_id=%s GROUP BY ai_type ORDER BY SUM(msg_count) DESC LIMIT 1"
+            ") WHERE id=%s",
+            (user_id, user_id)
+        )
+    except Exception as e:
+        print(f"[UsageStats] {e}")
+
+
+def _log_learning(user_id: str, ai_type: str, key: str, val: str,
+                  source: str = "conversation", confidence: float = 1.0):
+    """lu_learning_log に学習イベントを記録"""
+    try:
+        db_exec(
+            "INSERT INTO lu_learning_log (id, user_id, ai_type, learned_key, learned_val, source, confidence) "
+            "VALUES (gen_random_uuid(),%s,%s,%s,%s,%s,%s)",
+            (user_id, ai_type, key, val, source, confidence)
+        )
+    except Exception as e:
+        print(f"[LearningLog] {e}")
+
+
+@app.route("/api/usage-stats", methods=["GET"])
+@auth_required
+def get_usage_stats():
+    uid  = str(g.current_user["id"])
+    days = min(int(request.args.get("days", 30)), 90)
+    rows = db_exec(
+        "SELECT ai_type, date, msg_count, avg_rating "
+        "FROM lu_usage_stats WHERE user_id=%s AND date >= CURRENT_DATE - %s::int "
+        "ORDER BY date DESC, msg_count DESC",
+        (uid, days), fetch="all"
+    ) or []
+    result = []
+    for r in rows:
+        rec = dict(r)
+        rec["date"] = rec["date"].isoformat() if rec.get("date") else None
+        if rec.get("avg_rating"): rec["avg_rating"] = round(rec["avg_rating"], 2)
+        result.append(rec)
+    return jsonify({"stats": result, "days": days})
+
+
+# ══════════════════════════════════════════════════════════════
+#  lu_favorites: お気に入り登録・一覧・削除
+# ══════════════════════════════════════════════════════════════
+@app.route("/api/favorites", methods=["POST"])
+@auth_required
+def add_favorite():
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    if not d.get("title"):
+        return jsonify({"error": "title は必須です"}), 400
+    fid = str(uuid.uuid4())
+    db_exec(
+        "INSERT INTO lu_favorites (id,user_id,ai_type,category,title,subtitle,detail,source_url,note) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (fid, uid,
+         d.get("ai_type","general"), d.get("category","general"),
+         d["title"], d.get("subtitle"),
+         json.dumps(d["detail"], ensure_ascii=False) if d.get("detail") else None,
+         d.get("source_url"), d.get("note"))
+    )
+    return jsonify({"ok": True, "favorite_id": fid})
+
+@app.route("/api/favorites", methods=["GET"])
+@auth_required
+def list_favorites():
+    uid = str(g.current_user["id"])
+    ai_type  = request.args.get("ai_type")
+    category = request.args.get("category")
+    limit    = min(int(request.args.get("limit", 50)), 200)
+    where, params = ["user_id=%s"], [uid]
+    if ai_type:  where.append("ai_type=%s");  params.append(ai_type)
+    if category: where.append("category=%s"); params.append(category)
+    params.append(limit)
+    rows = db_exec(
+        f"SELECT id,ai_type,category,title,subtitle,detail,source_url,note,created_at "
+        f"FROM lu_favorites WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT %s",
+        params, fetch="all"
+    ) or []
+    result = []
+    for r in rows:
+        rec = dict(r); rec["id"] = str(rec["id"])
+        rec["created_at"] = rec["created_at"].isoformat() if rec.get("created_at") else None
+        if rec.get("detail") and isinstance(rec["detail"], str):
+            try: rec["detail"] = json.loads(rec["detail"])
+            except: pass
+        result.append(rec)
+    return jsonify({"favorites": result})
+
+@app.route("/api/favorites/<fid>", methods=["DELETE"])
+@auth_required
+def delete_favorite(fid):
+    uid = str(g.current_user["id"])
+    db_exec("DELETE FROM lu_favorites WHERE id=%s AND user_id=%s", (fid, uid))
+    return jsonify({"ok": True})
+
+@app.route("/api/favorites/<fid>/note", methods=["PUT"])
+@auth_required
+def update_favorite_note(fid):
+    uid  = str(g.current_user["id"])
+    note = (request.json or {}).get("note","")
+    db_exec("UPDATE lu_favorites SET note=%s WHERE id=%s AND user_id=%s", (note, fid, uid))
+    return jsonify({"ok": True})
+
 
 @app.route("/api/chat/sessions", methods=["GET"])
 @auth_required
@@ -1056,6 +1690,17 @@ def health_check():
         "openai":      "configured" if os.getenv("OPENAI_API_KEY") else "⚠ 未設定",
         "rakuten":     "configured" if os.getenv("RAKUTEN_APP_ID") else "未設定（任意）",
         "google_maps": "configured" if os.getenv("GOOGLE_MAPS_API_KEY") else "未設定（任意）",
+    })
+
+
+# ══════════════════════════════════════════════════════════════
+#  フロントエンド用公開設定（APIキー等）
+# ══════════════════════════════════════════════════════════════
+@app.route("/api/config", methods=["GET"])
+def get_frontend_config():
+    """フロントエンドが楽天APIを直接叩くために必要な公開設定を返す"""
+    return jsonify({
+        "rakuten_app_id": os.getenv("RAKUTEN_APP_ID", ""),
     })
 
 

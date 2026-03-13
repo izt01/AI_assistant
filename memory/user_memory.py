@@ -47,20 +47,37 @@ def load_memory(user_id: str, ai_type: str) -> dict:
                         "confidence": row["confidence"]
                     }
 
-                # 提案履歴（直近10件）
+                # 提案履歴 — lu_proposals（新）+ proposal_history（旧互換）を統合
+                cur.execute("""
+                    SELECT item_name AS proposal, outcome, reject_reason AS reason, created_at
+                    FROM lu_proposals
+                    WHERE user_id = %s AND ai_type = %s
+                    ORDER BY created_at DESC LIMIT 15
+                """, (user_id, ai_type))
+                lu_rows = cur.fetchall()
+
                 cur.execute("""
                     SELECT proposal, outcome, reason, created_at FROM proposal_history
                     WHERE user_id = %s AND ai_type = %s
                     ORDER BY created_at DESC LIMIT 10
                 """, (user_id, ai_type))
-                for row in cur.fetchall():
+                old_rows = cur.fetchall()
+
+                # 両テーブルをマージ（created_atで降順、最大20件）
+                all_rows = sorted(
+                    list(lu_rows) + list(old_rows),
+                    key=lambda r: r["created_at"],
+                    reverse=True
+                )[:20]
+
+                for row in all_rows:
                     entry = {
                         "proposal": row["proposal"],
                         "outcome":  row["outcome"],
                         "date":     str(row["created_at"])[:10],
                     }
                     if row["outcome"] == "rejected":
-                        memory["rejections"].append({**entry, "reason": row["reason"]})
+                        memory["rejections"].append({**entry, "reason": row.get("reason")})
                     else:
                         memory["history"].append(entry)
 
@@ -70,7 +87,7 @@ def load_memory(user_id: str, ai_type: str) -> dict:
     return memory
 
 
-def build_memory_prompt(memory: dict, ai_type: str) -> str:
+def build_memory_prompt(memory: dict, ai_type: str, overall_score: float = 0.0) -> str:
     """記憶をプロンプト文字列に変換する"""
     lines = []
 
@@ -84,21 +101,34 @@ def build_memory_prompt(memory: dict, ai_type: str) -> str:
 
     if memory["preferences"]:
         lines.append(f"\n【{ai_type}での蓄積された好み・嗜好】")
+        # confidence高い順にソート済み（DBのORDER BY confidence DESCを活用）
         for key, info in memory["preferences"].items():
-            conf = "（確実）" if info["confidence"] >= 3 else "（推測）"
-            lines.append(f"  {key}: {info['value']} {conf}")
+            conf_val = info["confidence"]
+            if conf_val >= 7:
+                conf_label = "（確実・最重要）"  # 迷わず前提として使う
+            elif conf_val >= 3:
+                conf_label = "（確実）"          # 確認なしで使う
+            else:
+                conf_label = "（推測）"          # 一言確認してから使う
+
+            # スコアが高いほど確信度の高い好みを前面に出す
+            if overall_score >= 25 and conf_val >= 3:
+                lines.append(f"  ★ {key}: {info['value']} {conf_label}")
+            else:
+                lines.append(f"  {key}: {info['value']} {conf_label}")
 
     if memory["rejections"]:
-        lines.append("\n【過去に却下された提案（繰り返さないこと）】")
-        for r in memory["rejections"][:5]:
+        lines.append("\n【過去に却下された提案（絶対に繰り返さないこと）】")
+        for r in memory["rejections"]:          # 全件表示（上限なし）
             reason = f" → 理由: {r['reason']}" if r.get("reason") else ""
-            lines.append(f"  - {r['proposal'][:80]}{reason}")
+            lines.append(f"  ✕ {r['proposal'][:80]}{reason}")
 
     if memory["history"]:
-        lines.append("\n【過去に好評だった提案】")
         accepted = [h for h in memory["history"] if h["outcome"] == "accepted"]
-        for h in accepted[:3]:
-            lines.append(f"  - {h['proposal'][:80]} ({h['date']})")
+        if accepted:
+            lines.append("\n【過去に好評だった提案（優先的に参考にすること）】")
+            for h in accepted[:5]:  # 3件→5件に拡張
+                lines.append(f"  ✓ {h['proposal'][:80]} ({h['date']})")
 
     if not lines:
         return ""
