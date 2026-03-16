@@ -350,6 +350,11 @@ table.dt{width:100%;border-collapse:collapse}
   .topbar         { display: none !important; }
   .main-wrap      { margin-left: 0 !important; }
 
+  /* チャット画面: ページ全体スクロール防止 */
+  body.chat-page  { overflow: hidden; height: 100dvh; height: 100svh; }
+  body.chat-page .app-layout { min-height: unset; height: 100%; overflow: hidden; }
+  body.chat-page .main-wrap  { min-height: unset; height: 100%; overflow: hidden; }
+
   /* モバイル専用要素を表示 */
   .mobile-nav     { display: flex; }
   .mobile-header  { display: flex; }
@@ -392,6 +397,8 @@ table.dt{width:100%;border-collapse:collapse}
   .chat-shell     {
     height: calc(100svh - 52px - 60px);
     height: calc(100dvh - 52px - 60px); /* アドレスバー動的対応 */
+    flex: 1;          /* 親がflex:columnの時に残り全部を占有 */
+    min-height: 0;    /* flexアイテムが縮められるように */
   }
   .chat-msgs      { padding: 12px; overflow-x: hidden; }
   .msg-bubble     { max-width: calc(100vw - 80px); font-size: 13.5px; word-break: break-word; overflow-wrap: anywhere; }
@@ -444,6 +451,8 @@ table.dt{width:100%;border-collapse:collapse}
     .chat-shell {
       height: calc(100svh - 52px - 60px - env(safe-area-inset-bottom));
       height: calc(100dvh - 52px - 60px - env(safe-area-inset-bottom));
+      flex: 1;
+      min-height: 0;
     }
   }
 }

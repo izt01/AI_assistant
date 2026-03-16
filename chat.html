@@ -117,7 +117,7 @@
 .hotel-fav:hover,.hotel-fav.saved{color:#dc2626}
 </style>
 </head>
-<body>
+<body class="chat-page">
 <div id="mobile-header-root"></div>
 <div id="toast-root"></div>
 <div id="modal-root"></div>
@@ -356,7 +356,13 @@ function parseMarkdown(text) {
 
 function scrollBottom() {
   const c = document.getElementById('chat-msgs')
-  setTimeout(()=>c.scrollTop = c.scrollHeight, 50)
+  if (!c) return
+  // requestAnimationFrameで確実にレンダリング後にスクロール
+  requestAnimationFrame(() => {
+    c.scrollTop = c.scrollHeight
+    // iOS SafariのOverscroll対策: 少し遅延して再実行
+    setTimeout(() => { c.scrollTop = c.scrollHeight }, 100)
+  })
 }
 
 function updateUsageBadge() {
