@@ -1,42 +1,75 @@
 """
-楽天API ツール
-- 楽天トラベル: ホテル検索
-- 楽天市場: 商品検索
+楽天API ツール（2026年新API対応版）
+- 2026年2月10日より新エンドポイントへの移行が必要
+- 旧: app.rakuten.co.jp  → 新: openapi.rakuten.co.jp
+- 認証: applicationId のみ → applicationId + accessKey の両方が必要
+- 移行期限: 2026年5月13日（以降は旧APIが完全停止）
+
+必要な環境変数:
+  RAKUTEN_APP_ID    : アプリケーションID（UUID形式）
+  RAKUTEN_ACCESS_KEY: アクセスキー（楽天アプリ管理画面から取得）
 """
 import os, requests
 
 
 def _app_id() -> str:
-    """毎回環境変数から取得（Railway追加後も再デプロイ不要）"""
-    val = os.getenv("RAKUTEN_APP_ID", "").strip()
-    return val
+    return os.getenv("RAKUTEN_APP_ID", "").strip()
+
+def _access_key() -> str:
+    return os.getenv("RAKUTEN_ACCESS_KEY", "").strip()
+
+def _auth_params() -> dict:
+    """新APIに必要な認証パラメータを返す"""
+    return {
+        "applicationId": _app_id(),
+        "accessKey":     _access_key(),
+    }
+
+def _auth_headers(app_url: str = "") -> dict:
+    """新APIに必要なReferer/Originヘッダーを返す（登録済みのアプリURLを使う）"""
+    url = app_url or os.getenv("RAKUTEN_APP_URL", "https://aiassistant-production-264e.up.railway.app")
+    return {
+        "Referer": url + "/",
+        "Origin":  url,
+    }
 
 
 def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num: int = 2, max_results: int = 4) -> dict:
-    """楽天トラベルでホテルを検索する"""
+    """楽天トラベルでホテルを検索する（新API対応）"""
     app_id = _app_id()
     if not app_id:
         return {"available": False, "reason": "RAKUTEN_APP_ID が未設定です"}
+    if not _access_key():
+        return {"available": False, "reason": "RAKUTEN_ACCESS_KEY が未設定です（2026年新API対応に必要）"}
     try:
         params = {
-            "applicationId": app_id,
-            "keyword":        keyword,
-            "hits":           max_results,
-            "responseType":   "small",
-            "format":         "json",
+            **_auth_params(),
+            "keyword":      keyword,
+            "hits":         max_results,
+            "responseType": "small",
+            "format":       "json",
         }
-        if checkin:  params["checkinDate"]  = checkin
-        if checkout: params["checkoutDate"] = checkout
-        if adult_num:  params["adultNum"]     = adult_num
+        if checkin:   params["checkinDate"]  = checkin
+        if checkout:  params["checkoutDate"] = checkout
+        if adult_num: params["adultNum"]     = adult_num
 
         r = requests.get(
-            "https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426",
-            params=params, timeout=5
+            # ★ 新エンドポイント（旧: app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426）
+            "https://openapi.rakuten.co.jp/travel/api/Travel/SimpleHotelSearch/20170426",
+            params=params,
+            headers=_auth_headers(),
+            timeout=8
         )
+        print(f"[Rakuten Hotels] keyword={keyword} status={r.status_code}")
+
+        data = r.json()
+        if data.get("error"):
+            print(f"[Rakuten Hotels] error={data.get('error')} desc={data.get('error_description')}")
+            return {"available": False, "reason": f"{data.get('error')}: {data.get('error_description')}"}
+
         hotels = []
-        for h in r.json().get("hotels", []):
+        for h in data.get("hotels", []):
             i = h[0]["hotelBasicInfo"]
-            
             hotel_no = i.get("hotelNo", "")
             checkin_fmt = checkin.replace("-", "") if checkin else ""
             deep_url = f"https://hotel.travel.rakuten.co.jp/hotelinfo/plan/{hotel_no}"
@@ -51,65 +84,69 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
                 "review_count": i.get("reviewCount"),
                 "url":          i.get("hotelInformationUrl"),
                 "image":        i.get("hotelImageUrl"),
-                "hotel_no":  hotel_no,
-                "deep_url":  deep_url,
-                "checkin":   checkin,
-                "checkout":  checkout,
-                "adult_num": adult_num,
+                "hotel_no":     hotel_no,
+                "deep_url":     deep_url,
+                "checkin":      checkin,
+                "checkout":     checkout,
+                "adult_num":    adult_num,
             })
         return {"available": True, "type": "hotels", "hotels": hotels, "adult_num": adult_num}
     except Exception as e:
+        print(f"[Rakuten Hotels] エラー: {e}")
         return {"available": False, "reason": str(e)}
 
 
 def search_products(keyword: str, max_results: int = 6, min_price: int = None, max_price: int = None) -> dict:
-    """楽天市場で商品を検索する"""
+    """楽天市場で商品を検索する（新API対応）"""
     app_id = _app_id()
     if not app_id:
         return {"available": False, "reason": "RAKUTEN_APP_ID が未設定です"}
+    if not _access_key():
+        return {"available": False, "reason": "RAKUTEN_ACCESS_KEY が未設定です（2026年新API対応に必要）"}
     try:
         params = {
-            "applicationId": app_id,
+            **_auth_params(),
             "keyword":       keyword,
             "hits":          max_results,
             "sort":          "standard",
             "availability":  1,
             "imageFlag":     1,
+            "formatVersion": 2,
         }
         if min_price: params["minPrice"] = min_price
         if max_price: params["maxPrice"] = max_price
 
         r = requests.get(
-            "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706",
+            # ★ 新エンドポイント（旧: app.rakuten.co.jp/services/api/IchibaItem/Search/20170706）
+            "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20220601",
             params=params,
+            headers=_auth_headers(),
             timeout=10
         )
         data = r.json()
         err  = data.get("error", "")
         desc = data.get("error_description", "")
         app_id_masked = app_id[:8] + "..." if len(app_id) > 8 else app_id
-        print(f"[Rakuten] keyword={keyword} status={r.status_code} count={data.get('count',0)} error={err or 'none'} desc={desc} appId={app_id_masked} len={len(app_id)}")
-        print(f"[Rakuten] full_response={str(data)[:300]}")
+        print(f"[Rakuten] keyword={keyword} status={r.status_code} count={data.get('count',0)} error={err or 'none'} desc={desc} appId={app_id_masked}")
         if err:
             return {"available": False, "reason": f"{err}: {desc}"}
 
         items = []
         for item in data.get("Items", []):
-            i = item.get("Item", item)  # APIバージョンによりItem直下のこともある
-            # 画像URL（smallは不鮮明なのでmediumを使う）
+            i = item.get("Item", item)
             img_urls = i.get("mediumImageUrls") or i.get("smallImageUrls") or []
             img = img_urls[0].get("imageUrl", "") if img_urls and isinstance(img_urls[0], dict) else ""
             items.append({
-                "name":      i.get("itemName", "")[:80],
-                "price":     i.get("itemPrice"),
-                "shop":      i.get("shopName"),
-                "shop_url":  i.get("shopUrl"),
-                "url":       i.get("itemUrl"),
-                "image":     img,
-                "review":    i.get("reviewAverage"),
+                "name":         i.get("itemName", "")[:80],
+                "price":        i.get("itemPrice"),
+                "shop":         i.get("shopName"),
+                "shop_url":     i.get("shopUrl"),
+                "url":          i.get("itemUrl"),
+                "image":        img,
+                "review":       i.get("reviewAverage"),
                 "review_count": i.get("reviewCount"),
-                "catchcopy": (i.get("catchcopy") or "")[:60],
-                "point":     i.get("pointRate"),
+                "catchcopy":    (i.get("catchcopy") or "")[:60],
+                "point":        i.get("pointRate"),
             })
         return {"available": True, "type": "products", "items": items, "total": data.get("count", 0)}
     except Exception as e:
