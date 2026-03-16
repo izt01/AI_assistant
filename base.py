@@ -90,9 +90,8 @@ class BaseAgent:
         msgs       = [{"role": "system", "content": system}] + messages
 
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
-        called_tools = set()       # 呼ばれたツール名を追跡
 
-        for i in range(5):  # ツールチェーンが長くなる場合に備えて5回に拡張
+        for i in range(3):
             kwargs = {
                 "model":      "gpt-4o",
                 "max_tokens": 1500,
@@ -100,6 +99,7 @@ class BaseAgent:
             }
             if self.TOOLS:
                 kwargs["tools"] = self.TOOLS
+                # 1回目はtool呼び出しを強制、2回目以降はauto
                 kwargs["tool_choice"] = "auto"
 
             res = client.chat.completions.create(**kwargs)
@@ -114,7 +114,6 @@ class BaseAgent:
                 args   = json.loads(tc.function.arguments)
                 fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
                 result = fn(args)
-                called_tools.add(tc.function.name)
                 print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
                 msgs.append({
                     "role":         "tool",
@@ -126,43 +125,6 @@ class BaseAgent:
 
         if last_assistant_msg is None:
             last_assistant_msg = msg
-
-        # ── セーフガード: search_products が定義されているのに呼ばれなかった場合、
-        #    AIの最終返答からキーワードを推測して強制呼び出しする
-        tool_names = {t["function"]["name"] for t in self.TOOLS}
-        if "search_products" in tool_names and "search_products" not in called_tools:
-            # 既にtoolのresultが_productsに入っていないか確認してから実行
-            has_products = any(
-                isinstance(m, dict) and m.get("role") == "tool" and
-                "products" in (json.loads(m["content"]) if isinstance(m.get("content"), str) else {}).get("type", "")
-                for m in msgs
-            )
-            if not has_products:
-                # 最後のユーザーメッセージからキーワードを取る
-                user_texts = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "user"]
-                kw = user_texts[-1] if user_texts else ""
-                # 「needs_more_info: true」の質問中でなければ強制検索
-                reply_text = (last_assistant_msg.content or "")
-                is_question = (
-                    '"needs_more_info": true' in reply_text or
-                    "'needs_more_info': true" in reply_text
-                )
-                if kw and not is_question:
-                    print(f"[SafeGuard] search_products未呼出のため強制実行: kw={kw[:30]}")
-                    fn = self.TOOL_MAP.get("search_products", lambda a: {})
-                    result = fn({"keyword": kw})
-                    if result.get("available") and result.get("items"):
-                        msgs.append({
-                            "role":    "assistant",
-                            "content": last_assistant_msg.content or "",
-                        })
-                        msgs.append({
-                            "role":    "tool",
-                            "tool_call_id": "safeguard-fallback",
-                            "content": json.dumps(result, ensure_ascii=False),
-                        })
-                        # セーフガード結果を _products として確実に伝達するためmsgを更新
-                        last_assistant_msg._safeguard_products = result
 
         text = last_assistant_msg.content or "{}"
         # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
@@ -194,7 +156,15 @@ class BaseAgent:
         if "message" in parsed and "reply" not in parsed:
             parsed["reply"] = parsed.pop("message")
 
-        # search_keyword の旧ブラウザ検索は廃止（バックエンドのsearch_productsツールに移行）
+        # 旅行AIのプランフィールドをフロントに渡す
+        if self.AI_TYPE == "travel" and parsed.get("plans"):
+            parsed["_travel_plans"] = parsed["plans"]
+            print(f"[Travel] プラン数={len(parsed['_travel_plans'])}案")
+
+        # search_keyword が含まれていればフロントに渡す（楽天ブラウザ検索用）
+        if parsed.get("search_keyword"):
+            parsed["_search_keyword"] = parsed["search_keyword"]
+            print(f"[Shopping] search_keyword={parsed['_search_keyword']}")
 
         # ツール結果をパース済みdictに追加
         for m in msgs:
@@ -202,16 +172,33 @@ class BaseAgent:
                 try:
                     data = json.loads(m["content"])
                     t = data.get("type")
-                    if t == "hotels":   parsed["_hotels"]   = data
-                    if t == "products": parsed["_products"] = data
-                    if t == "places":   parsed["_places"]   = data
+
+                    # ホテル結果（旅行AI）: source フィールドを追加して将来の複数API拡張に対応
+                    if t == "hotels":
+                        data["source"] = data.get("source", "rakuten")  # ★ 将来: 'agoda' | 'booking'
+                        parsed["_hotels"] = data
+
+                    # 商品結果（買い物AI・家電AI・DIY AI）
+                    if t == "products":
+                        parsed["_products"] = data
+
+                    # 位置情報結果: 呼び出し元AIによって格納先キーを変える
+                    # - gourmet → _places（飲食店カード）
+                    # - shopping → _nearby_stores（近隣実店舗カード）★追加
+                    # - recipe  → _nearby_stores（近隣スーパーカード）
+                    if t == "places":
+                        if self.AI_TYPE == "gourmet":
+                            parsed["_places"] = data
+                        elif self.AI_TYPE in ("shopping", "recipe"):
+                            parsed["_nearby_stores"] = data
+                        elif self.AI_TYPE == "travel":
+                            # 旅行AIは観光スポット検索なので _places に格納
+                            parsed["_places"] = data
+                        else:
+                            parsed["_places"] = data
+
                 except Exception:
                     pass
-
-        # セーフガードで強制実行した場合の結果を追加
-        if hasattr(last_assistant_msg, "_safeguard_products"):
-            parsed["_products"] = last_assistant_msg._safeguard_products
-            print(f"[SafeGuard] _productsをparsedに注入: {len(parsed['_products'].get('items',[]))}件")
 
         # 記憶を非同期的に保存（5ターン以上経ったら）
         if len(messages) >= 5:
