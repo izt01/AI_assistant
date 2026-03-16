@@ -120,6 +120,10 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
                     "reason": f"楽天トラベルで'{keyword}'に対応するエリアが見つかりませんでした"}
 
         middle_code, small_code = area_codes
+        # 一部都市(京都=shi, 東京=tokyo, 大阪=osaka等)はdetailClassCodeが必要
+        # 指定しない場合は400エラーになる → "A"（主要市街地）を使用
+        NEED_DETAIL = {"shi", "tokyo", "osaka", "nagoya", "yokohama",
+                       "sendai", "sapporo", "fukuoka", "hiroshima"}
         params = {
             **_auth_params(),
             "largeClassCode":  "japan",
@@ -129,6 +133,8 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
             "responseType":    "small",
             "format":          "json",
         }
+        if small_code in NEED_DETAIL:
+            params["detailClassCode"] = "A"  # 主要市街地エリア
         if checkin:   params["checkinDate"]  = checkin
         if checkout:  params["checkoutDate"] = checkout
         if adult_num: params["adultNum"]     = adult_num
@@ -140,7 +146,8 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
             headers=_auth_headers(),
             timeout=8
         )
-        print(f"[Rakuten Hotels] keyword={keyword} middle={middle_code} small={small_code} status={r.status_code}")
+        detail = params.get("detailClassCode", "-")
+        print(f"[Rakuten Hotels] keyword={keyword} middle={middle_code} small={small_code} detail={detail} status={r.status_code}")
 
         data = r.json()
         if data.get("error"):
