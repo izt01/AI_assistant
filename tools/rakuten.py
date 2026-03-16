@@ -12,7 +12,7 @@ def _app_id() -> str:
     return val
 
 
-def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_results: int = 4) -> dict:
+def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num: int = 2, max_results: int = 4) -> dict:
     """楽天トラベルでホテルを検索する"""
     app_id = _app_id()
     if not app_id:
@@ -27,6 +27,7 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_resul
         }
         if checkin:  params["checkinDate"]  = checkin
         if checkout: params["checkoutDate"] = checkout
+        if adult_num:  params["adultNum"]     = adult_num
 
         r = requests.get(
             "https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426",
@@ -35,6 +36,12 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_resul
         hotels = []
         for h in r.json().get("hotels", []):
             i = h[0]["hotelBasicInfo"]
+            
+            hotel_no = i.get("hotelNo", "")
+            checkin_fmt = checkin.replace("-", "") if checkin else ""
+            deep_url = f"https://hotel.travel.rakuten.co.jp/hotelinfo/plan/{hotel_no}"
+            if checkin_fmt:
+                deep_url += f"?f_hizuke={checkin_fmt}&f_otona_su={adult_num}&f_heya_su=1&f_syu=ch"
             hotels.append({
                 "name":         i.get("hotelName"),
                 "price":        i.get("hotelMinCharge"),
@@ -44,8 +51,13 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", max_resul
                 "review_count": i.get("reviewCount"),
                 "url":          i.get("hotelInformationUrl"),
                 "image":        i.get("hotelImageUrl"),
+                "hotel_no":  hotel_no,
+                "deep_url":  deep_url,
+                "checkin":   checkin,
+                "checkout":  checkout,
+                "adult_num": adult_num,
             })
-        return {"available": True, "type": "hotels", "hotels": hotels}
+        return {"available": True, "type": "hotels", "hotels": hotels, "adult_num": adult_num}
     except Exception as e:
         return {"available": False, "reason": str(e)}
 
