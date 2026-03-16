@@ -449,7 +449,7 @@ async function sendMsg() {
     }
 
     // 買い物AI・家電AI: 楽天商品（ブラウザ直接検索）
-    if((aiParam === 'shopping' || aiParam === 'home') && _rakutenAppId) {
+    if(aiParam === 'home' && resp.extra && resp.extra._products) {renderProductCards(resp.extra._products.items, 'appliance')} else if(aiParam === 'shopping' && _rakutenAppId) {
       const kwFromAI = resp.extra && resp.extra._search_keyword
       const kw = kwFromAI || (resp.extra?.needs_more_info ? null : extractShoppingKeyword(text, reply))
       console.log('[Shopping] needs_more_info=', resp.extra?.needs_more_info, 'kw=', kw)
