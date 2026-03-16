@@ -52,7 +52,7 @@
           <div class="field" style="margin:0"><label class="lbl">チェックアウト</label><input class="inp" type="date" id="cout" value="2025-05-03"></div>
         </div>
         <div class="grid3" style="gap:12px">
-          <div class="field" style="margin:0"><label class="lbl">人数</label><select class="sel"><option>2名</option><option>1名</option><option>3名</option><option>4名</option></select></div>
+          <div class="field" style="margin:0"><label class="lbl">人数</label><select class="sel" id="adult-num"><option value="2">2名</option><option value="1">1名</option><option value="3">3名</option><option value="4">4名</option></select></div>
           <div class="field" style="margin:0"><label class="lbl">予算（1泊）</label><select class="sel"><option>〜¥10,000</option><option>〜¥20,000</option><option>〜¥30,000</option><option>制限なし</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-gold btn-w" onclick="searchHotels()">🔍 検索</button></div>
         </div>
@@ -131,7 +131,18 @@ if(user) {
 }
 
 let selectedHotel = 1
-const hotels = ['THE THOUSAND KYOTO', '京都ブライトンホテル', '嵐山辨慶']
+let hotelData = []
+try {
+  const stored = sessionStorage.getItem('lumina_hotel_results')
+  hotelData = stored ? JSON.parse(stored) : []
+} catch(e) {}
+if (!hotelData.length) {
+  hotelData = [
+    { name: 'THE THOUSAND KYOTO',  hotel_no: '148141', price: 18500 },
+    { name: '京都ブライトンホテル', hotel_no: '12583',  price: 22000 },
+    { name: '嵐山辨慶',            hotel_no: '6253',   price: 35000 },
+  ]
+}
 
 function selectHotel(i) {
   document.querySelectorAll('.hotel-card').forEach(c=>c.classList.remove('hotel-sel'))
@@ -145,22 +156,33 @@ function searchHotels() {
   setTimeout(()=>toast('最新の空き状況を反映しました', 's'), 1200)
 }
 
+try {
+  const h0 = hotelData[0]
+  if (h0) {
+    if (h0.checkin)   document.getElementById('cin').value  = h0.checkin
+    if (h0.checkout)  document.getElementById('cout').value = h0.checkout
+    if (h0.adult_num) document.getElementById('adult-num').value = String(h0.adult_num)
+  }
+} catch(e) {}
+
+function renderFromData() {}
+renderFromData()
+
 function confirmBooking() {
-  const name = document.getElementById('gname').value
-  if(!name) { toast('お名前を入力してください', 'd'); return }
-  showModal({
-    title: '予約を確定しますか？',
-    body: `<p style="font-size:12.5px;color:var(--muted);line-height:1.7"><strong>${hotels[selectedHotel]}</strong><br>チェックイン: 2025年5月1日<br>チェックアウト: 2025年5月3日（2泊）<br>合計: ¥44,000（税込）</p>`,
-    actions: [
-      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
-      {label:'予約を確定する', cls:'btn-gold', fn:'bookingDone()'},
-    ]
-  })
+  const h = hotelData[selectedHotel]          // 選択ホテルのオブジェクトを参照
+  const cin = cinRaw.replace(/-/g, '')        // YYYYMMDD形式に変換
+  const adultNum = parseInt(adultSel.value)   // フォームから人数を取得
+  rakutenUrl = `https://hotel.travel.rakuten.co.jp/hotelinfo/plan/${h.hotel_no}
+    ?f_hizuke=${cin}&f_otona_su=${adultNum}&f_heya_su=1&f_syu=ch`
+  showModal({ title: '楽天トラベルで予約しますか？', })
+}
+function bookingRedirect(encodedUrl) {
+  window.open(url, '_blank')  // ← 楽天トラベルを新タブで開く
 }
 
 function bookingDone() {
   closeModal()
-  toast('ご予約が完了しました！確認メールをお送りします ✈️', 's')
+  toast('ご予約が完了しました！確認メールをお送りします！', 's')
   setTimeout(()=>location.href='dashboard.html', 2000)
 }
 </script>

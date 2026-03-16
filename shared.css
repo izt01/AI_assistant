@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:14px;scroll-behavior:smooth}
-body{font-family:'Noto Sans JP',sans-serif;background:#f5f3ee;color:#1a1610;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f3ee;color:#1a1610;overflow-x:hidden;-webkit-font-smoothing:antialiased;max-width:100vw}
 a{text-decoration:none;color:inherit}
 button{cursor:pointer;font-family:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit}
@@ -390,8 +390,8 @@ table.dt{width:100%;border-collapse:collapse}
 
   /* チャット画面 */
   .chat-shell     { height: calc(100svh - 52px - 60px); }
-  .chat-msgs      { padding: 12px; }
-  .msg-bubble     { max-width: 85%; font-size: 13.5px; }
+  .chat-msgs      { padding: 12px; overflow-x: hidden; }
+  .msg-bubble     { max-width: calc(100vw - 80px); font-size: 13.5px; word-break: break-word; overflow-wrap: anywhere; }
   .chat-input-area { padding: 10px 12px; }
   .chat-topbar    { padding: 10px 14px; }
   .chat-ai-name   { font-size: 14px; }

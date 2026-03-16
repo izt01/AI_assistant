@@ -13,9 +13,10 @@ class TravelAgent(BaseAgent):
             "name": "search_hotels",
             "description": "楽天トラベルでホテルを検索する",
             "parameters": {"type": "object", "properties": {
-                "keyword":  {"type": "string"},
-                "checkin":  {"type": "string"},
-                "checkout": {"type": "string"},
+            "keyword":   {"type": "string", "description": "都市名・ホテル名・エリア名"},
+            "checkin":   {"type": "string", "description": "チェックイン日 YYYY-MM-DD"},
+            "checkout":  {"type": "string", "description": "チェックアウト日 YYYY-MM-DD"},
+            "adult_num": {"type": "integer", "description": "大人の人数（デフォルト2）"},
             }, "required": ["keyword"]},
         }},
         {"type": "function", "function": {
