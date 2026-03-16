@@ -167,9 +167,31 @@ class BaseAgent:
                 try:
                     data = json.loads(m["content"])
                     t = data.get("type")
-                    if t == "hotels":   parsed["_hotels"]   = data
-                    if t == "products": parsed["_products"] = data
-                    if t == "places":   parsed["_places"]   = data
+
+                    # ホテル結果（旅行AI）: source フィールドを追加して将来の複数API拡張に対応
+                    if t == "hotels":
+                        data["source"] = data.get("source", "rakuten")  # ★ 将来: 'agoda' | 'booking'
+                        parsed["_hotels"] = data
+
+                    # 商品結果（買い物AI・家電AI・DIY AI）
+                    if t == "products":
+                        parsed["_products"] = data
+
+                    # 位置情報結果: 呼び出し元AIによって格納先キーを変える
+                    # - gourmet → _places（飲食店カード）
+                    # - shopping → _nearby_stores（近隣実店舗カード）★追加
+                    # - recipe  → _nearby_stores（近隣スーパーカード）
+                    if t == "places":
+                        if self.AI_TYPE == "gourmet":
+                            parsed["_places"] = data
+                        elif self.AI_TYPE in ("shopping", "recipe"):
+                            parsed["_nearby_stores"] = data
+                        elif self.AI_TYPE == "travel":
+                            # 旅行AIは観光スポット検索なので _places に格納
+                            parsed["_places"] = data
+                        else:
+                            parsed["_places"] = data
+
                 except Exception:
                     pass
 
