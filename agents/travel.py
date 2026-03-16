@@ -1,5 +1,8 @@
 """
 旅行プラン提案AI
+- search_hotels: 楽天トラベルでホテルを検索（将来は Agoda / Booking.com も追加予定）
+- search_nearby: 周辺の観光スポット・飲食店を Google Maps で検索
+ホテル検索結果には base.py 側で source="rakuten" が自動付与される。
 """
 from .base import BaseAgent
 from tools import search_hotels, search_nearby
