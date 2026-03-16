@@ -146,17 +146,17 @@
     </div>
   </div>
 </div>
-
+ 
 <!-- Feedback modal -->
 <div id="fb-modal" style="display:none;position:fixed;bottom:90px;right:22px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow2);z-index:100;width:280px;animation:fadeUp .2s ease">
   <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:10px">AIの回答はいかがでしたか？</div>
   <div style="display:flex;flex-direction:column;gap:7px" id="fb-options"></div>
   <button class="btn btn-g btn-sm" style="margin-top:10px;width:100%" onclick="closeFb()">送信して閉じる</button>
 </div>
-
+ 
 <script src="shared.js"></script>
 <script>
-
+ 
 const _aiParam = new URLSearchParams(location.search).get('ai') || 'all';
 const _aiNames = {all:'総合AI',travel:'旅行AI',cooking:'料理AI',shopping:'買い物AI',diy:'DIY AI',home:'家電AI',health:'健康AI'};
 buildMobileHeader(_aiNames[_aiParam]||'チャット', 'dashboard.html',
@@ -167,7 +167,7 @@ buildMobileNav("chat");
 // ─── 初期化（非同期）────────────────────────────────────────
 let user = null
 const aiParam = new URLSearchParams(location.search).get('ai') || 'all'
-
+ 
 const AI_CONFIG = {
   all:      {icon:'✦',  name:'総合チャット AI',   desc:'なんでもお任せください。最適なAIへご案内します',  color:'#c9a84c', bg:'rgba(201,168,76,.12)',
     greetings:['こんにちは！何でもお気軽にご相談ください。グルメ・旅行・料理・買い物・DIY・家電・健康など、あなたのご要望に合わせて最適なAIをご案内します✨','今日はどんなことでお手伝いできますか？お気軽にどうぞ！']},
@@ -186,7 +186,7 @@ const AI_CONFIG = {
   health:   {icon:'💚', name:'健康 AI',           desc:'生活習慣改善・ウェルネスアドバイス ※医療診断は行いません',color:'#00ced1', bg:'rgba(0,206,209,.12)',
     greetings:['健康・ウェルネスのお手伝いをします💚\n※医療診断は行いません。生活習慣の改善や健康的な習慣づくりをサポートします。','健康についてお気軽にご相談ください。生活習慣の改善から食事・運動まで幅広くアドバイスします！']},
 }
-
+ 
 const ai = AI_CONFIG[aiParam] || AI_CONFIG.all
 let messages = []
 let isTyping = false
@@ -195,7 +195,7 @@ let currentSessionId = null
 let lastMessageId  = null
 let lastProposalId = null
 let lastReactionDone = false
-
+ 
 // 楽天AppIDをバックエンドから取得
 let _rakutenAppId = ''
 async function loadConfig() {
@@ -205,10 +205,10 @@ async function loadConfig() {
     console.log('[Config] rakutenAppId取得:', _rakutenAppId ? '✓' : '未設定')
   } catch(e) { console.warn('[Config] 取得失敗', e) }
 }
-
+ 
 loadConfig()
 requireAuth().then(u => { if(u){ user=u; init() } })
-
+ 
 // ─── 楽天市場 ブラウザ直接検索（買い物AI・家電AI）─────────
 async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPrice=null) {
   if(!_rakutenAppId) { console.warn('[Rakuten] AppID未設定'); return null }
@@ -241,12 +241,12 @@ async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPric
     }))
   } catch(e) { console.error('[Rakuten] エラー:', e); return null }
 }
-
+ 
 // ─── 初期化 ──────────────────────────────────────────────────
 function init() {
   buildSidebar('chat-'+aiParam)
   buildHeader('AIチャット')
-
+ 
   document.getElementById('chat-topbar').innerHTML = `
     <div class="chat-ai-icon" style="background:${ai.bg}">${ai.icon}</div>
     <div style="flex:1">
@@ -257,16 +257,16 @@ function init() {
       <button class="btn btn-g btn-sm" onclick="clearChat()">会話をリセット</button>
       ${aiParam!=='all'?`<button class="btn btn-sm" style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);color:var(--gold)" onclick="location.href='chat.html?ai=all'">✦ 総合AIへ</button>`:''}
     </div>`
-
+ 
   // モバイルヘッダーのタイトル更新
   const mhTitle = document.querySelector('#mobile-header .mh-title')
   if(mhTitle) mhTitle.textContent = `${ai.icon} ${ai.name}`
-
+ 
   updateUsageBadge()
-
+ 
   const greeting = ai.greetings[Math.floor(Math.random()*ai.greetings.length)]
   addMessage('ai', greeting)
-
+ 
   const chips = getChips(aiParam)
   if(chips.length) {
     const chipRow = document.createElement('div')
@@ -275,7 +275,7 @@ function init() {
     document.getElementById('chat-msgs').appendChild(chipRow)
   }
 }
-
+ 
 function getChips(ai) {
   const c = {
     all:['旅行の計画を立てたい','美味しいレシピを教えて','おすすめの家電は？','DIYを始めたい'],
@@ -288,12 +288,12 @@ function getChips(ai) {
   }
   return c[ai] || []
 }
-
+ 
 function sendChip(text) {
   if((text==='比較表を作る'||text==='比較表')&&typeof _lastProducts!=='undefined'&&_lastProducts.length>0){showCompareTable();return}
   document.getElementById('chat-input').value = text; sendMsg()
 }
-
+ 
 function addMessage(role, text) {
   const el = document.createElement('div')
   el.className = `msg-row ${role}`
@@ -325,7 +325,7 @@ function addMessage(role, text) {
   document.getElementById('chat-msgs').appendChild(el)
   scrollBottom()
 }
-
+ 
 function showTyping() {
   const el = document.createElement('div')
   el.className = 'msg-row ai'; el.id = 'typing-row'
@@ -337,12 +337,12 @@ function showTyping() {
   document.getElementById('chat-msgs').appendChild(el)
   scrollBottom()
 }
-
+ 
 function hideTyping() {
   const el = document.getElementById('typing-row')
   if(el) el.remove()
 }
-
+ 
 // ── スクロール制御：ユーザーが上を見ているときは邪魔しない ──
 function scrollBottom(force = false) {
   const c = document.getElementById('chat-msgs')
@@ -354,7 +354,7 @@ function scrollBottom(force = false) {
     setTimeout(() => { c.scrollTop = c.scrollHeight }, 100)
   })
 }
-
+ 
 function updateUsageBadge() {
   const u = getUser() || {}
   const limit = u.usage_limit || PLANS[u.plan]?.limit || 10
@@ -366,40 +366,40 @@ function updateUsageBadge() {
   badge.className = 'usage-badge' + (pct>=90?' dngr':pct>=70?' warn':'')
   badge.textContent = `残り${remaining}回`
 }
-
+ 
 function handleKey(e) {
   if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() }
 }
-
+ 
 function autoResize(el) {
   el.style.height='auto'
   el.style.height=Math.min(el.scrollHeight, 120)+'px'
 }
-
+ 
 // ─── メッセージ送信 ───────────────────────────────────────────
 async function sendMsg() {
   const input = document.getElementById('chat-input')
   const text = input.value.trim()
   if(!text || isTyping) return
-
+ 
   const limit = PLANS[user?.plan]?.limit || 10
   if((user?.usage_count||0) >= limit) {
     if(user?.plan==='master') showLimitReachedModal()
     else showUpgradeModal(user?.plan)
     return
   }
-
+ 
   input.value = ''
   input.style.height = 'auto'
   document.getElementById('send-btn').disabled = true
   isTyping = true
   document.querySelectorAll('.chip-row').forEach(e=>e.remove())
-
+ 
   messages.push({ role:'user', content:text })
   addMessage('user', text)
   scrollBottom(true)
   showTyping()
-
+ 
   try {
     const resp = await apiRequest('/chat', {
       method: 'POST',
@@ -411,45 +411,55 @@ async function sendMsg() {
         lng:        window._userLng || null,
       }
     })
-
+ 
     hideTyping()
     currentSessionId = resp.session_id
     lastMessageId    = resp.message_id
     lastProposalId   = resp.proposal_id || null
     lastReactionDone = false
-
+ 
     const reply = resp.reply || ''
     messages.push({ role:'assistant', content:reply })
     addMessage('ai', reply)
-
+ 
     if(resp.learning_applied > 0) {
       toast(`✦ AIがあなたの好みを${resp.learning_applied}件学習しました`, '')
     }
-
+ 
     if(user) { user.usage_count = resp.usage_count || (user.usage_count||0)+1; setCachedUser(user) }
-
+ 
     // ── extra 内の API 結果をAI種別ごとに描画 ──────────────
-
+ 
     // グルメAI: Google Maps 飲食店
     if(aiParam === 'gourmet' && resp.extra && resp.extra._places) {
       handleGourmetExtra(resp.extra)
     }
-
-    // 旅行AI: ホテル（★ source を渡して将来の複数API対応に備える）
-    if(resp.extra && resp.extra._hotels) {
+ 
+    // 旅行AI: 旅行プランカード（★新規）
+    if(aiParam === 'travel' && resp.extra && resp.extra._travel_plans) {
+      renderTravelPlans(resp.extra._travel_plans)
+    }
+ 
+    // 旅行AI: 国内ホテルカード（楽天）
+    if(resp.extra && resp.extra._hotels && resp.extra._hotels.hotels && resp.extra._hotels.hotels.length > 0) {
       renderHotelCards(
-        resp.extra._hotels.hotels || [],
+        resp.extra._hotels.hotels,
         resp.extra._hotels.source || 'rakuten'
       )
     }
-
+ 
     // 料理AI: Google Maps 近隣スーパー ★新規追加
     if(aiParam === 'cooking' && resp.extra && resp.extra._nearby_stores) {
       renderNearbyStores(resp.extra._nearby_stores.places || [], 'cooking')
     }
-
-    // 買い物AI・家電AI: 楽天商品（ブラウザ直接検索）
-    if(aiParam === 'home' && resp.extra && resp.extra._products) {renderProductCards(resp.extra._products.items, 'appliance')} else if(aiParam === 'shopping' && _rakutenAppId) {
+ 
+    // ── 商品カード描画 ──────────────────────────────────────────
+    // 家電AI(home/appliance): バックエンドが検索済みの _products を優先使用
+    if(aiParam === 'home' && resp.extra && resp.extra._products) {
+      renderProductCards(resp.extra._products.items || [], 'appliance')
+ 
+    // 買い物AI(shopping): ブラウザから楽天を直接検索（リアルタイム検索）
+    } else if(aiParam === 'shopping' && _rakutenAppId) {
       const kwFromAI = resp.extra && resp.extra._search_keyword
       const kw = kwFromAI || (resp.extra?.needs_more_info ? null : extractShoppingKeyword(text, reply))
       console.log('[Shopping] needs_more_info=', resp.extra?.needs_more_info, 'kw=', kw)
@@ -465,9 +475,8 @@ async function sendMsg() {
           const el = document.getElementById('product-loading')
           if(el) el.remove()
           if(items && items.length > 0) {
-            renderProductCards(items)
-            // ★ 買い物AI: 楽天商品の後に近隣実店舗も表示（位置情報がある場合）
-            if(aiParam === 'shopping' && resp.extra && resp.extra._nearby_stores) {
+            renderProductCards(items, 'shopping')
+            if(resp.extra && resp.extra._nearby_stores) {
               renderNearbyStores(resp.extra._nearby_stores.places || [], 'shopping')
             }
           } else {
@@ -475,13 +484,19 @@ async function sendMsg() {
           }
         })()
       }
+ 
+    // DIY AI(diy): バックエンドの _products を使用
+    } else if(aiParam === 'diy' && resp.extra && resp.extra._products) {
+      renderProductCards(resp.extra._products.items || [], 'diy')
+ 
+    // その他AIでバックエンドが _products を返した場合
     } else if(resp.extra && resp.extra._products) {
       renderProductCards(resp.extra._products.items || [])
     }
-
+ 
     addActionChips(aiParam, text)
     updateUsageBadge()
-
+ 
   } catch(e) {
     hideTyping()
     if(e.error === 'usage_limit_reached') {
@@ -496,7 +511,7 @@ async function sendMsg() {
     document.getElementById('send-btn').disabled = false
   }
 }
-
+ 
 // ショッピング検索キーワード抽出（既存）
 function extractShoppingKeyword(userText, aiReply) {
   const cleaned = userText
@@ -509,9 +524,9 @@ function extractShoppingKeyword(userText, aiReply) {
   const match = aiReply.match(/「([^」]{2,20})」/)
   return match ? match[1] : null
 }
-
+ 
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
-
+ 
 function addRedirectCard(aiId) {
   const target = AI_CONFIG[aiId]
   const el = document.createElement('div')
@@ -530,7 +545,7 @@ function addRedirectCard(aiId) {
   document.getElementById('chat-msgs').appendChild(el)
   scrollBottom()
 }
-
+ 
 function addActionChips(ai, text) {
   const actions = {
     travel:   ['ホテルを探す →','観光スポット詳細','日程を組み直す'],
@@ -547,24 +562,24 @@ function addActionChips(ai, text) {
   el.className = 'chip-row'
   el.innerHTML = chips.map(c=>`<div class="chip" onclick="sendChip('${c}')">${c}</div>`).join('')
   document.getElementById('chat-msgs').appendChild(el)
-
+ 
   if(ai === 'travel' && /ホテル/.test(text)) setTimeout(()=>{ location.href = 'hotel.html' }, 300)
   if(ai === 'shopping' && /買い物リスト|リスト/.test(text)) setTimeout(()=>{ location.href = 'shopping-list.html' }, 300)
-
+ 
   // ★ 位置情報取得: グルメ・買い物・料理AIで使用
   if(ai === 'gourmet')  requestUserLocation('gourmet')
   if(ai === 'shopping') requestUserLocation('shopping')
   if(ai === 'cooking')  requestUserLocation('cooking')
-
+ 
   scrollBottom()
 }
-
+ 
 // ── Reaction ──────────────────────────────────────────────────
 const REACTION_LABELS = {
   love:'🩷 最高', helpful:'👍 役立った', boring:'😐 普通',
   wrong:'❌ 内容が違う', too_long:'📜 長すぎ', too_short:'📝 短すぎ', off_topic:'🔀 的外れ',
 }
-
+ 
 async function giveReaction(btn, reaction) {
   if(lastReactionDone) return
   const row = btn.closest('.fb-row')
@@ -578,7 +593,7 @@ async function giveReaction(btn, reaction) {
     } catch(e) { toast('送信に失敗しました','d') }
   }
 }
-
+ 
 function showNegReactionModal(btn) {
   showModal({
     title: '改善点を教えてください',
@@ -599,7 +614,7 @@ function showNegReactionModal(btn) {
   })
   window._negReactionBtn = btn
 }
-
+ 
 async function submitNegReaction() {
   const selected = document.querySelector('input[name="neg_reaction"]:checked')
   const reaction = selected?.value || 'boring'
@@ -612,7 +627,7 @@ async function submitNegReaction() {
     }
   }
 }
-
+ 
 // ── 「やってみた」ボタン ──────────────────────────────────────
 const ACTION_TYPE_MAP = {
   gourmet:  [{v:'visited',  l:'🍽️ 行ってきた'},{v:'other',l:'✍️ その他'}],
@@ -624,7 +639,7 @@ const ACTION_TYPE_MAP = {
   appliance:[{v:'purchased',l:'🛒 購入した'},  {v:'other',l:'✍️ その他'}],
   general:  [{v:'other',    l:'✍️ 実行した'}],
 }
-
+ 
 function showDoneModal(btn) {
   const types = ACTION_TYPE_MAP[aiParam] || ACTION_TYPE_MAP.general
   showModal({
@@ -642,7 +657,7 @@ function showDoneModal(btn) {
     ]
   })
 }
-
+ 
 async function submitDoneAction() {
   const selected = document.querySelector('input[name="action_type"]:checked')
   const action_type = selected?.value || 'other'
@@ -654,7 +669,7 @@ async function submitDoneAction() {
     document.querySelectorAll('.fb-done-btn').forEach(b=>{b.textContent='✓ 記録済み';b.style.opacity='0.55';b.disabled=true})
   } catch(e) { toast('記録に失敗しました','d') }
 }
-
+ 
 // ── お気に入り保存 ────────────────────────────────────────────
 async function saveProdAsFavorite(btn, name, url, price, shop) {
   if(btn.classList.contains('saved')) return
@@ -664,7 +679,7 @@ async function saveProdAsFavorite(btn, name, url, price, shop) {
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
-
+ 
 async function saveHotelAsFavorite(btn, name, url, price, area) {
   if(btn.classList.contains('saved')) return
   btn.classList.add('saved'); btn.textContent = '♥'
@@ -673,7 +688,7 @@ async function saveHotelAsFavorite(btn, name, url, price, area) {
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
-
+ 
 async function saveRestAsFavorite(btn, name, address, mapsUrl, rating) {
   if(btn.classList.contains('saved')) return
   btn.classList.add('saved'); btn.textContent = '♥'
@@ -682,7 +697,7 @@ async function saveRestAsFavorite(btn, name, address, mapsUrl, rating) {
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
-
+ 
 async function saveMsgAsFavorite(btn) {
   if(btn.classList.contains('saved')) return
   const bubble = btn.closest('.fb-row')?.previousElementSibling
@@ -694,18 +709,18 @@ async function saveMsgAsFavorite(btn) {
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡ お気に入り'; toast('保存に失敗しました','d') }
 }
-
+ 
 function giveFeedback(btn, type) {
   if(type==='good') giveReaction(btn,'helpful')
   else showNegReactionModal(btn)
 }
-
+ 
 function clearChat() {
   messages = []; currentSessionId = null; lastMessageId = null
   document.getElementById('chat-msgs').innerHTML = ''
   init()
 }
-
+ 
 // ─── 位置情報取得（グルメ・買い物・料理AI 共通）─────────────
 // ★ aiType 引数で呼び出し元AIを区別（デバッグ用）
 function requestUserLocation(aiType) {
@@ -726,7 +741,7 @@ function requestUserLocation(aiType) {
     { enableHighAccuracy: false, timeout: 8000 }
   )
 }
-
+ 
 // ─── グルメAI: 飲食店カード描画 ─────────────────────────────
 function renderRestaurantCards(places) {
   if(!places || !places.length) return
@@ -754,11 +769,11 @@ function renderRestaurantCards(places) {
   document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()
 }
-
+ 
 function handleGourmetExtra(extra) {
   if(extra && extra._places && extra._places.places) renderRestaurantCards(extra._places.places)
 }
-
+ 
 // ─── ★ 近隣店舗カード描画（買い物AI・料理AI 共通）──────────
 // aiType: 'shopping' | 'cooking'  でラベルと色を切り替え
 function renderNearbyStores(places, aiType) {
@@ -768,7 +783,7 @@ function renderNearbyStores(places, aiType) {
   const rankBg    = isCooking
     ? 'linear-gradient(135deg,#16a34a,#15803d)'
     : 'linear-gradient(135deg,var(--gold),var(--gold2))'
-
+ 
   const wrap = document.createElement('div')
   wrap.className = 'nearby-stores'
   wrap.innerHTML = `
@@ -793,10 +808,10 @@ function renderNearbyStores(places, aiType) {
   document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()
 }
-
+ 
 // ─── 商品カード描画（買い物AI・家電AI）──────────────────────
 let _lastProducts = []
-
+ 
 function getProductBadges(p, isBest) {
   const badges = []
   if(isBest) badges.push('<span class="product-badge badge-cheap">💰 最安値</span>')
@@ -809,16 +824,20 @@ function getProductBadges(p, isBest) {
   if(/送料無料/.test(cc)) badges.push('<span class="product-badge badge-point">🚚 送料無料</span>')
   return badges.slice(0,3).join('')
 }
-
-function renderProductCards(items) {
+ 
+// aiType: 'appliance'|'diy'|'shopping'|undefined
+function renderProductCards(items, aiType) {
   if(!items || !items.length) return
   _lastProducts = items
   const wrap = document.createElement('div')
   wrap.className = 'product-cards'
   const minPrice = Math.min(...items.map(p=>p.price||Infinity))
+  const label = aiType === 'appliance' ? '🏠 家電・インテリア商品'
+              : aiType === 'diy'       ? '🔨 DIY材料・工具'
+              : '🛍️ 楽天市場の商品'
   wrap.innerHTML = `
     <div style="font-size:12px;color:var(--subtle);margin-bottom:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between">
-      <span>🛍️ 楽天市場の商品 ${items.length}件</span>
+      <span>${label} ${items.length}件</span>
       <button onclick="showCompareTable()" style="font-size:11px;color:var(--gold);background:none;border:none;cursor:pointer;font-family:inherit">比較表を見る →</button>
     </div>
     ${items.map((p, i) => {
@@ -827,6 +846,9 @@ function renderProductCards(items) {
       const safeShop = (p.shop||'').replace(/'/g,"'").slice(0,25)
       const safeUrl  = p.url||''
       const safeImg  = p.image||''
+      const safeShopUrl = p.shop_url||''
+      // Google Maps で店舗名検索するURL
+      const mapsUrl = safeShop ? `https://www.google.com/maps/search/${encodeURIComponent(safeShop)}` : ''
       const badges   = getProductBadges(p, isBest)
       return `
       <div class="product-card" onclick="showProductDetail(${i})" style="${isBest?'border-color:rgba(201,168,76,.4);':''}">
@@ -843,7 +865,20 @@ function renderProductCards(items) {
               <span class="product-price">¥${(p.price||0).toLocaleString()}</span>
               ${p.review?`<span class="product-review">⭐${p.review}<span style="font-size:9.5px;color:var(--subtle)">(${(p.review_count||0).toLocaleString()}件)</span></span>`:''}
             </div>
-            <div style="margin-top:4px;font-size:10.5px;color:var(--subtle)">🏪 ${safeShop||'楽天市場'}</div>
+            <!-- 店舗名 + Google Maps リンク -->
+            <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:10.5px;color:var(--subtle)">🏪 ${safeShop||'楽天市場'}</span>
+              ${mapsUrl?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()"
+                style="font-size:10px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.3);border-radius:4px;padding:1px 6px;white-space:nowrap">
+                📍 地図</a>`:''}
+            </div>
+            <!-- 楽天で購入リンク -->
+            <div style="margin-top:5px">
+              <a href="${safeUrl}" target="_blank" onclick="event.stopPropagation()"
+                style="font-size:10.5px;color:var(--gold);text-decoration:none;font-weight:600">
+                楽天市場で見る →
+              </a>
+            </div>
           </div>
         </div>
         <button class="product-fav" title="お気に入りに追加"
@@ -854,7 +889,7 @@ function renderProductCards(items) {
   document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()
 }
-
+ 
 function extractFeatures(p) {
   const src = (p.name||'') + ' ' + (p.catchcopy||'')
   const features = []
@@ -868,7 +903,7 @@ function extractFeatures(p) {
   if(/コーティング/.test(src))      features.push({icon:'✨', text:'コーティング加工'})
   return features
 }
-
+ 
 function showProductDetail(idx) {
   const p = _lastProducts[idx]
   if(!p) return
@@ -890,33 +925,370 @@ function showProductDetail(idx) {
       </div>
       ${p.catchcopy?`<div class="prod-detail-section"><div class="prod-detail-section-title">キャッチコピー</div><div style="font-size:12.5px;color:var(--ink3);line-height:1.6;padding:8px 12px;background:var(--cream2);border-radius:8px">${p.catchcopy}</div></div>`:''}
       ${features.length?`<div class="prod-detail-section"><div class="prod-detail-section-title">✨ 特徴</div><div class="prod-feature-list">${features.map(f=>`<div class="prod-feature-item"><span>${f.icon}</span><span>${f.text}</span></div>`).join('')}</div></div>`:''}
-      <div class="prod-detail-section"><div class="prod-detail-section-title">取り扱い店舗情報</div><div style="background:var(--cream2);border-radius:8px;padding:10px 12px"><div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:4px">🏪 ${p.shop||'楽天市場店舗'}</div>${p.shop_url?`<a href="${p.shop_url}" target="_blank" style="font-size:11px;color:var(--gold)">店舗ページを見る →</a>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">※ オンラインショップ（楽天市場）</div></div></div>
+      <div class="prod-detail-section">
+        <div class="prod-detail-section-title">取り扱い店舗情報</div>
+        <div style="background:var(--cream2);border-radius:8px;padding:10px 12px">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px">🏪 ${p.shop||'楽天市場店舗'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            ${p.shop_url?`<a href="${p.shop_url}" target="_blank"
+              style="font-size:11px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.3);border-radius:6px;padding:3px 10px">
+              🏪 店舗ページ →</a>`:''}
+            ${p.shop?`<a href="https://www.google.com/maps/search/${encodeURIComponent(p.shop)}" target="_blank"
+              style="font-size:11px;color:#4285f4;text-decoration:none;border:1px solid rgba(66,133,244,.3);border-radius:6px;padding:3px 10px">
+              📍 Google Maps →</a>`:''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">※ オンラインショップ（楽天市場）</div>
+        </div>
+      </div>
       ${p.review?`<div class="prod-detail-section"><div class="prod-detail-section-title">📊 レビュー</div><div style="display:flex;align-items:center;gap:10px"><div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)">${p.review}</div><div><div style="font-size:13px">⭐⭐⭐⭐⭐</div><div style="font-size:11px;color:var(--muted)">${(p.review_count||0).toLocaleString()}件のレビュー</div></div></div></div>`:''}
     `,
     actions:[
       {label:'閉じる', cls:'btn-g', fn:'closeModal()'},
-      {label:'楽天で購入する 🛒', cls:'btn-gold', fn:`window.open('${p.url}','_blank');closeModal()`},
+      {label:'楽天で購入する 🛒', cls:'btn-gold', fn:`closeModal();setTimeout(()=>showPurchaseConfirm(${idx}),120)`},
     ]
   })
 }
-
-function showCompareTable() {
-  if(!_lastProducts.length) return
-  const items     = _lastProducts.slice(0,6)
-  const minPrice  = Math.min(...items.map(p=>p.price||Infinity))
-  const maxReview = Math.max(...items.map(p=>p.review||0))
-  const rows = items.map((p,i) => {
-    const priceBest  = p.price  === minPrice  ? ' class="best"' : ''
-    const reviewBest = p.review === maxReview && maxReview > 0 ? ' class="best"' : ''
-    return `<tr${i===0?' class="rank1"':''}><td style="font-weight:600">${i+1}. ${(p.name||'').slice(0,30)}${p.name&&p.name.length>30?'…':''}</td><td${priceBest}>¥${(p.price||0).toLocaleString()}${priceBest?' 👑':''}</td><td${reviewBest}>${p.review?`⭐${p.review}(${p.review_count}件)${reviewBest?' 👑':''}` : 'なし'}</td><td>${p.shop||'-'}</td><td><a href="${p.url}" target="_blank" style="color:var(--accent);font-size:11px">見る→</a></td></tr>`
-  }).join('')
+ 
+// ─── 購入確認モーダル ────────────────────────────────────────────
+// 楽天の購入ページに遷移する前に、AIが読み込んだ商品情報を確認する
+function showPurchaseConfirm(idx) {
+  const p = _lastProducts[idx]
+  if(!p) return
+ 
+  const minPrice = Math.min(..._lastProducts.map(q=>q.price||Infinity))
+  const isBest   = p.price === minPrice
+  const safeName = (p.name||'').slice(0, 80)
+  const safeShop = p.shop || '楽天市場'
+  const mapsUrl  = p.shop ? `https://www.google.com/maps/search/${encodeURIComponent(p.shop)}` : ''
+ 
+  // AIコメント自動生成
+  const aiComments = []
+  if(isBest)                              aiComments.push('💰 表示商品の中で最安値です')
+  if(p.review >= 4.5 && p.review_count >= 50) aiComments.push(`⭐ 高評価（${p.review} / ${p.review_count}件）`)
+  if(p.point >= 5)                        aiComments.push(`🎁 ${p.point}倍ポイント還元中`)
+  if(/省エネ/.test(p.name+p.catchcopy))   aiComments.push('⚡ 省エネ対応商品')
+  if(/日本製|国産/.test(p.name+p.catchcopy)) aiComments.push('🇯🇵 日本製')
+  if(/送料無料/.test(p.catchcopy))        aiComments.push('🚚 送料無料')
+  const commentHtml = aiComments.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+        ${aiComments.map(c=>`<span style="font-size:11px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:20px;padding:3px 10px;color:var(--ink3)">${c}</span>`).join('')}
+       </div>`
+    : ''
+ 
+  // 注意書き（楽天側のフォームについて）
+  const noteHtml = `
+    <div style="margin-top:14px;padding:10px 12px;background:var(--cream2);border-radius:8px;border-left:3px solid rgba(201,168,76,.4)">
+      <div style="font-size:11.5px;font-weight:600;color:var(--ink);margin-bottom:4px">📋 購入ページについて</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7">
+        楽天の購入ページでは、設置場所・搬入経路などの確認事項が表示される場合があります。<br>
+        下記の情報を手元に準備してからページに進むとスムーズです：<br>
+        <span style="color:var(--ink3)">・設置場所（設置環境）　・搬入経路の確認　・カラー選択</span>
+      </div>
+    </div>`
+ 
   showModal({
-    title: '🛍️ 商品比較表',
-    body: `<div class="compare-wrap"><table class="compare-table"><thead><tr><th>商品名</th><th>価格</th><th>評価</th><th>ショップ</th><th>リンク</th></tr></thead><tbody>${rows}</tbody></table></div><div style="font-size:11px;color:var(--subtle);margin-top:10px">👑 = 最優秀・最安値</div>`,
-    actions:[{label:'閉じる',cls:'btn-g',fn:'closeModal()'}]
+    title: '購入内容の確認',
+    wide: true,
+    body: `
+      <!-- 商品サマリー -->
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:12px;background:var(--cream2);border-radius:10px;margin-bottom:14px">
+        ${p.image
+          ? `<img src="${p.image}" alt="" style="width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0">`
+          : `<div style="width:80px;height:80px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🛍️</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:4px">${safeName}</div>
+          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:900;color:var(--gold)">
+            ¥${(p.price||0).toLocaleString()}
+            ${isBest?'<span style="font-size:10px;background:rgba(220,38,38,.1);color:#dc2626;border-radius:4px;padding:2px 6px;margin-left:4px;font-family:inherit">最安値</span>':''}
+          </div>
+          ${p.point?`<div style="font-size:11px;color:#059669;margin-top:2px">🎁 ${p.point}倍ポイント</div>`:''}
+        </div>
+      </div>
+ 
+      <!-- 取り扱い店舗 -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">取り扱い店舗</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">🏪 ${safeShop}</span>
+          ${mapsUrl?`<a href="${mapsUrl}" target="_blank"
+            style="font-size:11px;color:#4285f4;text-decoration:none;border:1px solid rgba(66,133,244,.3);border-radius:6px;padding:3px 9px">
+            📍 Google Maps で探す</a>`:''}
+          ${p.shop_url?`<a href="${p.shop_url}" target="_blank"
+            style="font-size:11px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.3);border-radius:6px;padding:3px 9px">
+            🏪 店舗ページ</a>`:''}
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:4px">※ オンラインショップ（楽天市場）での販売です</div>
+      </div>
+ 
+      <!-- AIコメント -->
+      ${commentHtml}
+ 
+      <!-- 注意書き -->
+      ${noteHtml}
+    `,
+    actions: [
+      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+      {label:'楽天の商品ページへ進む →', cls:'btn-gold', fn:`window.open('${p.url}','_blank');closeModal()`},
+    ]
   })
 }
-
+ 
+function showCompareTable() {
+  if(!_lastProducts.length) return
+  const items     = _lastProducts.slice(0, 6)
+  const minPrice  = Math.min(...items.map(p => p.price  || Infinity))
+  const maxReview = Math.max(...items.map(p => p.review || 0))
+  const maxPoint  = Math.max(...items.map(p => p.point  || 0))
+ 
+  // 各商品のスコアを算出（価格・評価・ポイントの総合評価）
+  function calcScore(p) {
+    let s = 0
+    if(p.price  === minPrice)                      s += 3
+    else if(p.price <= minPrice * 1.1)             s += 2
+    else if(p.price <= minPrice * 1.2)             s += 1
+    if(p.review >= 4.5)                            s += 3
+    else if(p.review >= 4.0)                       s += 2
+    else if(p.review >= 3.5)                       s += 1
+    if(p.point  >= 5)                              s += 2
+    else if(p.point >= 3)                          s += 1
+    if(/送料無料/.test(p.catchcopy||''))           s += 1
+    if(/日本製|国産/.test((p.name||'')+(p.catchcopy||''))) s += 1
+    return s
+  }
+  const scores    = items.map(calcScore)
+  const maxScore  = Math.max(...scores)
+ 
+  // バッジ生成
+  function badges(p, score, idx) {
+    const bs = []
+    if(p.price  === minPrice)  bs.push('<span style="background:rgba(220,38,38,.12);color:#dc2626;font-size:9.5px;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap">💰 最安値</span>')
+    if(p.review === maxReview && maxReview > 0) bs.push('<span style="background:rgba(201,168,76,.12);color:#a07c20;font-size:9.5px;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap">⭐ 最高評価</span>')
+    if(score    === maxScore)  bs.push('<span style="background:rgba(16,185,129,.1);color:#059669;font-size:9.5px;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap">✦ 総合おすすめ</span>')
+    if(/送料無料/.test(p.catchcopy||'')) bs.push('<span style="background:rgba(59,130,246,.1);color:#2563eb;font-size:9.5px;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap">🚚 送料無料</span>')
+    return bs.join('')
+  }
+ 
+  // スコアバー描画（5段階）
+  function scoreBar(score) {
+    const max = 10
+    const pct = Math.round(score / max * 100)
+    const color = pct >= 70 ? '#059669' : pct >= 40 ? '#c9a84c' : '#94a3b8'
+    return `<div style="display:flex;align-items:center;gap:6px">
+      <div style="flex:1;height:6px;background:var(--cream2);border-radius:3px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:10px;color:var(--muted);min-width:20px">${score}</span>
+    </div>`
+  }
+ 
+  // カード型比較表
+  const cards = items.map((p, i) => {
+    const score   = scores[i]
+    const isTop   = score === maxScore
+    const border  = isTop ? 'border:1.5px solid rgba(201,168,76,.5)' : 'border:1px solid var(--border)'
+    const bg      = isTop ? 'background:rgba(201,168,76,.04)' : 'background:var(--surface)'
+    const nameTxt = (p.name||'').slice(0, 40) + ((p.name||'').length > 40 ? '…' : '')
+    const shopUrl = p.shop ? `https://www.google.com/maps/search/${encodeURIComponent(p.shop)}` : ''
+    return `
+    <div style="${border};${bg};border-radius:10px;padding:12px;position:relative">
+      ${isTop ? '<div style="position:absolute;top:-1px;left:12px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:0 0 6px 6px">✦ おすすめ</div>' : ''}
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-top:${isTop?'8px':'0'}">
+        <!-- 画像 -->
+        ${p.image
+          ? `<img src="${p.image}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+          : `<div style="width:56px;height:56px;border-radius:6px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🛍️</div>`}
+        <!-- 情報 -->
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11.5px;font-weight:700;color:var(--ink);line-height:1.4;margin-bottom:4px">${i+1}. ${nameTxt}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${badges(p, score, i)}</div>
+          <!-- 価格・評価・ポイント -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">
+            <div style="background:var(--cream2);border-radius:6px;padding:5px 8px;text-align:center">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:1px">価格</div>
+              <div style="font-family:'Fraunces',serif;font-size:14px;font-weight:900;color:${p.price===minPrice?'#dc2626':'var(--gold)'}">¥${(p.price||0).toLocaleString()}</div>
+            </div>
+            <div style="background:var(--cream2);border-radius:6px;padding:5px 8px;text-align:center">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:1px">評価</div>
+              <div style="font-size:13px;font-weight:700;color:var(--ink3)">${p.review ? `⭐${p.review}` : '—'}</div>
+              ${p.review_count ? `<div style="font-size:9px;color:var(--muted)">${p.review_count}件</div>` : ''}
+            </div>
+            <div style="background:var(--cream2);border-radius:6px;padding:5px 8px;text-align:center">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:1px">ポイント</div>
+              <div style="font-size:13px;font-weight:700;color:${p.point>=5?'#059669':'var(--ink3)'}">${p.point ? `${p.point}倍` : '—'}</div>
+            </div>
+          </div>
+          <!-- 総合スコアバー -->
+          <div style="margin-bottom:6px">
+            <div style="font-size:9px;color:var(--muted);margin-bottom:3px">総合スコア</div>
+            ${scoreBar(score)}
+          </div>
+          <!-- 店舗 -->
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:10.5px;color:var(--subtle)">🏪 ${p.shop||'楽天市場'}</span>
+            ${shopUrl ? `<a href="${shopUrl}" target="_blank" style="font-size:10px;color:#4285f4;text-decoration:none;border:1px solid rgba(66,133,244,.25);border-radius:4px;padding:1px 6px">📍 地図</a>` : ''}
+          </div>
+        </div>
+      </div>
+      <!-- 購入ボタン -->
+      <div style="margin-top:10px;display:flex;gap:7px">
+        <button onclick="closeModal();setTimeout(()=>showPurchaseConfirm(${i}),120)"
+          style="flex:1;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+          🛒 購入確認へ
+        </button>
+        <a href="${p.url}" target="_blank"
+          style="display:flex;align-items:center;justify-content:center;background:var(--cream2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--ink3);text-decoration:none;white-space:nowrap">
+          詳細 →
+        </a>
+      </div>
+    </div>`
+  }).join('')
+ 
+  showModal({
+    title: '🛍️ 商品比較',
+    wide: true,
+    body: `
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
+        ${items.length}件を比較中 · ✦おすすめはAIの総合スコアで自動選定
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${cards}
+      </div>
+      <div style="margin-top:12px;padding:8px 12px;background:var(--cream2);border-radius:8px;font-size:10.5px;color:var(--muted);line-height:1.6">
+        ✦おすすめ = 価格・評価・ポイント・送料・品質を総合評価したスコアで自動判定
+      </div>
+    `,
+    actions: [{label:'閉じる', cls:'btn-g', fn:'closeModal()'}]
+  })
+}
+ 
+// ─── 旅行プランカード描画 ────────────────────────────────────────
+let _lastTravelPlans = []
+ 
+function renderTravelPlans(plans) {
+  if(!plans || !plans.length) return
+  _lastTravelPlans = plans
+ 
+  const wrap = document.createElement('div')
+  wrap.className = 'travel-plan-cards'
+ 
+  // タブ切り替えUI
+  const planIds = plans.map(p => p.plan_id || String(Math.random()))
+  const tabId   = 'tabs-' + Date.now()
+ 
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:8px;font-weight:600">
+      ✈️ 旅行プラン ${plans.length}案
+    </div>
+ 
+    <!-- プランタブ -->
+    <div id="${tabId}" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${plans.map((p, i) => `
+        <button onclick="switchTravelPlan('${tabId}',${i})"
+          id="${tabId}-tab-${i}"
+          style="padding:6px 14px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;transition:all .15s;
+            ${i===0
+              ? 'background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;font-weight:700'
+              : 'background:var(--cream2);border:1px solid var(--border);color:var(--muted)'}">
+          プラン${p.plan_id || i+1}
+        </button>`).join('')}
+    </div>
+ 
+    <!-- プランパネル -->
+    ${plans.map((p, pi) => `
+      <div id="${tabId}-panel-${pi}" style="display:${pi===0?'block':'none'}">
+        <!-- プランヘッダー -->
+        <div style="background:linear-gradient(135deg,rgba(100,149,237,.1),rgba(100,149,237,.05));border:1px solid rgba(100,149,237,.2);border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px">${p.title||'旅行プラン'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--muted)">
+            ${p.theme    ? `<span style="background:rgba(100,149,237,.15);color:#4a7de8;padding:2px 9px;border-radius:20px;font-weight:600">${p.theme}</span>` : ''}
+            ${p.total_days ? `<span>📅 ${p.total_days}日間</span>` : ''}
+            ${p.budget_per_person ? `<span>💴 ${p.budget_per_person}/人</span>` : ''}
+          </div>
+          ${p.highlight ? `<div style="margin-top:6px;font-size:11.5px;color:var(--ink3)">✨ ${p.highlight}</div>` : ''}
+        </div>
+ 
+        <!-- 日程タイムライン -->
+        ${(p.days||[]).map((d, di) => `
+          <div style="margin-bottom:14px">
+            <!-- 日付ヘッダー -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <div style="width:32px;height:32px;background:linear-gradient(135deg,#6495ed,#4a7de8);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${d.day||di+1}</div>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--ink)">${d.date_label||`${d.day||di+1}日目`}</div>
+                <div style="font-size:11px;color:var(--muted)">${d.location||''}</div>
+              </div>
+              ${d.transport ? `<div style="margin-left:auto;font-size:10.5px;color:var(--subtle);text-align:right;max-width:140px;line-height:1.4">${d.transport}</div>` : ''}
+            </div>
+ 
+            <!-- スケジュール -->
+            <div style="margin-left:16px;border-left:2px solid rgba(100,149,237,.25);padding-left:14px">
+              ${(d.schedule||[]).map(s => `
+                <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-start">
+                  <div style="min-width:40px;font-size:11px;font-weight:700;color:#6495ed;padding-top:1px">${s.time||''}</div>
+                  <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px">
+                    <div style="font-size:12.5px;font-weight:600;color:var(--ink)">${s.activity||''}</div>
+                    ${s.duration ? `<div style="font-size:10.5px;color:var(--subtle);margin-top:1px">⏱ ${s.duration}</div>` : ''}
+                    ${s.note     ? `<div style="font-size:10.5px;color:var(--muted);margin-top:3px;border-top:1px solid var(--border);padding-top:3px">💡 ${s.note}</div>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>
+ 
+            <!-- ホテル -->
+            ${d.hotel ? `
+              <div style="margin-left:16px;padding-left:14px;margin-top:6px">
+                <div style="background:rgba(100,149,237,.06);border:1px solid rgba(100,149,237,.2);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <span style="font-size:18px">🏨</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:700;color:var(--ink)">${d.hotel.name||''}</div>
+                    ${d.hotel.area        ? `<div style="font-size:10.5px;color:var(--muted)">📍 ${d.hotel.area}</div>` : ''}
+                    ${d.hotel.booking_note? `<div style="font-size:10.5px;color:var(--subtle)">🔗 ${d.hotel.booking_note}</div>` : ''}
+                    ${d.hotel.price       ? `<div style="font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:var(--gold)">¥${Number(d.hotel.price).toLocaleString()}〜/泊</div>` : ''}
+                  </div>
+                  ${d.hotel.url ? `<a href="${d.hotel.url}" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.3);border-radius:6px;padding:4px 10px;white-space:nowrap">予約 →</a>` : ''}
+                </div>
+              </div>` : ''}
+          </div>
+        `).join('')}
+ 
+        <!-- このプランで相談ボタン -->
+        <button onclick="sendChip('プラン${p.plan_id||pi+1}でもっと詳しく教えて')"
+          style="width:100%;margin-top:6px;padding:10px;background:rgba(100,149,237,.08);border:1px solid rgba(100,149,237,.25);border-radius:10px;color:#4a7de8;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">
+          プラン${p.plan_id||pi+1}でさらに詳しく相談する →
+        </button>
+      </div>
+    `).join('')}
+  `
+ 
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+ 
+function switchTravelPlan(tabId, idx) {
+  // 全パネルを非表示
+  document.querySelectorAll(`[id^="${tabId}-panel-"]`).forEach((el, i) => {
+    el.style.display = 'none'
+  })
+  // 全タブをリセット
+  document.querySelectorAll(`[id^="${tabId}-tab-"]`).forEach(el => {
+    el.style.background   = 'var(--cream2)'
+    el.style.border       = '1px solid var(--border)'
+    el.style.color        = 'var(--muted)'
+    el.style.fontWeight   = 'normal'
+  })
+  // 選択したパネルを表示
+  const panel = document.getElementById(`${tabId}-panel-${idx}`)
+  if(panel) panel.style.display = 'block'
+  // 選択したタブをアクティブに
+  const tab = document.getElementById(`${tabId}-tab-${idx}`)
+  if(tab) {
+    tab.style.background = 'linear-gradient(135deg,var(--gold),var(--gold2))'
+    tab.style.border     = 'none'
+    tab.style.color      = 'var(--ink)'
+    tab.style.fontWeight = '700'
+  }
+  scrollBottom()
+}
+ 
 // ─── ホテルカード描画（旅行AI）───────────────────────────────
 // ★ source 引数で将来の複数ホテルAPI対応（現在は 'rakuten' のみ）
 function renderHotelCards(hotels, source) {
@@ -926,7 +1298,7 @@ function renderHotelCards(hotels, source) {
     agoda:   '🏨 Agodaのホテル',
     booking: '🏨 Booking.comのホテル',
   }[source] || '🏨 おすすめホテル'
-
+ 
   const wrap = document.createElement('div')
   wrap.className = 'hotel-cards'
   wrap.innerHTML = `
@@ -948,7 +1320,7 @@ function renderHotelCards(hotels, source) {
   document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()
 }
-
+ 
 </script>
 <div id="mobile-nav-root"></div>
 </body>
