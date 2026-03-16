@@ -418,7 +418,22 @@ async function sendMsg() {
     lastProposalId   = resp.proposal_id || null
     lastReactionDone = false
  
-    const reply = resp.reply || ''
+    // replyがJSON全体になってしまった場合の安全策
+    // （base.pyが古い版の場合など、サーバーがJSON全体をreplyとして返すケースに対応）
+    let reply = resp.reply || ''
+    let extraPlans = resp.extra && resp.extra._travel_plans ? resp.extra._travel_plans : null
+ 
+    if(reply.trimStart().startsWith('{') && reply.includes('"plans"')) {
+      try {
+        const parsed = JSON.parse(reply)
+        if(parsed.message) reply = parsed.message
+        if(parsed.plans && !extraPlans) extraPlans = parsed.plans
+        console.log('[Travel] replyからplansを抽出:', extraPlans?.length, '案')
+      } catch(e) {
+        // パース失敗 → そのまま表示
+      }
+    }
+ 
     messages.push({ role:'assistant', content:reply })
     addMessage('ai', reply)
  
@@ -435,9 +450,9 @@ async function sendMsg() {
       handleGourmetExtra(resp.extra)
     }
  
-    // 旅行AI: 旅行プランカード（★新規）
-    if(aiParam === 'travel' && resp.extra && resp.extra._travel_plans) {
-      renderTravelPlans(resp.extra._travel_plans)
+    // 旅行AI: 旅行プランカード（extra._travel_plans または reply から抽出したplans）
+    if(aiParam === 'travel' && extraPlans && extraPlans.length > 0) {
+      renderTravelPlans(extraPlans)
     }
  
     // 旅行AI: 国内ホテルカード（楽天）
