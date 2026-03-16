@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:14px;scroll-behavior:smooth}
-body{font-family:'Noto Sans JP',sans-serif;background:#f5f3ee;color:#1a1610;overflow-x:hidden;-webkit-font-smoothing:antialiased;max-width:100vw}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f3ee;color:#1a1610;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 a{text-decoration:none;color:inherit}
 button{cursor:pointer;font-family:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit}
@@ -350,14 +350,6 @@ table.dt{width:100%;border-collapse:collapse}
   .topbar         { display: none !important; }
   .main-wrap      { margin-left: 0 !important; }
 
-  /* チャット画面: ページ全体スクロール防止 */
-  body.chat-page  { overflow: hidden; height: 100dvh; height: 100svh; }
-  body.chat-page .app-layout { min-height: unset; height: 100%; overflow: hidden; }
-
-  /* ★ Fix: overflow:hidden → overflow:clip に変更
-     clip は横方向のはみ出しだけ制御し、縦方向の子スクロールを妨げない */
-  body.chat-page .main-wrap { min-height: unset; height: 100%; overflow: clip; }
-
   /* モバイル専用要素を表示 */
   .mobile-nav     { display: flex; }
   .mobile-header  { display: flex; }
@@ -367,7 +359,7 @@ table.dt{width:100%;border-collapse:collapse}
 
   /* auth画面: 2カラム→1カラム */
   .auth-layout    { grid-template-columns: 1fr; min-height: 100svh; }
-  .auth-panel     { display: none; }
+  .auth-panel     { display: none; }  /* 左パネル非表示 */
   .auth-right     {
     padding: 28px 22px 40px;
     min-height: 100svh;
@@ -397,26 +389,13 @@ table.dt{width:100%;border-collapse:collapse}
   .err-msg        { color: #f87171; }
 
   /* チャット画面 */
-  .chat-shell     {
-    height: calc(100svh - 52px - 60px);
-    height: calc(100dvh - 52px - 60px);
-    flex: 1;
-    min-height: 0;
-  }
-
-  /* ★ Fix: chat-msgs に iOS Safari スクロール対応を追加 */
-  .chat-msgs      {
-    padding: 12px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; /* iOS Safari慣性スクロール */
-  }
-
-  .msg-bubble     { max-width: calc(100vw - 80px); font-size: 13.5px; word-break: break-word; overflow-wrap: anywhere; }
+  .chat-shell     { height: calc(100svh - 52px - 60px); }
+  .chat-msgs      { padding: 12px; }
+  .msg-bubble     { max-width: 85%; font-size: 13.5px; }
   .chat-input-area { padding: 10px 12px; }
-  .chat-topbar    { display: none !important; }
+  .chat-topbar    { padding: 10px 14px; }
   .chat-ai-name   { font-size: 14px; }
-  .chat-input-row textarea { font-size: 16px; }
+  .chat-input-row textarea { font-size: 16px; /* iOS ズーム防止 */ }
 
   /* ダッシュボード */
   .kpi-grid       { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -461,9 +440,6 @@ table.dt{width:100%;border-collapse:collapse}
   @media (max-width: 768px) {
     .chat-shell {
       height: calc(100svh - 52px - 60px - env(safe-area-inset-bottom));
-      height: calc(100dvh - 52px - 60px - env(safe-area-inset-bottom));
-      flex: 1;
-      min-height: 0;
     }
   }
 }
@@ -559,7 +535,10 @@ table.dt{width:100%;border-collapse:collapse}
   justify-content: center;
   flex-shrink: 0;
 }
-.rest-body { flex: 1; min-width: 0; }
+.rest-body {
+  flex: 1;
+  min-width: 0;
+}
 .rest-name {
   font-size: 13.5px;
   font-weight: 700;
@@ -569,8 +548,17 @@ table.dt{width:100%;border-collapse:collapse}
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rest-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
-.rest-rating { font-size: 11.5px; color: var(--gold); font-weight: 600; }
+.rest-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 3px;
+}
+.rest-rating {
+  font-size: 11.5px;
+  color: var(--gold);
+  font-weight: 600;
+}
 .rest-open {
   font-size: 10.5px;
   background: rgba(22,163,74,.1);
@@ -586,5 +574,16 @@ table.dt{width:100%;border-collapse:collapse}
   padding: 1px 7px;
   border-radius: 20px;
 }
-.rest-addr { font-size: 11px; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rest-arrow { font-size: 20px; color: var(--subtle); flex-shrink: 0; line-height: 1; }
+.rest-addr {
+  font-size: 11px;
+  color: var(--subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rest-arrow {
+  font-size: 20px;
+  color: var(--subtle);
+  flex-shrink: 0;
+  line-height: 1;
+}
