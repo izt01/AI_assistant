@@ -100,7 +100,7 @@ class BaseAgent:
             if self.TOOLS:
                 kwargs["tools"] = self.TOOLS
                 # 1回目はtool呼び出しを強制、2回目以降はauto
-                kwargs["tool_choice"] = "required" if i == 0 else "auto"
+                kwargs["tool_choice"] = "auto"
 
             res = client.chat.completions.create(**kwargs)
             msg = res.choices[0].message
