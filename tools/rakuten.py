@@ -37,50 +37,63 @@ def _auth_headers(app_url: str = "") -> dict:
 # 楽天トラベルのエリアコードマップ
 # (middleClassCode, smallClassCode) のタプルで返す
 # smallClassCode は都道府県の主要エリアを代表値として設定
+# 楽天トラベルの地区コードマップ (middleClassCode, smallClassCode)
+# smallClassCode は地区コードAPIで確認した正確な値を使用
 _AREA_CODE_MAP = {
-    # キーワード: (middleClassCode, smallClassCode)
-    "札幌":("hokkaido","sapporo"),  "北海道":("hokkaido","sapporo"),
-    "函館":("hokkaido","hakodate"), "旭川":("hokkaido","asahikawa"),
-    "仙台":("miyagi","sendai"),     "宮城":("miyagi","sendai"),
-    "青森":("aomori","aomori"),     "岩手":("iwate","morioka"),
-    "秋田":("akita","akita"),       "山形":("yamagata","yamagata"),
-    "福島":("fukushima","fukushima"),
-    "東京":("tokyo","tokyo"),       "新宿":("tokyo","tokyo"),
-    "渋谷":("tokyo","tokyo"),       "浅草":("tokyo","tokyo"),
-    "横浜":("kanagawa","yokohama"), "神奈川":("kanagawa","yokohama"),
-    "箱根":("kanagawa","hakone"),   "鎌倉":("kanagawa","kamakura"),
-    "埼玉":("saitama","saitama"),   "千葉":("chiba","chiba"),
-    "茨城":("ibaraki","mito"),      "栃木":("tochigi","nikko"),
-    "日光":("tochigi","nikko"),     "群馬":("gunma","kusatsu"),
-    "草津":("gunma","kusatsu"),     "軽井沢":("nagano","karuizawa"),
-    "長野":("nagano","nagano"),     "松本":("nagano","matsumoto"),
-    "新潟":("niigata","niigata"),   "富山":("toyama","toyama"),
-    "金沢":("ishikawa","kanazawa"), "石川":("ishikawa","kanazawa"),
-    "福井":("fukui","fukui"),       "山梨":("yamanashi","kofu"),
-    "富士":("shizuoka","fujinomiya"),"静岡":("shizuoka","shizuoka"),
-    "熱海":("shizuoka","atami"),    "伊豆":("shizuoka","izu"),
-    "名古屋":("aichi","nagoya"),    "愛知":("aichi","nagoya"),
-    "岐阜":("gifu","gifu"),         "三重":("mie","ise"),
-    "伊勢":("mie","ise"),           "滋賀":("shiga","biwako"),
-    "琵琶湖":("shiga","biwako"),
-    "京都":("kyoto","kyoto"),       "嵐山":("kyoto","kyoto"),
-    "大阪":("osaka","osaka"),       "難波":("osaka","osaka"),
-    "兵庫":("hyogo","kobe"),        "神戸":("hyogo","kobe"),
-    "有馬":("hyogo","arima"),       "奈良":("nara","nara"),
-    "和歌山":("wakayama","wakayama"),
+    # ── 北海道・東北 ──
+    "札幌":("hokkaido","sapporo"),   "北海道":("hokkaido","sapporo"),
+    "函館":("hokkaido","hakodate"),  "旭川":("hokkaido","asahikawa"),
+    "富良野":("hokkaido","furano"),  "知床":("hokkaido","abashiri"),
+    "仙台":("miyagi","sendai"),      "宮城":("miyagi","sendai"),
+    "松島":("miyagi","matsushima"),  "青森":("aomori","aomori"),
+    "秋田":("akita","akita"),        "山形":("yamagata","yamagata"),
+    "蔵王":("yamagata","zao"),       "福島":("fukushima","fukushima"),
+    # ── 関東 ──
+    "東京":("tokyo","tokyo"),        "新宿":("tokyo","tokyo"),
+    "浅草":("tokyo","tokyo"),        "銀座":("tokyo","tokyo"),
+    "横浜":("kanagawa","yokohama"),  "神奈川":("kanagawa","yokohama"),
+    "箱根":("kanagawa","hakone"),    "鎌倉":("kanagawa","kamakura"),
+    "日光":("tochigi","nikko"),      "栃木":("tochigi","nikko"),
+    "草津":("gunma","kusatsu"),      "伊香保":("gunma","ikaho"),
+    # ── 中部・北陸 ──
+    "軽井沢":("nagano","karuizawa"), "長野":("nagano","nagano"),
+    "松本":("nagano","matsumoto"),   "白馬":("nagano","hakuba"),
+    "上高地":("nagano","kamikochi"), "新潟":("niigata","niigata"),
+    "湯沢":("niigata","yuzawa"),     "金沢":("ishikawa","kanazawa"),
+    "石川":("ishikawa","kanazawa"),  "富山":("toyama","toyama"),
+    "山梨":("yamanashi","kofu"),     "富士":("shizuoka","fujinomiya"),
+    "熱海":("shizuoka","atami"),     "伊豆":("shizuoka","izu"),
+    "静岡":("shizuoka","shizuoka"),
+    # ── 東海 ──
+    "名古屋":("aichi","nagoya"),     "愛知":("aichi","nagoya"),
+    "岐阜":("gifu","gifu"),          "白川郷":("gifu","shirakawago"),
+    "伊勢":("mie","ise"),            "三重":("mie","ise"),
+    # ── 近畿 ──
+    "京都":("kyoto","shi"),          "嵐山":("kyoto","shi"),     # ★ shi = 京都市
+    "祇園":("kyoto","shi"),          "清水":("kyoto","shi"),
+    "大阪":("osaka","osaka"),        "難波":("osaka","osaka"),
+    "神戸":("hyogo","kobe"),         "兵庫":("hyogo","kobe"),
+    "有馬":("hyogo","arima"),        "城崎":("hyogo","kinosaki"),
+    "奈良":("nara","nara"),          "吉野":("nara","yoshino"),
+    "滋賀":("shiga","ootsu"),        "琵琶湖":("shiga","ootsu"),
+    "和歌山":("wakayama","wakayama"),"白浜":("wakayama","shirahama"),
+    # ── 中国・四国 ──
     "広島":("hiroshima","hiroshima"),"宮島":("hiroshima","miyajima"),
-    "岡山":("okayama","okayama"),   "鳥取":("tottori","tottori"),
-    "島根":("shimane","matsue"),    "出雲":("shimane","izumo"),
-    "山口":("yamaguchi","yamaguchi"),
-    "徳島":("tokushima","tokushima"),"香川":("kagawa","takamatsu"),
-    "愛媛":("ehime","matsuyama"),   "高知":("kochi","kochi"),
-    "福岡":("fukuoka","fukuoka"),   "博多":("fukuoka","fukuoka"),
-    "佐賀":("saga","saga"),         "長崎":("nagasaki","nagasaki"),
-    "熊本":("kumamoto","kumamoto"), "大分":("oita","beppu"),
-    "別府":("oita","beppu"),        "湯布院":("oita","yufuin"),
-    "宮崎":("miyazaki","miyazaki"), "鹿児島":("kagoshima","kagoshima"),
-    "沖縄":("okinawa","naha"),      "那覇":("okinawa","naha"),
-    "石垣":("okinawa","ishigaki"),
+    "岡山":("okayama","okayama"),    "倉敷":("okayama","kurashiki"),
+    "松江":("shimane","matsue"),     "出雲":("shimane","izumo"),
+    "鳥取":("tottori","tottori"),    "山口":("yamaguchi","yamaguchi"),
+    "松山":("ehime","matsuyama"),    "道後":("ehime","matsuyama"),
+    "高知":("kochi","kochi"),        "香川":("kagawa","takamatsu"),
+    "徳島":("tokushima","tokushima"),
+    # ── 九州・沖縄 ──
+    "福岡":("fukuoka","fukuoka"),    "博多":("fukuoka","fukuoka"),
+    "長崎":("nagasaki","nagasaki"),  "佐世保":("nagasaki","sasebo"),
+    "熊本":("kumamoto","kumamoto"),  "阿蘇":("kumamoto","aso"),
+    "別府":("oita","beppu"),         "湯布院":("oita","yufuin"),
+    "大分":("oita","beppu"),         "宮崎":("miyazaki","miyazaki"),
+    "鹿児島":("kagoshima","kagoshima"),"指宿":("kagoshima","ibusuki"),
+    "沖縄":("okinawa","naha"),       "那覇":("okinawa","naha"),
+    "石垣":("okinawa","ishigaki"),   "宮古":("okinawa","miyakojima"),
 }
 
 def _keyword_to_area_codes(keyword: str) -> tuple | None:
@@ -136,9 +149,19 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
 
         hotels = []
         for h in data.get("hotels", []):
-            # 新APIはhotel[0]ではなくhotel直下の場合もある
-            info = h[0] if isinstance(h, list) else h
-            i = info.get("hotelBasicInfo", info)
+            # 楽天トラベルAPIのレスポンス構造:
+            # hotels[n] = {"hotel": [{"hotelBasicInfo": {...}}, {"roomInfo": [...]}]}
+            try:
+                if isinstance(h, dict) and "hotel" in h:
+                    i = h["hotel"][0]["hotelBasicInfo"]   # 通常パターン
+                elif isinstance(h, list):
+                    i = h[0].get("hotelBasicInfo", {})    # 旧パターン
+                else:
+                    i = h.get("hotelBasicInfo", {})
+            except (KeyError, IndexError, TypeError):
+                continue
+            if not i:
+                continue
             hotel_no = i.get("hotelNo", "")
             checkin_fmt = checkin.replace("-", "") if checkin else ""
             deep_url = f"https://hotel.travel.rakuten.co.jp/hotelinfo/plan/{hotel_no}"
