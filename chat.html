@@ -6,12 +6,12 @@
 <link rel="stylesheet" href="shared.css">
 <title>チャット — Lumina AI</title>
 <style>
-.chat-shell{display:flex;flex-direction:column;height:calc(100vh - var(--hh));height:calc(100dvh - var(--hh));overflow:hidden}
+.chat-shell{display:flex;flex-direction:column;height:calc(100vh - var(--hh));height:calc(100dvh - var(--hh));overflow:visible}
 .chat-topbar{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:11px;flex-shrink:0}
 .chat-ai-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .chat-ai-name{font-family:'Fraunces',serif;font-size:16px;font-weight:900;color:var(--ink);letter-spacing:-.02em}
 .chat-ai-desc{font-size:11px;color:var(--muted)}
-.chat-msgs{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px;display:flex;flex-direction:column;gap:12px;background:var(--cream)}
+.chat-msgs{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:20px;display:flex;flex-direction:column;gap:12px;background:var(--cream)}
 .chat-input-area{padding:14px 18px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
 .chat-input-row{display:flex;gap:9px;align-items:flex-end}
 .chat-input-row textarea{flex:1;border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;font-size:13px;font-family:inherit;resize:none;min-height:44px;max-height:120px;background:var(--cream);transition:all .15s;outline:none;line-height:1.5}
@@ -93,7 +93,6 @@
 .compare-table .best{color:var(--success);font-weight:700}
 .compare-table .rank1{background:rgba(201,168,76,.06)}
 /* 商品カード改善 */
-.product-card-inner{display:flex;gap:0;align-items:stretch}
 .product-badge-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px}
 .product-badge{font-size:9.5px;padding:2px 7px;border-radius:99px;font-weight:600;white-space:nowrap}
 .badge-cheap{background:rgba(220,38,38,.1);color:#dc2626}
@@ -113,7 +112,7 @@
 .hotel-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted);margin-bottom:6px}
 .hotel-price{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--gold)}
 .hotel-access{font-size:11px;color:var(--subtle);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hotel-fav{position:absolute;top:10px;right:10px;background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--muted);transition:all .14s;padding:2px}
+.hotel-fav{position:absolute;top:10px;right:10px;background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--muted);transition:all .14px;padding:2px}
 .hotel-fav:hover,.hotel-fav.saved{color:#dc2626}
 </style>
 </head>
@@ -191,9 +190,6 @@ let currentSessionId = null
 let lastMessageId  = null
 let lastProposalId = null
 let lastReactionDone = false
-
-// 楽天商品検索はバックエンド（Python）で行うため、ブラウザ直接呼び出しは不要
-// → CORSエラー・applicationId漏洩を防ぎ、サーバー側で安全に処理する
 
 // 非同期で認証してから初期化
 requireAuth().then(u => { if(u){ user=u; init() } })
@@ -301,66 +297,42 @@ function hideTyping() {
   if(el) el.remove()
 }
 
-
 // ── Markdownパーサー（AIメッセージの ### ** ` リンク等を変換）──────────────
 function parseMarkdown(text) {
-  // XSS対策: HTMLをエスケープしてから処理
   let s = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-
-  // コードブロック（```）
   s = s.replace(/```([\s\S]*?)```/g, (_,c) =>
     `<pre style="background:var(--cream2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:11.5px;overflow-x:auto;margin:6px 0;white-space:pre-wrap;word-break:break-all;">${c.trim()}</pre>`)
-
-  // インラインコード（`code`）
   s = s.replace(/`([^`]+)`/g, (_,c) =>
     `<code style="background:var(--cream2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11.5px;">${c}</code>`)
-
-  // 見出し（### ## #）
   s = s.replace(/^### (.+)$/gm, '<strong style="display:block;font-size:13.5px;font-weight:700;color:var(--ink);margin:10px 0 4px;">$1</strong>')
   s = s.replace(/^## (.+)$/gm,  '<strong style="display:block;font-size:14px;font-weight:700;color:var(--ink);margin:10px 0 4px;">$1</strong>')
   s = s.replace(/^# (.+)$/gm,   '<strong style="display:block;font-size:15px;font-weight:700;color:var(--ink);margin:10px 0 4px;">$1</strong>')
-
-  // 太字（**text**）
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-
-  // 斜体（*text*）
   s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-
-  // URLをクリッカブルリンクに変換
   s = s.replace(/(https?:\/\/[^\s<>"）)）]+)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;word-break:break-all;">$1</a>')
-
-  // マークダウンリンク（[text](url)）
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
     '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;">$1</a>')
-
-  // リスト（- item）
   s = s.replace(/^[-・] (.+)$/gm,
     '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:var(--gold);flex-shrink:0;">•</span><span>$1</span></div>')
-
-  // 番号付きリスト（1. item）
   s = s.replace(/^(\d+)\. (.+)$/gm,
     '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:var(--gold);font-weight:600;flex-shrink:0;min-width:16px;">$1.</span><span>$2</span></div>')
-
-  // 水平線（---）
   s = s.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">')
-
-  // 改行
   s = s.replace(/\n/g, '<br>')
-
   return s
 }
 
-function scrollBottom() {
+// ── スクロール制御：ユーザーが履歴を遡っているときは強制スクロールしない ──
+function scrollBottom(force = false) {
   const c = document.getElementById('chat-msgs')
   if (!c) return
-  // requestAnimationFrameで確実にレンダリング後にスクロール
+  const nearBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 120
+  if (!force && !nearBottom) return
   requestAnimationFrame(() => {
     c.scrollTop = c.scrollHeight
-    // iOS SafariのOverscroll対策: 少し遅延して再実行
     setTimeout(() => { c.scrollTop = c.scrollHeight }, 100)
   })
 }
@@ -404,9 +376,11 @@ async function sendMsg() {
   isTyping = true
   document.querySelectorAll('.chip-row').forEach(e=>e.remove())
 
-  // APIに送るメッセージ配列（role/content形式）に追加
+  // ★ Fix: addMessage は1回だけ呼ぶ。送信時は force=true で強制スクロール
   messages.push({ role:'user', content:text })
   addMessage('user', text)
+  scrollBottom(true)
+
   showTyping()
 
   try {
@@ -435,25 +409,16 @@ async function sendMsg() {
       toast(`✦ AIがあなたの好みを${resp.learning_applied}件学習しました`, '')
     }
 
-    // キャッシュのusage_countを更新
     if(user) { user.usage_count = resp.usage_count || (user.usage_count||0)+1; setCachedUser(user) }
 
-    // AIカード描画（extra内のtool結果を種別ごとに描画）
     if (resp.extra) {
       if (aiParam === 'gourmet' && resp.extra._places) handleGourmetExtra(resp.extra)
       if (resp.extra._hotels)   renderHotelCards(resp.extra._hotels.hotels || [])
     }
 
-    // 買い物AI・家電AI: バックエンド（Python）が search_products を呼んだ結果を表示
-    // ※ ブラウザから楽天APIを直接叩くとCORSエラーになるため、必ずバックエンド経由
     if (resp.extra && resp.extra._products) {
       const items = resp.extra._products.items || []
-      console.log('[Shopping] バックエンドから商品取得:', items.length, '件')
-      if (items.length > 0) {
-        renderProductCards(items)
-      } else {
-        console.warn('[Shopping] 商品0件')
-      }
+      if (items.length > 0) renderProductCards(items)
     }
 
     addActionChips(aiParam, text)
@@ -473,8 +438,6 @@ async function sendMsg() {
     document.getElementById('send-btn').disabled = false
   }
 }
-
-// extractShoppingKeyword は削除（バックエンド検索に移行）
 
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
 
@@ -508,41 +471,6 @@ function addRedirectCard(aiId) {
   scrollBottom()
 }
 
-function generateReply(ai, text) {
-  const replies = {
-    travel: [
-      '素晴らしい！旅行の計画をご一緒に作りましょう✈️\n\nまず以下を教えていただけますか？\n・ご希望の目的地\n・旅行期間（何泊）\n・大人何名でのご旅行か\n・ご予算の目安\n\nこれらをもとに最適なプランをご提案します！',
-      '京都旅行ですね！素晴らしい選択です✨\n\n**おすすめ2泊3日プラン**\n\n1日目：嵐山（竹林・渡月橋）→ 金閣寺\n2日目：祇園→ 清水寺→ 二条城\n3日目：伏見稲荷→ 宇治（抹茶体験）\n\nホテルも合わせてご紹介しましょうか？',
-    ],
-    cooking: [
-      '美味しいレシピをご提案します🍳\n\n教えていただいた食材で作れる料理をいくつか選びました：\n\n① 親子丼（鶏肉・卵・玉ねぎ）\n② チキンソテー玉ねぎソース\n③ 鶏肉の和風炒め\n\nどれか気になるものはありますか？材料と手順を詳しくご説明します！',
-      'なるほど、その食材でしたら親子丼が一番おすすめです！\n\n**簡単親子丼（2人分）**\n• 鶏もも肉 200g\n• 玉ねぎ 1個\n• 卵 3個\n• だし汁 150ml、醤油・みりん各大さじ2\n\n詳しい手順もお伝えしましょうか？買い物リストも作れますよ！',
-    ],
-    shopping: [
-      '商品選びのお手伝いをします🛍️\n\nより良い提案のために教えてください：\n・ご予算の目安\n・用途や設置場所\n・重視するポイント（省エネ・静音・機能性など）\n\nこれらをもとに最適な商品をご紹介します！',
-      'ご予算と用途を教えていただきありがとうございます！\n\nおすすめ商品を3つピックアップしました：\n\n① A社製（¥23,800）— コスパ最良、基本機能充実\n② B社製（¥35,600）— 高性能・省エネ設計\n③ C社製（¥48,000）— フラッグシップ、10年保証\n\n詳しい比較が必要でしょうか？',
-    ],
-    diy: [
-      'DIYプロジェクト、楽しそうですね！🔨\n\n作業を始める前に確認させてください：\n・DIYの経験レベル（初めて/少しある/慣れている）\n・使える工具はお持ちですか？\n・完成サイズのイメージはありますか？\n\n手順と必要な材料リストをご説明します！',
-    ],
-    home: [
-      'インテリア・家電選びをお手伝いします📺\n\nより良い提案のために教えてください：\n・お部屋の広さ（畳数）\n・現在のインテリアスタイル\n・ご予算\n・特に重視したい点\n\n理想のお部屋づくりをサポートします！',
-    ],
-    health: [
-      '健康のご相談ですね💚\n\n※このAIは医療診断を行いません。生活習慣の改善アドバイスのみご提供します。\n\n現在のお悩みやご状況をもう少し教えていただけますか？\n・年代・生活スタイル\n・特に気になっていること\n・これまでに試したこと\n\nあなたに合ったアドバイスをご提案します！',
-    ],
-    gourmet: [
-      '何を食べたいですか？🍽️\n\nお腹の気分を教えていただければ、近くのぴったりなお店をご紹介します。\n\n例えば…\n・がっつり系？さっぱり系？\n・和食・洋食・中華・エスニックなど\n・予算感（気軽に〜ちょっと贅沢まで）\n\n位置情報をオンにしていただけると、リアルタイムでお近くのお店を検索できます！',
-      'いいですね！どんなジャンルが気分ですか？😊\nラーメン・カフェ・焼肉・寿司・パスタ・カレー…何でも探せますよ！',
-    ],
-    all: [
-      'ご質問ありがとうございます！詳しくお聞きして、最適なサポートをご提供します。\nどのようなことでお役に立てますか？',
-    ],
-  }
-  const r = replies[ai] || replies.all
-  return r[Math.floor(Math.random()*r.length)]
-}
-
 function addActionChips(ai, text) {
   const actions = {
     travel: ['ホテルを探す →','観光スポット詳細','日程を組み直す'],
@@ -559,29 +487,16 @@ function addActionChips(ai, text) {
   el.className = 'chip-row'
   el.innerHTML = chips.map(c=>`<div class="chip" onclick="sendChip('${c}')">${c}</div>`).join('')
   document.getElementById('chat-msgs').appendChild(el)
-
-  // Special actions
-  if(ai === 'travel' && /ホテル/.test(text)) {
-    setTimeout(() => { location.href = 'hotel.html' }, 300)
-  }
-  if(ai === 'shopping' && /買い物リスト|リスト/.test(text)) {
-    setTimeout(() => { location.href = 'shopping-list.html' }, 300)
-  }
-  if(ai === 'gourmet') {
-    requestUserLocation()
-  }
+  if(ai === 'travel' && /ホテル/.test(text)) setTimeout(() => { location.href = 'hotel.html' }, 300)
+  if(ai === 'shopping' && /買い物リスト|リスト/.test(text)) setTimeout(() => { location.href = 'shopping-list.html' }, 300)
+  if(ai === 'gourmet') requestUserLocation()
   scrollBottom()
 }
 
-// ── Reaction（5種別フィードバック）──────────────────────────────
+// ── Reaction ──────────────────────────────────────────────────
 const REACTION_LABELS = {
-  love:      '🩷 最高',
-  helpful:   '👍 役立った',
-  boring:    '😐 普通',
-  wrong:     '❌ 内容が違う',
-  too_long:  '📜 長すぎ',
-  too_short: '📝 短すぎ',
-  off_topic: '🔀 的外れ',
+  love:'🩷 最高', helpful:'👍 役立った', boring:'😐 普通',
+  wrong:'❌ 内容が違う', too_long:'📜 長すぎ', too_short:'📝 短すぎ', off_topic:'🔀 的外れ',
 }
 
 async function giveReaction(btn, reaction) {
@@ -592,15 +507,9 @@ async function giveReaction(btn, reaction) {
   lastReactionDone = true
   if(lastMessageId) {
     try {
-      await apiRequest('/chat/reaction',{method:'POST',body:{
-        message_id: lastMessageId,
-        reaction,
-        ai_type: aiParam
-      }})
+      await apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,ai_type:aiParam}})
       toast('フィードバックありがとうございます！','s')
-    } catch(e) {
-      toast('送信に失敗しました','d')
-    }
+    } catch(e) { toast('送信に失敗しました','d') }
   }
 }
 
@@ -610,13 +519,7 @@ function showNegReactionModal(btn) {
     body: `
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">詳しく教えていただくとAIがより賢くなります。</p>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${[
-          ['wrong',    '❌ 内容が違う・不正確'],
-          ['too_long', '📜 回答が長すぎる'],
-          ['too_short','📝 回答が短すぎる'],
-          ['off_topic','🔀 質問の意図を理解していない'],
-          ['boring',   '😐 その他・普通'],
-        ].map(([val,label])=>`
+        ${[['wrong','❌ 内容が違う・不正確'],['too_long','📜 回答が長すぎる'],['too_short','📝 回答が短すぎる'],['off_topic','🔀 質問の意図を理解していない'],['boring','😐 その他・普通']].map(([val,label])=>`
           <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
             <input type="radio" name="neg_reaction" value="${val}" style="accent-color:var(--gold2)">${label}
           </label>`).join('')}
@@ -625,10 +528,9 @@ function showNegReactionModal(btn) {
       </div>`,
     actions: [
       {label:'キャンセル', cls:'btn-g',    fn:'closeModal()'},
-      {label:'送信',       cls:'btn-gold', fn:`submitNegReaction(${JSON.stringify(btn.closest('.fb-row').id||'')})` },
+      {label:'送信',       cls:'btn-gold', fn:`submitNegReaction(${JSON.stringify(btn.closest('.fb-row').id||'')})`},
     ]
   })
-  // btn参照を保持
   window._negReactionBtn = btn
 }
 
@@ -640,23 +542,21 @@ async function submitNegReaction() {
   if(window._negReactionBtn) {
     await giveReaction(window._negReactionBtn, reaction)
     if(detail && lastMessageId) {
-      apiRequest('/chat/reaction',{method:'POST',body:{
-        message_id: lastMessageId, reaction, detail, ai_type: aiParam
-      }}).catch(()=>{})
+      apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,detail,ai_type:aiParam}}).catch(()=>{})
     }
   }
 }
 
-// ── 「やってみた」ボタン ─────────────────────────────────────
+// ── 「やってみた」ボタン ──────────────────────────────────────
 const ACTION_TYPE_MAP = {
-  gourmet:   [{v:'visited',   l:'🍽️ 行ってきた'},   {v:'other', l:'✍️ その他'}],
-  recipe:    [{v:'cooked',    l:'🍳 作ってみた'},    {v:'other', l:'✍️ その他'}],
-  travel:    [{v:'booked',    l:'✈️ 予約した'},      {v:'visited', l:'🏨 行ってきた'},{v:'other',l:'✍️ その他'}],
-  shopping:  [{v:'purchased', l:'🛒 購入した'},      {v:'other', l:'✍️ その他'}],
-  diy:       [{v:'diy_done',  l:'🔨 作った・直した'},{v:'other', l:'✍️ その他'}],
-  health:    [{v:'exercised', l:'💪 やってみた'},    {v:'other', l:'✍️ その他'}],
-  appliance: [{v:'purchased', l:'🛒 購入した'},      {v:'other', l:'✍️ その他'}],
-  general:   [{v:'other',     l:'✍️ 実行した'}],
+  gourmet:  [{v:'visited',   l:'🍽️ 行ってきた'}, {v:'other',l:'✍️ その他'}],
+  recipe:   [{v:'cooked',    l:'🍳 作ってみた'},  {v:'other',l:'✍️ その他'}],
+  travel:   [{v:'booked',    l:'✈️ 予約した'},    {v:'visited',l:'🏨 行ってきた'},{v:'other',l:'✍️ その他'}],
+  shopping: [{v:'purchased', l:'🛒 購入した'},    {v:'other',l:'✍️ その他'}],
+  diy:      [{v:'diy_done',  l:'🔨 作った・直した'},{v:'other',l:'✍️ その他'}],
+  health:   [{v:'exercised', l:'💪 やってみた'},  {v:'other',l:'✍️ その他'}],
+  appliance:[{v:'purchased', l:'🛒 購入した'},    {v:'other',l:'✍️ その他'}],
+  general:  [{v:'other',     l:'✍️ 実行した'}],
 }
 
 function showDoneModal(btn) {
@@ -666,10 +566,7 @@ function showDoneModal(btn) {
     body: `
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">実際にやってみた内容を教えてください。AIの学習に役立ちます🎉</p>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${types.map(({v,l})=>`
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="radio" name="action_type" value="${v}" style="accent-color:var(--gold2)">${l}
-          </label>`).join('')}
+        ${types.map(({v,l})=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="action_type" value="${v}" style="accent-color:var(--gold2)">${l}</label>`).join('')}
         <textarea id="action_note" rows="2" placeholder="一言メモ（任意）例：美味しかった、また行きたい"
           style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:none;background:var(--cream2)"></textarea>
       </div>`,
@@ -686,32 +583,18 @@ async function submitDoneAction() {
   const note        = document.getElementById('action_note')?.value || ''
   closeModal()
   try {
-    await apiRequest('/actions',{method:'POST',body:{
-      action_type,
-      ai_type:     aiParam,
-      proposal_id: lastProposalId,
-      note:        note || undefined
-    }})
+    await apiRequest('/actions',{method:'POST',body:{action_type,ai_type:aiParam,proposal_id:lastProposalId,note:note||undefined}})
     toast('🎉 記録しました！AIの学習に反映されます','s')
-    // 「やってみた」ボタンをdone状態に
-    document.querySelectorAll('.fb-done-btn').forEach(b=>{
-      b.textContent='✓ 記録済み'; b.style.opacity='0.55'; b.disabled=true
-    })
-  } catch(e) {
-    toast('記録に失敗しました','d')
-  }
+    document.querySelectorAll('.fb-done-btn').forEach(b=>{b.textContent='✓ 記録済み';b.style.opacity='0.55';b.disabled=true})
+  } catch(e) { toast('記録に失敗しました','d') }
 }
 
-// ── お気に入り保存 ──────────────────────────────────────────
+// ── お気に入り保存 ────────────────────────────────────────────
 async function saveProdAsFavorite(btn, name, url, price, shop) {
   if(btn.classList.contains('saved')) return
   btn.classList.add('saved'); btn.textContent = '♥'
   try {
-    await apiRequest('/favorites', { method:'POST', body:{
-      ai_type:'shopping', category:'product',
-      title: name, subtitle: shop ? `${shop} ¥${price.toLocaleString()}` : `¥${price.toLocaleString()}`,
-      detail:{ price, shop, url }, source_url: url,
-    }})
+    await apiRequest('/favorites',{method:'POST',body:{ai_type:'shopping',category:'product',title:name,subtitle:shop?`${shop} ¥${price.toLocaleString()}`:`¥${price.toLocaleString()}`,detail:{price,shop,url},source_url:url}})
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
@@ -720,61 +603,32 @@ async function saveHotelAsFavorite(btn, name, url, price, area) {
   if(btn.classList.contains('saved')) return
   btn.classList.add('saved'); btn.textContent = '♥'
   try {
-    await apiRequest('/favorites', { method:'POST', body:{
-      ai_type:'travel', category:'hotel',
-      title: name, subtitle: area ? `${area}・¥${price.toLocaleString()}〜` : `¥${price.toLocaleString()}〜`,
-      detail:{ price, area, url }, source_url: url,
-    }})
+    await apiRequest('/favorites',{method:'POST',body:{ai_type:'travel',category:'hotel',title:name,subtitle:area?`${area}・¥${price.toLocaleString()}〜`:`¥${price.toLocaleString()}〜`,detail:{price,area,url},source_url:url}})
     toast('♥ お気に入りに追加しました','s')
   } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
 
 async function saveRestAsFavorite(btn, name, address, mapsUrl, rating) {
   if(btn.classList.contains('saved')) return
-  btn.classList.add('saved')
-  btn.textContent = '♥'
+  btn.classList.add('saved'); btn.textContent = '♥'
   try {
-    await apiRequest('/favorites', { method:'POST', body:{
-      ai_type:    'gourmet',
-      category:   'restaurant',
-      title:      name,
-      subtitle:   address,
-      detail:     { rating, address, maps_url: mapsUrl },
-      source_url: mapsUrl,
-    }})
+    await apiRequest('/favorites',{method:'POST',body:{ai_type:'gourmet',category:'restaurant',title:name,subtitle:address,detail:{rating,address,maps_url:mapsUrl},source_url:mapsUrl}})
     toast('♥ お気に入りに追加しました','s')
-  } catch(e) {
-    btn.classList.remove('saved'); btn.textContent = '♡'
-    toast('保存に失敗しました','d')
-  }
+  } catch(e) { btn.classList.remove('saved'); btn.textContent='♡'; toast('保存に失敗しました','d') }
 }
 
 async function saveMsgAsFavorite(btn) {
   if(btn.classList.contains('saved')) return
-  // AIの最新メッセージの内容を取得
   const bubble = btn.closest('.fb-row')?.previousElementSibling
   const text = bubble?.textContent?.trim()?.slice(0,120) || 'AIの提案'
-  const AI_CATEGORY = {
-    gourmet:'restaurant', travel:'travel', cooking:'recipe',
-    shopping:'product', diy:'diy', home:'appliance', health:'health'
-  }
-  btn.classList.add('saved')
-  btn.textContent = '♥ 保存済み'
+  const AI_CATEGORY = {gourmet:'restaurant',travel:'travel',cooking:'recipe',shopping:'product',diy:'diy',home:'appliance',health:'health'}
+  btn.classList.add('saved'); btn.textContent = '♥ 保存済み'
   try {
-    await apiRequest('/favorites', { method:'POST', body:{
-      ai_type:  aiParam,
-      category: AI_CATEGORY[aiParam] || 'general',
-      title:    text,
-      detail:   { message_id: lastMessageId, ai_type: aiParam },
-    }})
+    await apiRequest('/favorites',{method:'POST',body:{ai_type:aiParam,category:AI_CATEGORY[aiParam]||'general',title:text,detail:{message_id:lastMessageId,ai_type:aiParam}}})
     toast('♥ お気に入りに追加しました','s')
-  } catch(e) {
-    btn.classList.remove('saved'); btn.textContent = '♡ お気に入り'
-    toast('保存に失敗しました','d')
-  }
+  } catch(e) { btn.classList.remove('saved'); btn.textContent='♡ お気に入り'; toast('保存に失敗しました','d') }
 }
 
-// 旧giveFeedback互換（念のため残す）
 function giveFeedback(btn, type) {
   if(type==='good') giveReaction(btn,'helpful')
   else showNegReactionModal(btn)
@@ -795,29 +649,23 @@ function requestUserLocation() {
     pos => {
       window._userLat = pos.coords.latitude
       window._userLng = pos.coords.longitude
-      console.log('[Gourmet] 位置情報取得:', window._userLat, window._userLng)
-      // 位置情報取得済みをチャットに通知
       const notice = document.createElement('div')
       notice.style.cssText = 'text-align:center;font-size:11px;color:var(--subtle);margin:6px 0'
       notice.textContent = '📍 現在地を取得しました'
       document.getElementById('chat-msgs').appendChild(notice)
     },
-    err => {
-      console.warn('[Gourmet] 位置情報取得失敗:', err.message)
-    },
+    err => { console.warn('[Gourmet] 位置情報取得失敗:', err.message) },
     { enableHighAccuracy: false, timeout: 8000 }
   )
 }
 
-// ─── グルメAI: お店カード描画 ───────────────────────────────
+// ─── グルメAI: お店カード描画 ────────────────────────────────
 function renderRestaurantCards(places) {
   if (!places || !places.length) return
   const wrap = document.createElement('div')
   wrap.className = 'restaurant-cards'
   wrap.innerHTML = `
-    <div style="font-size:12px;color:var(--subtle);margin-bottom:10px;font-weight:600">
-      📍 近くのおすすめのお店
-    </div>
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:10px;font-weight:600">📍 近くのおすすめのお店</div>
     ${places.map((p, i) => `
       <div class="rest-card" onclick="window.open('${p.maps_url}','_blank')">
         <div class="rest-rank">${i + 1}</div>
@@ -839,22 +687,18 @@ function renderRestaurantCards(places) {
   scrollBottom()
 }
 
-// ─── グルメAI: chat.htmlのextra処理でお店を描画 ─────────────
 function handleGourmetExtra(extra) {
-  if (extra && extra._places && extra._places.places) {
-    renderRestaurantCards(extra._places.places)
-  }
+  if (extra && extra._places && extra._places.places) renderRestaurantCards(extra._places.places)
 }
 
-// ─── 商品カード描画（買い物AI・家電AI）───────────────────────
-let _lastProducts = []  // 比較表用に保持
+// ─── 商品カード描画（買い物AI・家電AI）──────────────────────
+let _lastProducts = []
 
 function getProductBadges(p, isBest) {
   const badges = []
   if(isBest) badges.push('<span class="product-badge badge-cheap">💰 最安値</span>')
   if(p.review >= 4.5 && p.review_count >= 50) badges.push('<span class="product-badge badge-popular">⭐ 人気</span>')
   if(p.point >= 5) badges.push(`<span class="product-badge badge-point">🎁 ${p.point}倍P</span>`)
-  // catchcopyから特徴バッジ
   const cc = p.catchcopy || ''
   if(/軽量|軽い/.test(cc)) badges.push('<span class="product-badge badge-new">🪶 軽量</span>')
   if(/IH|ih/.test(cc+p.name)) badges.push('<span class="product-badge badge-new">🔥 IH対応</span>')
@@ -868,9 +712,7 @@ function renderProductCards(items) {
   _lastProducts = items
   const wrap = document.createElement('div')
   wrap.className = 'product-cards'
-
   const minPrice = Math.min(...items.map(p=>p.price||Infinity))
-
   wrap.innerHTML = `
     <div style="font-size:12px;color:var(--subtle);margin-bottom:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between">
       <span>🛍️ 楽天市場の商品 ${items.length}件</span>
@@ -884,21 +726,19 @@ function renderProductCards(items) {
       const safeImg  = p.image||''
       const badges   = getProductBadges(p, isBest)
       return `
-      <div class="product-card" onclick="showProductDetail(${i})" style="${isBest?'border-color:rgba(201,168,76,.4);':''}" >
+      <div class="product-card" onclick="showProductDetail(${i})" style="${isBest?'border-color:rgba(201,168,76,.4);':''}">
         <div class="product-card-inner">
           <div class="product-img-wrap">
-            ${safeImg
-              ? `<img class="product-img" src="${safeImg}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=product-img-placeholder>🛍️</div>'">`
-              : `<div class="product-img-placeholder">🛍️</div>`}
+            ${safeImg?`<img class="product-img" src="${safeImg}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=product-img-placeholder>🛍️</div>'">`:`<div class="product-img-placeholder">🛍️</div>`}
           </div>
           <div class="product-body">
             <div class="product-rank">${i+1}</div>
-            ${badges ? `<div class="product-badge-row">${badges}</div>` : ''}
+            ${badges?`<div class="product-badge-row">${badges}</div>`:''}
             <div class="product-name">${safeName}</div>
-            ${p.catchcopy ? `<div class="product-catch" style="color:var(--muted);font-size:10.5px;margin-bottom:5px">${p.catchcopy.slice(0,55)}</div>` : ''}
+            ${p.catchcopy?`<div class="product-catch" style="color:var(--muted);font-size:10.5px;margin-bottom:5px">${p.catchcopy.slice(0,55)}</div>`:''}
             <div class="product-meta">
               <span class="product-price">¥${(p.price||0).toLocaleString()}</span>
-              ${p.review ? `<span class="product-review">⭐${p.review}<span style="font-size:9.5px;color:var(--subtle)">(${(p.review_count||0).toLocaleString()}件)</span></span>` : ''}
+              ${p.review?`<span class="product-review">⭐${p.review}<span style="font-size:9.5px;color:var(--subtle)">(${(p.review_count||0).toLocaleString()}件)</span></span>`:''}
             </div>
             <div style="margin-top:4px;font-size:10.5px;color:var(--subtle)">🏪 ${safeShop||'楽天市場'}</div>
           </div>
@@ -913,7 +753,6 @@ function renderProductCards(items) {
 }
 
 function extractFeatures(p) {
-  // catchcopy・商品名から特徴を抽出
   const src = (p.name||'') + ' ' + (p.catchcopy||'')
   const features = []
   if(/軽量|軽い/.test(src))       features.push({icon:'🪶', text:'軽量設計'})
@@ -933,58 +772,23 @@ function showProductDetail(idx) {
   const features = extractFeatures(p)
   const minPrice = Math.min(..._lastProducts.map(q=>q.price||Infinity))
   const isBest   = p.price === minPrice
-
   showModal({
-    title: '商品詳細',
-    wide: true,
+    title: '商品詳細', wide: true,
     body: `
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        ${p.image
-          ? `<img src="${p.image}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--cream2)">`
-          : `<div style="width:100px;height:100px;border-radius:8px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🛍️</div>`}
+        ${p.image?`<img src="${p.image}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--cream2)">`:`<div style="width:100px;height:100px;border-radius:8px;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🛍️</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:6px">${p.name||''}</div>
           <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--gold)">¥${(p.price||0).toLocaleString()}
-            ${isBest ? '<span style="font-family:inherit;font-size:11px;background:rgba(220,38,38,.1);color:#dc2626;border-radius:4px;padding:2px 6px;margin-left:4px">最安値</span>' : ''}
+            ${isBest?'<span style="font-family:inherit;font-size:11px;background:rgba(220,38,38,.1);color:#dc2626;border-radius:4px;padding:2px 6px;margin-left:4px">最安値</span>':''}
           </div>
-          ${p.point ? `<div style="font-size:11.5px;color:#059669;margin-top:2px">🎁 ${p.point}倍ポイント還元</div>` : ''}
+          ${p.point?`<div style="font-size:11.5px;color:#059669;margin-top:2px">🎁 ${p.point}倍ポイント還元</div>`:''}
         </div>
       </div>
-
-      ${p.catchcopy ? `
-      <div class="prod-detail-section">
-        <div class="prod-detail-section-title">キャッチコピー</div>
-        <div style="font-size:12.5px;color:var(--ink3);line-height:1.6;padding:8px 12px;background:var(--cream2);border-radius:8px">${p.catchcopy}</div>
-      </div>` : ''}
-
-      ${features.length ? `
-      <div class="prod-detail-section">
-        <div class="prod-detail-section-title">✨ 特徴</div>
-        <div class="prod-feature-list">
-          ${features.map(f=>`<div class="prod-feature-item"><span>${f.icon}</span><span>${f.text}</span></div>`).join('')}
-        </div>
-      </div>` : ''}
-
-      <div class="prod-detail-section">
-        <div class="prod-detail-section-title">取り扱い店舗情報</div>
-        <div style="background:var(--cream2);border-radius:8px;padding:10px 12px">
-          <div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:4px">🏪 ${p.shop||'楽天市場店舗'}</div>
-          ${p.shop_url ? `<a href="${p.shop_url}" target="_blank" style="font-size:11px;color:var(--gold)">店舗ページを見る →</a>` : ''}
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">※ オンラインショップ（楽天市場）</div>
-        </div>
-      </div>
-
-      ${p.review ? `
-      <div class="prod-detail-section">
-        <div class="prod-detail-section-title">📊 レビュー</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)">${p.review}</div>
-          <div>
-            <div style="font-size:13px">⭐⭐⭐⭐⭐</div>
-            <div style="font-size:11px;color:var(--muted)">${(p.review_count||0).toLocaleString()}件のレビュー</div>
-          </div>
-        </div>
-      </div>` : ''}
+      ${p.catchcopy?`<div class="prod-detail-section"><div class="prod-detail-section-title">キャッチコピー</div><div style="font-size:12.5px;color:var(--ink3);line-height:1.6;padding:8px 12px;background:var(--cream2);border-radius:8px">${p.catchcopy}</div></div>`:''}
+      ${features.length?`<div class="prod-detail-section"><div class="prod-detail-section-title">✨ 特徴</div><div class="prod-feature-list">${features.map(f=>`<div class="prod-feature-item"><span>${f.icon}</span><span>${f.text}</span></div>`).join('')}</div></div>`:''}
+      <div class="prod-detail-section"><div class="prod-detail-section-title">取り扱い店舗情報</div><div style="background:var(--cream2);border-radius:8px;padding:10px 12px"><div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:4px">🏪 ${p.shop||'楽天市場店舗'}</div>${p.shop_url?`<a href="${p.shop_url}" target="_blank" style="font-size:11px;color:var(--gold)">店舗ページを見る →</a>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">※ オンラインショップ（楽天市場）</div></div></div>
+      ${p.review?`<div class="prod-detail-section"><div class="prod-detail-section-title">📊 レビュー</div><div style="display:flex;align-items:center;gap:10px"><div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold)">${p.review}</div><div><div style="font-size:13px">⭐⭐⭐⭐⭐</div><div style="font-size:11px;color:var(--muted)">${(p.review_count||0).toLocaleString()}件のレビュー</div></div></div></div>`:''}
     `,
     actions:[
       {label:'閉じる', cls:'btn-g', fn:'closeModal()'},
@@ -998,37 +802,19 @@ function showCompareTable() {
   const items = _lastProducts.slice(0,6)
   const minPrice = Math.min(...items.map(p=>p.price||Infinity))
   const maxReview = Math.max(...items.map(p=>p.review||0))
-
   const rows = items.map((p,i) => {
     const priceBest  = p.price  === minPrice  ? ' class="best"' : ''
     const reviewBest = p.review === maxReview && maxReview > 0 ? ' class="best"' : ''
-    return `<tr${i===0?' class="rank1"':''}>
-      <td style="font-weight:600">${i+1}. ${(p.name||'').slice(0,30)}${p.name&&p.name.length>30?'…':''}</td>
-      <td${priceBest}>¥${(p.price||0).toLocaleString()}${priceBest?' 👑':''}</td>
-      <td${reviewBest}>${p.review ? `⭐${p.review}(${p.review_count}件)${reviewBest?' 👑':''}` : 'なし'}</td>
-      <td>${p.shop||'-'}</td>
-      <td><a href="${p.url}" target="_blank" style="color:var(--accent);font-size:11px">見る→</a></td>
-    </tr>`
+    return `<tr${i===0?' class="rank1"':''}><td style="font-weight:600">${i+1}. ${(p.name||'').slice(0,30)}${p.name&&p.name.length>30?'…':''}</td><td${priceBest}>¥${(p.price||0).toLocaleString()}${priceBest?' 👑':''}</td><td${reviewBest}>${p.review?`⭐${p.review}(${p.review_count}件)${reviewBest?' 👑':''}` : 'なし'}</td><td>${p.shop||'-'}</td><td><a href="${p.url}" target="_blank" style="color:var(--accent);font-size:11px">見る→</a></td></tr>`
   }).join('')
-
   showModal({
     title: '🛍️ 商品比較表',
-    body: `
-      <div class="compare-wrap">
-        <table class="compare-table">
-          <thead><tr>
-            <th>商品名</th><th>価格</th><th>評価</th><th>ショップ</th><th>リンク</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-      <div style="font-size:11px;color:var(--subtle);margin-top:10px">👑 = 最優秀・最安値</div>
-    `,
+    body: `<div class="compare-wrap"><table class="compare-table"><thead><tr><th>商品名</th><th>価格</th><th>評価</th><th>ショップ</th><th>リンク</th></tr></thead><tbody>${rows}</tbody></table></div><div style="font-size:11px;color:var(--subtle);margin-top:10px">👑 = 最優秀・最安値</div>`,
     actions:[{label:'閉じる',cls:'btn-g',fn:'closeModal()'}]
   })
 }
 
-// ─── ホテルカード描画（旅行AI）──────────────────────────────
+// ─── ホテルカード描画（旅行AI）───────────────────────────────
 function renderHotelCards(hotels) {
   if (!hotels || !hotels.length) return
   const wrap = document.createElement('div')

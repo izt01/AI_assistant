@@ -353,7 +353,10 @@ table.dt{width:100%;border-collapse:collapse}
   /* チャット画面: ページ全体スクロール防止 */
   body.chat-page  { overflow: hidden; height: 100dvh; height: 100svh; }
   body.chat-page .app-layout { min-height: unset; height: 100%; overflow: hidden; }
-  body.chat-page .main-wrap  { min-height: unset; height: 100%; overflow: hidden; }
+
+  /* ★ Fix: overflow:hidden → overflow:clip に変更
+     clip は横方向のはみ出しだけ制御し、縦方向の子スクロールを妨げない */
+  body.chat-page .main-wrap { min-height: unset; height: 100%; overflow: clip; }
 
   /* モバイル専用要素を表示 */
   .mobile-nav     { display: flex; }
@@ -364,7 +367,7 @@ table.dt{width:100%;border-collapse:collapse}
 
   /* auth画面: 2カラム→1カラム */
   .auth-layout    { grid-template-columns: 1fr; min-height: 100svh; }
-  .auth-panel     { display: none; }  /* 左パネル非表示 */
+  .auth-panel     { display: none; }
   .auth-right     {
     padding: 28px 22px 40px;
     min-height: 100svh;
@@ -396,16 +399,24 @@ table.dt{width:100%;border-collapse:collapse}
   /* チャット画面 */
   .chat-shell     {
     height: calc(100svh - 52px - 60px);
-    height: calc(100dvh - 52px - 60px); /* アドレスバー動的対応 */
-    flex: 1;          /* 親がflex:columnの時に残り全部を占有 */
-    min-height: 0;    /* flexアイテムが縮められるように */
+    height: calc(100dvh - 52px - 60px);
+    flex: 1;
+    min-height: 0;
   }
-  .chat-msgs      { padding: 12px; overflow-x: hidden; }
+
+  /* ★ Fix: chat-msgs に iOS Safari スクロール対応を追加 */
+  .chat-msgs      {
+    padding: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; /* iOS Safari慣性スクロール */
+  }
+
   .msg-bubble     { max-width: calc(100vw - 80px); font-size: 13.5px; word-break: break-word; overflow-wrap: anywhere; }
   .chat-input-area { padding: 10px 12px; }
-  .chat-topbar    { display: none !important; }  /* モバイルはmobile-headerに統合 */
+  .chat-topbar    { display: none !important; }
   .chat-ai-name   { font-size: 14px; }
-  .chat-input-row textarea { font-size: 16px; /* iOS ズーム防止 */ }
+  .chat-input-row textarea { font-size: 16px; }
 
   /* ダッシュボード */
   .kpi-grid       { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -548,10 +559,7 @@ table.dt{width:100%;border-collapse:collapse}
   justify-content: center;
   flex-shrink: 0;
 }
-.rest-body {
-  flex: 1;
-  min-width: 0;
-}
+.rest-body { flex: 1; min-width: 0; }
 .rest-name {
   font-size: 13.5px;
   font-weight: 700;
@@ -561,17 +569,8 @@ table.dt{width:100%;border-collapse:collapse}
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rest-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 3px;
-}
-.rest-rating {
-  font-size: 11.5px;
-  color: var(--gold);
-  font-weight: 600;
-}
+.rest-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.rest-rating { font-size: 11.5px; color: var(--gold); font-weight: 600; }
 .rest-open {
   font-size: 10.5px;
   background: rgba(22,163,74,.1);
@@ -587,16 +586,5 @@ table.dt{width:100%;border-collapse:collapse}
   padding: 1px 7px;
   border-radius: 20px;
 }
-.rest-addr {
-  font-size: 11px;
-  color: var(--subtle);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rest-arrow {
-  font-size: 20px;
-  color: var(--subtle);
-  flex-shrink: 0;
-  line-height: 1;
-}
+.rest-addr { font-size: 11px; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rest-arrow { font-size: 20px; color: var(--subtle); flex-shrink: 0; line-height: 1; }
