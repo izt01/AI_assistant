@@ -34,27 +34,60 @@ def _auth_headers(app_url: str = "") -> dict:
     }
 
 
-# 楽天トラベルの都道府県コードマップ（keyword → middleClassCode変換用）
+# 楽天トラベルのエリアコードマップ
+# (middleClassCode, smallClassCode) のタプルで返す
+# smallClassCode は都道府県の主要エリアを代表値として設定
 _AREA_CODE_MAP = {
-    "北海道":"hokkaido","青森":"aomori","岩手":"iwate","宮城":"miyagi",
-    "秋田":"akita","山形":"yamagata","福島":"fukushima",
-    "茨城":"ibaraki","栃木":"tochigi","群馬":"gunma","埼玉":"saitama",
-    "千葉":"chiba","東京":"tokyo","神奈川":"kanagawa",
-    "新潟":"niigata","富山":"toyama","石川":"ishikawa","福井":"fukui",
-    "山梨":"yamanashi","長野":"nagano","岐阜":"gifu","静岡":"shizuoka","愛知":"aichi",
-    "三重":"mie","滋賀":"shiga","京都":"kyoto","大阪":"osaka",
-    "兵庫":"hyogo","奈良":"nara","和歌山":"wakayama",
-    "鳥取":"tottori","島根":"shimane","岡山":"okayama","広島":"hiroshima","山口":"yamaguchi",
-    "徳島":"tokushima","香川":"kagawa","愛媛":"ehime","高知":"kochi",
-    "福岡":"fukuoka","佐賀":"saga","長崎":"nagasaki","熊本":"kumamoto",
-    "大分":"oita","宮崎":"miyazaki","鹿児島":"kagoshima","沖縄":"okinawa",
+    # キーワード: (middleClassCode, smallClassCode)
+    "札幌":("hokkaido","sapporo"),  "北海道":("hokkaido","sapporo"),
+    "函館":("hokkaido","hakodate"), "旭川":("hokkaido","asahikawa"),
+    "仙台":("miyagi","sendai"),     "宮城":("miyagi","sendai"),
+    "青森":("aomori","aomori"),     "岩手":("iwate","morioka"),
+    "秋田":("akita","akita"),       "山形":("yamagata","yamagata"),
+    "福島":("fukushima","fukushima"),
+    "東京":("tokyo","tokyo"),       "新宿":("tokyo","tokyo"),
+    "渋谷":("tokyo","tokyo"),       "浅草":("tokyo","tokyo"),
+    "横浜":("kanagawa","yokohama"), "神奈川":("kanagawa","yokohama"),
+    "箱根":("kanagawa","hakone"),   "鎌倉":("kanagawa","kamakura"),
+    "埼玉":("saitama","saitama"),   "千葉":("chiba","chiba"),
+    "茨城":("ibaraki","mito"),      "栃木":("tochigi","nikko"),
+    "日光":("tochigi","nikko"),     "群馬":("gunma","kusatsu"),
+    "草津":("gunma","kusatsu"),     "軽井沢":("nagano","karuizawa"),
+    "長野":("nagano","nagano"),     "松本":("nagano","matsumoto"),
+    "新潟":("niigata","niigata"),   "富山":("toyama","toyama"),
+    "金沢":("ishikawa","kanazawa"), "石川":("ishikawa","kanazawa"),
+    "福井":("fukui","fukui"),       "山梨":("yamanashi","kofu"),
+    "富士":("shizuoka","fujinomiya"),"静岡":("shizuoka","shizuoka"),
+    "熱海":("shizuoka","atami"),    "伊豆":("shizuoka","izu"),
+    "名古屋":("aichi","nagoya"),    "愛知":("aichi","nagoya"),
+    "岐阜":("gifu","gifu"),         "三重":("mie","ise"),
+    "伊勢":("mie","ise"),           "滋賀":("shiga","biwako"),
+    "琵琶湖":("shiga","biwako"),
+    "京都":("kyoto","kyoto"),       "嵐山":("kyoto","kyoto"),
+    "大阪":("osaka","osaka"),       "難波":("osaka","osaka"),
+    "兵庫":("hyogo","kobe"),        "神戸":("hyogo","kobe"),
+    "有馬":("hyogo","arima"),       "奈良":("nara","nara"),
+    "和歌山":("wakayama","wakayama"),
+    "広島":("hiroshima","hiroshima"),"宮島":("hiroshima","miyajima"),
+    "岡山":("okayama","okayama"),   "鳥取":("tottori","tottori"),
+    "島根":("shimane","matsue"),    "出雲":("shimane","izumo"),
+    "山口":("yamaguchi","yamaguchi"),
+    "徳島":("tokushima","tokushima"),"香川":("kagawa","takamatsu"),
+    "愛媛":("ehime","matsuyama"),   "高知":("kochi","kochi"),
+    "福岡":("fukuoka","fukuoka"),   "博多":("fukuoka","fukuoka"),
+    "佐賀":("saga","saga"),         "長崎":("nagasaki","nagasaki"),
+    "熊本":("kumamoto","kumamoto"), "大分":("oita","beppu"),
+    "別府":("oita","beppu"),        "湯布院":("oita","yufuin"),
+    "宮崎":("miyazaki","miyazaki"), "鹿児島":("kagoshima","kagoshima"),
+    "沖縄":("okinawa","naha"),      "那覇":("okinawa","naha"),
+    "石垣":("okinawa","ishigaki"),
 }
 
-def _keyword_to_area_code(keyword: str) -> str | None:
-    """都市名・地名からmiddleClassCodeを返す。見つからなければNone。"""
-    for name, code in _AREA_CODE_MAP.items():
+def _keyword_to_area_codes(keyword: str) -> tuple | None:
+    """都市名・地名から (middleClassCode, smallClassCode) を返す。見つからなければNone。"""
+    for name, codes in _AREA_CODE_MAP.items():
         if name in keyword:
-            return code
+            return codes
     return None
 
 
@@ -66,20 +99,22 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
     if not _access_key():
         return {"available": False, "reason": "RAKUTEN_ACCESS_KEY が未設定です（2026年新API対応に必要）"}
     try:
-        # keywordから都道府県コードに変換
-        area_code = _keyword_to_area_code(keyword)
-        if not area_code:
+        # keywordから (middleClassCode, smallClassCode) に変換
+        area_codes = _keyword_to_area_codes(keyword)
+        if not area_codes:
             print(f"[Rakuten Hotels] 対応エリアコードなし: keyword={keyword}")
             return {"available": True, "type": "hotels", "hotels": [], "adult_num": adult_num,
                     "reason": f"楽天トラベルで'{keyword}'に対応するエリアが見つかりませんでした"}
 
+        middle_code, small_code = area_codes
         params = {
             **_auth_params(),
-            "largeClassCode": "japan",
-            "middleClassCode": area_code,
-            "hits":           max_results,
-            "responseType":   "small",
-            "format":         "json",
+            "largeClassCode":  "japan",
+            "middleClassCode": middle_code,
+            "smallClassCode":  small_code,
+            "hits":            max_results,
+            "responseType":    "small",
+            "format":          "json",
         }
         if checkin:   params["checkinDate"]  = checkin
         if checkout:  params["checkoutDate"] = checkout
@@ -92,7 +127,7 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
             headers=_auth_headers(),
             timeout=8
         )
-        print(f"[Rakuten Hotels] keyword={keyword} area={area_code} status={r.status_code}")
+        print(f"[Rakuten Hotels] keyword={keyword} middle={middle_code} small={small_code} status={r.status_code}")
 
         data = r.json()
         if data.get("error"):
