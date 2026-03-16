@@ -34,33 +34,65 @@ def _auth_headers(app_url: str = "") -> dict:
     }
 
 
+# 楽天トラベルの都道府県コードマップ（keyword → middleClassCode変換用）
+_AREA_CODE_MAP = {
+    "北海道":"hokkaido","青森":"aomori","岩手":"iwate","宮城":"miyagi",
+    "秋田":"akita","山形":"yamagata","福島":"fukushima",
+    "茨城":"ibaraki","栃木":"tochigi","群馬":"gunma","埼玉":"saitama",
+    "千葉":"chiba","東京":"tokyo","神奈川":"kanagawa",
+    "新潟":"niigata","富山":"toyama","石川":"ishikawa","福井":"fukui",
+    "山梨":"yamanashi","長野":"nagano","岐阜":"gifu","静岡":"shizuoka","愛知":"aichi",
+    "三重":"mie","滋賀":"shiga","京都":"kyoto","大阪":"osaka",
+    "兵庫":"hyogo","奈良":"nara","和歌山":"wakayama",
+    "鳥取":"tottori","島根":"shimane","岡山":"okayama","広島":"hiroshima","山口":"yamaguchi",
+    "徳島":"tokushima","香川":"kagawa","愛媛":"ehime","高知":"kochi",
+    "福岡":"fukuoka","佐賀":"saga","長崎":"nagasaki","熊本":"kumamoto",
+    "大分":"oita","宮崎":"miyazaki","鹿児島":"kagoshima","沖縄":"okinawa",
+}
+
+def _keyword_to_area_code(keyword: str) -> str | None:
+    """都市名・地名からmiddleClassCodeを返す。見つからなければNone。"""
+    for name, code in _AREA_CODE_MAP.items():
+        if name in keyword:
+            return code
+    return None
+
+
 def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num: int = 2, max_results: int = 4) -> dict:
-    """楽天トラベルでホテルを検索する（新API対応）"""
+    """楽天トラベルでホテルを検索する（新API対応・エリアコード変換付き）"""
     app_id = _app_id()
     if not app_id:
         return {"available": False, "reason": "RAKUTEN_APP_ID が未設定です"}
     if not _access_key():
         return {"available": False, "reason": "RAKUTEN_ACCESS_KEY が未設定です（2026年新API対応に必要）"}
     try:
+        # keywordから都道府県コードに変換
+        area_code = _keyword_to_area_code(keyword)
+        if not area_code:
+            print(f"[Rakuten Hotels] 対応エリアコードなし: keyword={keyword}")
+            return {"available": True, "type": "hotels", "hotels": [], "adult_num": adult_num,
+                    "reason": f"楽天トラベルで'{keyword}'に対応するエリアが見つかりませんでした"}
+
         params = {
             **_auth_params(),
-            "keyword":      keyword,
-            "hits":         max_results,
-            "responseType": "small",
-            "format":       "json",
+            "largeClassCode": "japan",
+            "middleClassCode": area_code,
+            "hits":           max_results,
+            "responseType":   "small",
+            "format":         "json",
         }
         if checkin:   params["checkinDate"]  = checkin
         if checkout:  params["checkoutDate"] = checkout
         if adult_num: params["adultNum"]     = adult_num
 
         r = requests.get(
-            # ★ 新エンドポイント（旧: app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426）
-            "https://openapi.rakuten.co.jp/travel/api/Travel/SimpleHotelSearch/20170426",
+            # ★ 正しいエンドポイント: engine/api（travel/api は誤り）
+            "https://openapi.rakuten.co.jp/engine/api/Travel/SimpleHotelSearch/20170426",
             params=params,
             headers=_auth_headers(),
             timeout=8
         )
-        print(f"[Rakuten Hotels] keyword={keyword} status={r.status_code}")
+        print(f"[Rakuten Hotels] keyword={keyword} area={area_code} status={r.status_code}")
 
         data = r.json()
         if data.get("error"):
@@ -69,7 +101,9 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
 
         hotels = []
         for h in data.get("hotels", []):
-            i = h[0]["hotelBasicInfo"]
+            # 新APIはhotel[0]ではなくhotel直下の場合もある
+            info = h[0] if isinstance(h, list) else h
+            i = info.get("hotelBasicInfo", info)
             hotel_no = i.get("hotelNo", "")
             checkin_fmt = checkin.replace("-", "") if checkin else ""
             deep_url = f"https://hotel.travel.rakuten.co.jp/hotelinfo/plan/{hotel_no}"

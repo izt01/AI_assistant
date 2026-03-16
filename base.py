@@ -92,9 +92,11 @@ class BaseAgent:
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
 
         for i in range(3):
+            # 旅行AIはプランJSONが大きいため max_tokens を増やす
+            max_tok = 4000 if self.AI_TYPE == "travel" else 1500
             kwargs = {
                 "model":      "gpt-4o",
-                "max_tokens": 1500,
+                "max_tokens": max_tok,
                 "messages":   msgs,
             }
             if self.TOOLS:
