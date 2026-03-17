@@ -139,15 +139,22 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
         if checkout:  params["checkoutDate"] = checkout
         if adult_num: params["adultNum"]     = adult_num
 
-        r = requests.get(
-            # ★ 正しいエンドポイント: engine/api（travel/api は誤り）
-            "https://openapi.rakuten.co.jp/engine/api/Travel/SimpleHotelSearch/20170426",
-            params=params,
-            headers=_auth_headers(),
-            timeout=8
-        )
-        detail = params.get("detailClassCode", "-")
-        print(f"[Rakuten Hotels] keyword={keyword} middle={middle_code} small={small_code} detail={detail} status={r.status_code}")
+        # 429レート制限対策: 最大3回リトライ
+        import time as _time
+        for _attempt in range(3):
+            r = requests.get(
+                # ★ 正しいエンドポイント: engine/api（travel/api は誤り）
+                "https://openapi.rakuten.co.jp/engine/api/Travel/SimpleHotelSearch/20170426",
+                params=params,
+                headers=_auth_headers(),
+                timeout=8
+            )
+            detail = params.get("detailClassCode", "-")
+            print(f"[Rakuten Hotels] keyword={keyword} middle={middle_code} small={small_code} detail={detail} status={r.status_code}")
+            if r.status_code != 429:
+                break
+            print(f"[Rakuten Hotels] 429 Rate Limit, retry {_attempt+1}/3...")
+            _time.sleep(1.5)
 
         data = r.json()
         if data.get("error"):
