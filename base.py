@@ -92,11 +92,9 @@ class BaseAgent:
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
 
         for i in range(3):
-            # 旅行AIはプランJSONが大きいため max_tokens を増やす
-            max_tok = 4000 if self.AI_TYPE == "travel" else 1500
             kwargs = {
                 "model":      "gpt-4o",
-                "max_tokens": max_tok,
+                "max_tokens": 1500,
                 "messages":   msgs,
             }
             if self.TOOLS:
@@ -131,14 +129,17 @@ class BaseAgent:
         text = last_assistant_msg.content or "{}"
         # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
         def extract_json(s):
-            # コードブロック除去
-            s = s.replace("```json", "").replace("```", "").strip()
+            import re
+            # コードブロック・前後テキストを除去
+            s = re.sub(r'```json\s*', '', s)
+            s = re.sub(r'```\s*',     '', s)
+            s = s.strip()
             # 純粋JSONなら直接パース
             try:
                 return json.loads(s)
             except Exception:
                 pass
-            # 最初の { から最後の } を抽出
+            # 最初の { から最後の } を抽出（途中切れ対策）
             start = s.find("{")
             end   = s.rfind("}")
             if start != -1 and end != -1 and end > start:
@@ -146,6 +147,16 @@ class BaseAgent:
                     return json.loads(s[start:end+1])
                 except Exception:
                     pass
+            # さらに fallback: json.JSONDecodeError の pos まで切り詰めて再試行
+            if start != -1:
+                try:
+                    chunk = s[start:]
+                    json.loads(chunk)
+                except json.JSONDecodeError as e:
+                    try:
+                        return json.loads(chunk[:e.pos])
+                    except Exception:
+                        pass
             return None
 
         parsed = extract_json(text)
@@ -157,11 +168,6 @@ class BaseAgent:
         # messageフィールドの正規化（message / reply どちらでも受け取れるように）
         if "message" in parsed and "reply" not in parsed:
             parsed["reply"] = parsed.pop("message")
-
-        # 旅行AIのプランフィールドをフロントに渡す
-        if self.AI_TYPE == "travel" and parsed.get("plans"):
-            parsed["_travel_plans"] = parsed["plans"]
-            print(f"[Travel] プラン数={len(parsed['_travel_plans'])}案")
 
         # search_keyword が含まれていればフロントに渡す（楽天ブラウザ検索用）
         if parsed.get("search_keyword"):

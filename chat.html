@@ -303,7 +303,7 @@ function addMessage(role, text) {
     el.innerHTML = `
       <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
       <div>
-        <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
+        <div class="msg-bubble">${parseMarkdown(text)}</div>
         <div class="fb-row" data-msg-idx="${msgIndex}">
           <button class="fb-btn reaction-love"   onclick="giveReaction(this,'love')">🩷 最高</button>
           <button class="fb-btn reaction-helpful" onclick="giveReaction(this,'helpful')">👍 役立った</button>
@@ -353,6 +353,47 @@ function scrollBottom(force = false) {
     c.scrollTop = c.scrollHeight
     setTimeout(() => { c.scrollTop = c.scrollHeight }, 100)
   })
+}
+ 
+ 
+// ── Markdownパーサー ─────────────────────────────────────────
+function parseMarkdown(text) {
+  // JSON生テキストが来た場合は空文字にする（plansはカードで表示するため）
+  const cleaned = text.replace(/```json/g,'').replace(/```/g,'').trim()
+  if(cleaned.startsWith('{') && cleaned.includes('"plans"')) return ''
+ 
+  let s = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+ 
+  // コードブロック
+  s = s.replace(/```([\s\S]*?)```/g, (_,c) =>
+    `<pre style="background:var(--cream2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:11.5px;overflow-x:auto;margin:6px 0;white-space:pre-wrap;word-break:break-all;">${c.trim()}</pre>`)
+  // インラインコード
+  s = s.replace(/`([^`]+)`/g, (_,c) =>
+    `<code style="background:var(--cream2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11.5px;">${c}</code>`)
+  // 見出し
+  s = s.replace(/^### (.+)$/gm,'<strong style="display:block;font-size:13.5px;font-weight:700;color:var(--ink);margin:8px 0 3px;">$1</strong>')
+  s = s.replace(/^## (.+)$/gm, '<strong style="display:block;font-size:14px;font-weight:700;color:var(--ink);margin:8px 0 3px;">$1</strong>')
+  s = s.replace(/^# (.+)$/gm,  '<strong style="display:block;font-size:15px;font-weight:700;color:var(--ink);margin:8px 0 3px;">$1</strong>')
+  // 太字・斜体
+  s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+  s = s.replace(/\*([^*]+)\*/g,'<em>$1</em>')
+  // URLリンク
+  s = s.replace(/(https?:\/\/[^\s<>"）)）]+)/g,
+    '<a href="$1" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline;word-break:break-all;">$1</a>')
+  // [text](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline;">$1</a>')
+  // リスト
+  s = s.replace(/^[-・] (.+)$/gm,
+    '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:var(--gold);flex-shrink:0;">•</span><span>$1</span></div>')
+  s = s.replace(/^(\d+)\. (.+)$/gm,
+    '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:var(--gold);font-weight:600;flex-shrink:0;min-width:16px;">$1.</span><span>$2</span></div>')
+  // 水平線
+  s = s.replace(/^---+$/gm,'<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">')
+  // 改行
+  s = s.replace(/\n/g,'<br>')
+  return s
 }
  
 function updateUsageBadge() {
@@ -426,13 +467,23 @@ async function sendMsg() {
                   || (resp.extra && resp.extra._travel_plans)
                   || null
  
-    if(!extraPlans && reply.trimStart().startsWith('{') && reply.includes('"plans"')) {
+    // replyにJSONが混入している場合、messageだけ取り出してplansも救済
+    const looksJson = reply.replace(/```json|```/g,'').trimStart().startsWith('{')
+    if(looksJson) {
       try {
-        const parsed = JSON.parse(reply)
+        const cleaned = reply.replace(/```json/g,'').replace(/```/g,'').trim()
+        const parsed  = JSON.parse(cleaned)
+        // messageフィールドをreplyに差し替え（JSON生テキストをバブルに出さない）
         if(parsed.message) reply = parsed.message
-        if(parsed.plans) extraPlans = parsed.plans
-        console.log('[Travel] replyからplansを抽出:', extraPlans?.length, '案')
-      } catch(e) { /* パース失敗 → そのまま表示 */ }
+        // plansがまだ取れていなければreplyのJSONから救済
+        if(parsed.plans && parsed.plans.length && !extraPlans) {
+          extraPlans = parsed.plans
+          console.log('[Travel] replyからplansを救済:', extraPlans.length, '案')
+        }
+      } catch(e) {
+        // JSONパース失敗 → replyをそのまま表示（ただし先頭のコードブロックは除去）
+        reply = reply.replace(/```json/g,'').replace(/```/g,'').trim()
+      }
     }
  
     messages.push({ role:'assistant', content:reply })
