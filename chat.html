@@ -1259,6 +1259,60 @@ function travelActivityIcon(activity) {
   return '📍'
 }
  
+
+// ── 交通手段から予約ディープリンクURLを生成 ────────────────────
+function travelBookingUrl(transport, fromCity, toCity, date) {
+  if(!transport) return null
+  const t = transport
+  const from = fromCity || ''
+  const to   = toCity   || ''
+  const d    = (date || '').replace(/-/g, '')  // YYYYMMDD
+
+  // 新幹線・JR → えきねっと
+  if (/新幹線|JR|jr|のぞみ|ひかり|こだま|はやぶさ|かがやき|つるぎ/.test(t)) {
+    // えきねっとの列車検索URL（出発地・目的地・日付）
+    const params = new URLSearchParams({
+      'typeCD': 'B',  // 新幹線
+      'dep': from,
+      'arr': to,
+    })
+    return `https://www.eki-net.com/travel/shinkansen/reserve/ReserveStart.aspx`
+  }
+
+  // 飛行機 → スカイスキャナー
+  if (/飛行機|フライト|航空|ANA|JAL|LCC|空港/.test(t)) {
+    const dateStr = date || ''
+    const fromCode = from.includes('東京') || from.includes('羽田') ? 'TYO' :
+                     from.includes('大阪') || from.includes('伊丹') ? 'OSA' :
+                     from.includes('名古屋') || from.includes('中部') ? 'NGO' :
+                     from.includes('札幌') || from.includes('新千歳') ? 'CTS' :
+                     from.includes('福岡') ? 'FUK' :
+                     from.includes('沖縄') || from.includes('那覇') ? 'OKA' : ''
+    const toCode   = to.includes('東京') || to.includes('羽田') ? 'TYO' :
+                     to.includes('大阪') || to.includes('伊丹') ? 'OSA' :
+                     to.includes('金沢') || to.includes('小松') ? 'KMQ' :
+                     to.includes('札幌') || to.includes('新千歳') ? 'CTS' :
+                     to.includes('福岡') ? 'FUK' :
+                     to.includes('沖縄') || to.includes('那覇') ? 'OKA' : ''
+    if (fromCode && toCode) {
+      return `https://www.skyscanner.jp/routes/${fromCode}/${toCode}/${dateStr}/`
+    }
+    return `https://www.skyscanner.jp/`
+  }
+
+  // バス → 高速バスnet
+  if (/バス|highway|高速/.test(t)) {
+    return `https://www.kosokubus.com/`
+  }
+
+  // フェリー
+  if (/船|フェリー|ferry/.test(t)) {
+    return `https://www.ferrysearcher.com/`
+  }
+
+  return null
+}
+
 function renderTravelPlans(plans) {
   if (!plans || !plans.length) return
   _lastTravelPlans = plans
@@ -1314,6 +1368,10 @@ function renderTravelPlans(plans) {
               <div class="tp-transport">
                 <span class="tp-transport-icon">🚄</span>
                 <span class="tp-transport-text">${d.transport}</span>
+                ${(()=>{
+                  const url = travelBookingUrl(d.transport, p.days[0]?.location, d.location, p.days[0]?.date)
+                  return url ? `<a href="${url}" target="_blank" class="tp-transport-btn">チケット検索 →</a>` : ''
+                })()}
               </div>` : ''}
  
             <!-- タイムライン -->
@@ -1332,6 +1390,14 @@ function renderTravelPlans(plans) {
                         ${s.duration ? `<span>⏱ ${s.duration}</span>` : ''}
                         ${s.note     ? `<span class="tp-item-note">💡 ${s.note}</span>` : ''}
                       </div>
+                      ${(()=>{
+                        const url = travelBookingUrl(s.activity, p.days[0]?.location, d.location, '')
+                        if(!url) return ''
+                        const label = /飛行機|フライト|航空/.test(s.activity||'') ? '✈️ 航空券を検索' :
+                                      /新幹線|JR/.test(s.activity||'') ? '🚄 チケットを検索' :
+                                      /バス/.test(s.activity||'') ? '🚌 バスを検索' : '🎫 検索する'
+                        return `<a href="${url}" target="_blank" class="tp-item-book-btn">${label}</a>`
+                      })()}
                     </div>
                   </div>
                 </div>`).join('')}
@@ -1349,9 +1415,14 @@ function renderTravelPlans(plans) {
                 </div>
                 <div class="tp-hotel-right">
                   ${d.hotel.price ? `<div class="tp-hotel-price">¥${Number(d.hotel.price).toLocaleString()}<span>/泊〜</span></div>` : ''}
-                  ${d.hotel.url
-                    ? `<a href="${d.hotel.url}" target="_blank" class="tp-hotel-btn">予約 →</a>`
-                    : (d.hotel.booking_note ? `<div class="tp-hotel-note">${d.hotel.booking_note}</div>` : '')}
+                  ${(()=>{
+                    if(d.hotel.url) return `<a href="${d.hotel.url}" target="_blank" class="tp-hotel-btn">楽天で予約 →</a>`
+                    // ホテル名で楽天トラベル検索
+                    const q = encodeURIComponent(d.hotel.name || d.hotel.area || '')
+                    const rakutenSearchUrl = q ? `https://travel.rakuten.co.jp/keyword/?f_query=${q}` : ''
+                    if(rakutenSearchUrl) return `<a href="${rakutenSearchUrl}" target="_blank" class="tp-hotel-btn">楽天で検索 →</a>`
+                    return d.hotel.booking_note ? `<div class="tp-hotel-note">${d.hotel.booking_note}</div>` : ''
+                  })()}
                 </div>
               </div>` : ''}
           </div>
