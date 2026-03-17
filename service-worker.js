@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v2";
+const CACHE_NAME = "lumina-pwa-v3";
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];
