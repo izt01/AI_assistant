@@ -173,6 +173,10 @@ class BaseAgent:
                         data["source"] = data.get("source", "rakuten")  # ★ 将来: 'agoda' | 'booking'
                         parsed["_hotels"] = data
 
+                    # 航空券結果（旅行AI）
+                    if t == "flights":
+                        parsed["_flights"] = data
+
                     # 商品結果（買い物AI・家電AI・DIY AI）
                     if t == "products":
                         parsed["_products"] = data

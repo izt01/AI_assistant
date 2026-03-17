@@ -1724,6 +1724,7 @@ if __name__ == "__main__":
     print(f"  OpenAI  : {'✓' if os.getenv('OPENAI_API_KEY') else '⚠ OPENAI_API_KEY 未設定'}")
     print(f"  楽天    : {'✓' if os.getenv('RAKUTEN_APP_ID') else '未設定（任意）'}")
     print(f"  Google  : {'✓' if os.getenv('GOOGLE_MAPS_API_KEY') else '未設定（任意）'}")
+    print(f"  RapidAPI: {'✓' if os.getenv('RAPIDAPI_KEY') else '未設定（任意・航空券検索）'}")
     print(f"  DB URL  : {'DATABASE_URL あり' if os.getenv('DATABASE_URL') else 'DB_HOST 使用'}")
     print(f"  PORT    : {PORT}")
     print("=" * 52)

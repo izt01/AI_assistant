@@ -119,6 +119,64 @@
 .store-closed{font-size:10px;background:rgba(220,38,38,.08);color:#dc2626;padding:1px 7px;border-radius:20px}
 .store-addr{font-size:11px;color:var(--subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .store-arrow{font-size:18px;color:var(--subtle);flex-shrink:0}
+/* ════ 旅行プランカード tp-* ════ */
+.travel-plan-wrap{margin-top:12px}
+.tp-header{font-size:12px;font-weight:700;color:var(--subtle);margin-bottom:10px;letter-spacing:.03em}
+.tp-tabs{display:flex !important;flex-direction:row !important;gap:6px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;flex-wrap:nowrap}
+.tp-tabs::-webkit-scrollbar{display:none}
+.tp-tab{flex-shrink:0;display:flex !important;flex-direction:column !important;align-items:center;gap:2px;padding:8px 14px;border-radius:10px;background:var(--cream2);border:1.5px solid var(--border);color:var(--muted);font-family:inherit;cursor:pointer;transition:all .18s;min-width:72px;text-align:center}
+.tp-tab.active{background:linear-gradient(135deg,var(--gold),var(--gold2)) !important;border-color:transparent !important;color:var(--ink) !important;box-shadow:0 3px 10px rgba(201,168,76,.25)}
+.tp-tab-label{font-size:12px;font-weight:700;display:block}
+.tp-tab-days{font-size:10px;opacity:.75;display:block}
+.tp-panel{animation:fadeUp .2s ease both}
+.tp-summary{background:linear-gradient(135deg,rgba(100,149,237,.08),rgba(100,149,237,.03));border:1px solid rgba(100,149,237,.2);border-radius:14px;padding:14px 16px;margin-bottom:16px}
+.tp-summary-title{font-size:14.5px;font-weight:800;color:var(--ink);margin-bottom:8px;line-height:1.4;font-family:'Fraunces',serif}
+.tp-summary-tags{display:flex !important;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.tp-tag{font-size:11px;padding:2px 9px;border-radius:20px;background:var(--cream2);color:var(--muted);border:1px solid var(--border)}
+.tp-tag-blue{background:rgba(100,149,237,.13);color:#4a7de8;border-color:rgba(100,149,237,.25);font-weight:700}
+.tp-highlight{font-size:11.5px;color:var(--ink3);line-height:1.6}
+.tp-day{margin-bottom:20px}
+.tp-day-header{display:flex !important;flex-direction:row !important;align-items:center;gap:10px;margin-bottom:10px}
+.tp-day-badge{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6495ed,#4a7de8);color:#fff;font-size:13px;font-weight:800;display:flex !important;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 8px rgba(100,149,237,.3)}
+.tp-day-info{flex:1;min-width:0}
+.tp-day-label{font-size:13.5px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif}
+.tp-day-loc{font-size:11px;color:var(--muted);margin-top:1px}
+.tp-transport{display:flex !important;align-items:center;gap:8px;background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:7px 12px;margin-bottom:10px;font-size:11.5px;color:var(--ink3);line-height:1.5}
+.tp-transport-icon{font-size:16px;flex-shrink:0}
+.tp-transport-text{flex:1}
+.tp-transport-btn{margin-left:auto;flex-shrink:0;font-size:11px;padding:4px 10px;border-radius:6px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);color:var(--gold);text-decoration:none;white-space:nowrap;font-weight:600;cursor:pointer;font-family:inherit}
+.tp-transport-btn:hover{background:rgba(201,168,76,.2)}
+.tp-timeline{padding-left:4px}
+.tp-item{display:flex !important;flex-direction:row !important;gap:10px;align-items:flex-start}
+.tp-item-left{display:flex !important;flex-direction:column !important;align-items:center;flex-shrink:0;width:36px}
+.tp-item-icon{width:34px;height:34px;border-radius:50%;background:var(--surface);border:2px solid var(--border);display:flex !important;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.tp-item-line{width:2px;flex:1;min-height:14px;background:linear-gradient(to bottom,rgba(100,149,237,.35),rgba(100,149,237,.1));margin:4px 0}
+.tp-item-body{flex:1;min-width:0;padding-bottom:12px}
+.tp-item-time{font-size:11px;font-weight:700;color:#6495ed;margin-bottom:4px;letter-spacing:.03em}
+.tp-item-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 12px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.tp-item-name{font-size:13px;font-weight:600;color:var(--ink);line-height:1.45;margin-bottom:4px}
+.tp-item-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:10.5px;color:var(--subtle)}
+.tp-item-note{color:var(--muted);border-left:2px solid var(--border);padding-left:6px}
+.tp-item-book-btn{display:inline-flex;align-items:center;gap:3px;margin-top:5px;font-size:10.5px;padding:3px 9px;border-radius:5px;background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.25);color:#4a7de8;text-decoration:none;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit}
+.tp-hotel{display:flex !important;align-items:center;justify-content:space-between;gap:10px;background:rgba(201,168,76,.06);border:1.5px solid rgba(201,168,76,.2);border-radius:12px;padding:11px 14px;margin-top:6px;margin-bottom:4px}
+.tp-hotel-left{display:flex !important;align-items:center;gap:10px;flex:1;min-width:0}
+.tp-hotel-icon{font-size:22px;flex-shrink:0}
+.tp-hotel-name{font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-hotel-area{font-size:10.5px;color:var(--muted);margin-top:2px}
+.tp-hotel-right{display:flex !important;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.tp-hotel-price{font-family:'Fraunces',serif;font-size:15px;font-weight:900;color:var(--gold)}
+.tp-hotel-price span{font-size:10px;font-weight:400;color:var(--muted)}
+.tp-hotel-btn{font-size:11px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.35);border-radius:6px;padding:4px 10px;white-space:nowrap;transition:all .15s}
+.tp-hotel-note{font-size:10.5px;color:var(--subtle)}
+.tp-more-btn{width:100%;margin-top:10px;padding:12px;background:rgba(100,149,237,.07);border:1.5px solid rgba(100,149,237,.2);border-radius:12px;color:#4a7de8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s;text-align:center;display:block}
+.tp-more-btn:hover{background:rgba(100,149,237,.13)}
+@media(max-width:768px){
+  .tp-tab{padding:7px 12px;min-width:60px}
+  .tp-tab-label{font-size:11px}
+  .tp-item-card{padding:8px 10px}
+  .tp-hotel{flex-direction:column !important;align-items:flex-start;gap:8px}
+  .tp-hotel-right{flex-direction:row !important;align-items:center;gap:10px}
+}
 </style>
 </head>
 <body>
@@ -505,6 +563,11 @@ async function sendMsg() {
     // 旅行AI: 旅行プランカード（extra._travel_plans または reply から抽出したplans）
     if(aiParam === 'travel' && extraPlans && extraPlans.length > 0) {
       renderTravelPlans(extraPlans)
+    }
+ 
+    // 旅行AI: 航空券カード（Amadeus）
+    if(aiParam === 'travel' && resp.extra && resp.extra._flights && resp.extra._flights.flights && resp.extra._flights.flights.length > 0) {
+      renderFlightCards(resp.extra._flights)
     }
  
     // 旅行AI: 国内ホテルカード（楽天）
@@ -1259,7 +1322,33 @@ function travelActivityIcon(activity) {
   return '📍'
 }
  
-
+ 
+ 
+// ── transport文字列から出発・到着時刻を抽出 ────────────────────
+function parseTransport(transport) {
+  if(!transport) return null
+  // "東京駅 07:26発 → 金沢駅 09:57着: ..." のパターン
+  const timePattern = /(\d{1,2}:\d{2})[発発]\s*[→→\-]\s*(?:.*?\s+)?(\d{1,2}:\d{2})[着着]/
+  const m = transport.match(timePattern)
+  if(m) return { dep: m[1], arr: m[2] }
+  // "07:26→09:57" のような簡略パターン
+  const simplePattern = /(\d{1,2}:\d{2})\s*[→→\-]\s*(\d{1,2}:\d{2})/
+  const m2 = transport.match(simplePattern)
+  if(m2) return { dep: m2[1], arr: m2[2] }
+  return null
+}
+ 
+// ── えきねっとディープリンクURL生成 ──────────────────────────────
+function ekiNetUrl(transport, fromCity, toCity) {
+  // えきねっとは出発駅・到着駅をパラメータで渡せる
+  const from = encodeURIComponent(fromCity || '')
+  const to   = encodeURIComponent(toCity   || '')
+  if(from && to) {
+    return `https://www.eki-net.com/travel/shinkansen/reserve/ReserveStart.aspx?dep=${from}&arr=${to}`
+  }
+  return 'https://www.eki-net.com/travel/shinkansen/'
+}
+ 
 // ── 交通手段から予約ディープリンクURLを生成 ────────────────────
 function travelBookingUrl(transport, fromCity, toCity, date) {
   if(!transport) return null
@@ -1267,7 +1356,7 @@ function travelBookingUrl(transport, fromCity, toCity, date) {
   const from = fromCity || ''
   const to   = toCity   || ''
   const d    = (date || '').replace(/-/g, '')  // YYYYMMDD
-
+ 
   // 新幹線・JR → えきねっと
   if (/新幹線|JR|jr|のぞみ|ひかり|こだま|はやぶさ|かがやき|つるぎ/.test(t)) {
     // えきねっとの列車検索URL（出発地・目的地・日付）
@@ -1278,7 +1367,7 @@ function travelBookingUrl(transport, fromCity, toCity, date) {
     })
     return `https://www.eki-net.com/travel/shinkansen/reserve/ReserveStart.aspx`
   }
-
+ 
   // 飛行機 → スカイスキャナー
   if (/飛行機|フライト|航空|ANA|JAL|LCC|空港/.test(t)) {
     const dateStr = date || ''
@@ -1299,20 +1388,20 @@ function travelBookingUrl(transport, fromCity, toCity, date) {
     }
     return `https://www.skyscanner.jp/`
   }
-
+ 
   // バス → 高速バスnet
   if (/バス|highway|高速/.test(t)) {
     return `https://www.kosokubus.com/`
   }
-
+ 
   // フェリー
   if (/船|フェリー|ferry/.test(t)) {
     return `https://www.ferrysearcher.com/`
   }
-
+ 
   return null
 }
-
+ 
 function renderTravelPlans(plans) {
   if (!plans || !plans.length) return
   _lastTravelPlans = plans
@@ -1364,15 +1453,33 @@ function renderTravelPlans(plans) {
             </div>
  
             <!-- 移動情報バナー -->
-            ${d.transport ? `
+            ${d.transport ? (()=>{
+              const times = parseTransport(d.transport)
+              const isFlight = /飛行機|フライト|航空|ANA|JAL/.test(d.transport)
+              const isBus    = /バス|highway/.test(d.transport)
+              const icon     = isFlight ? '✈️' : isBus ? '🚌' : '🚄'
+              const bookUrl  = isFlight
+                ? travelBookingUrl(d.transport, p.depart_city||p.days[0]?.location, d.location, '')
+                : ekiNetUrl(d.transport, p.depart_city||'', d.location||'')
+              const btnLabel = isFlight ? '航空券を検索 →' : isBus ? 'バスを検索 →' : 'えきねっとで予約 →'
+ 
+              return `
               <div class="tp-transport">
-                <span class="tp-transport-icon">🚄</span>
-                <span class="tp-transport-text">${d.transport}</span>
-                ${(()=>{
-                  const url = travelBookingUrl(d.transport, p.days[0]?.location, d.location, p.days[0]?.date)
-                  return url ? `<a href="${url}" target="_blank" class="tp-transport-btn">チケット検索 →</a>` : ''
-                })()}
-              </div>` : ''}
+                <span class="tp-transport-icon">${icon}</span>
+                <div style="flex:1;min-width:0">
+                  ${times ? `
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                      <span style="font-family:'Fraunces',serif;font-size:15px;font-weight:900;color:var(--ink)">${times.dep}</span>
+                      <span style="font-size:10px;color:var(--muted)">出発</span>
+                      <span style="flex:1;border-top:1px dashed var(--border);margin:0 4px"></span>
+                      <span style="font-size:10px;color:var(--muted)">到着</span>
+                      <span style="font-family:'Fraunces',serif;font-size:15px;font-weight:900;color:#4a7de8">${times.arr}</span>
+                    </div>` : ''}
+                  <div style="font-size:11px;color:var(--muted);line-height:1.4">${d.transport}</div>
+                </div>
+                ${bookUrl ? `<a href="${bookUrl}" target="_blank" class="tp-transport-btn">${btnLabel}</a>` : ''}
+              </div>`
+            })() : ''}
  
             <!-- タイムライン -->
             <div class="tp-timeline">
@@ -1450,6 +1557,92 @@ function switchTravelPlan(tabId, idx) {
   if (panel) panel.style.display = 'block'
   const tab = document.getElementById(`${tabId}-tab-${idx}`)
   if (tab) tab.classList.add('active')
+  scrollBottom()
+}
+ 
+ 
+// ─── 航空券カード描画（旅行AI / Google Flights Data via RapidAPI）─
+function renderFlightCards(data) {
+  const flights = data.flights || []
+  if (!flights.length) return
+ 
+  const originIata    = data.origin_iata    || ''
+  const destIata      = data.dest_iata      || ''
+  const date          = data.departure_date || ''
+  const dateFmt       = date.replace(/-/g, '')
+  const skyscannerTop = `https://www.skyscanner.jp/routes/${originIata}/${destIata}/${dateFmt}/`
+ 
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'margin-top:12px'
+ 
+  wrap.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--subtle);margin-bottom:8px">
+      ✈️ フライト検索結果（${originIata} → ${destIata}）
+    </div>
+ 
+    ${flights.slice(0,4).map(f => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
+                  padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:all .15s"
+           onclick="window.open('${f.book_url}','_blank')"
+           onmouseover="this.style.borderColor='rgba(100,149,237,.4)'"
+           onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+ 
+          <!-- 航空会社 -->
+          <div style="flex-shrink:0;width:46px;text-align:center">
+            <div style="font-size:20px">✈️</div>
+            <div style="font-size:9.5px;font-weight:700;color:var(--muted);margin-top:1px">${f.airline||'各社'}</div>
+          </div>
+ 
+          <!-- 時刻ライン -->
+          <div style="flex:1;min-width:140px">
+            ${f.departure_time && f.arrival_time ? `
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--ink)">${f.departure_time}</span>
+                <div style="flex:1;position:relative;border-top:1.5px solid var(--border)">
+                  <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+                              font-size:9px;color:var(--muted);white-space:nowrap;
+                              background:var(--surface);padding:0 3px">
+                    ${f.duration}${f.direct ? '' : ' (乗継)'}
+                  </div>
+                </div>
+                <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:#4a7de8">${f.arrival_time}</span>
+              </div>` : `
+              <div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:3px">
+                ${f.airline||'各社'} ${f.flight_number||''}
+              </div>`}
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              ${f.flight_number ? `<span style="font-size:10px;color:var(--subtle)">${f.flight_number}</span>` : ''}
+              ${f.direct ? `<span style="font-size:10px;background:rgba(22,163,74,.1);color:#16a34a;
+                                         padding:1px 6px;border-radius:4px;font-weight:600">直行</span>` : ''}
+            </div>
+          </div>
+ 
+          <!-- 料金 -->
+          <div style="flex-shrink:0;text-align:right">
+            <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:900;color:#4a7de8">
+              ¥${Number(f.price).toLocaleString()}
+            </div>
+            <div style="font-size:10px;color:var(--muted)">大人1名〜</div>
+          </div>
+        </div>
+      </div>`).join('')}
+ 
+    <!-- スカイスキャナー予約ボタン -->
+    <a href="${skyscannerTop}" target="_blank"
+       style="display:flex;align-items:center;justify-content:center;gap:6px;
+              padding:11px;border:1.5px solid rgba(100,149,237,.25);border-radius:10px;
+              color:#4a7de8;font-size:12.5px;font-weight:700;text-decoration:none;
+              background:rgba(100,149,237,.05);transition:all .15s"
+       onmouseover="this.style.background='rgba(100,149,237,.1)'"
+       onmouseout="this.style.background='rgba(100,149,237,.05)'">
+      スカイスキャナーで予約する →
+    </a>
+    <div style="font-size:10px;color:var(--subtle);text-align:center;margin-top:4px">
+      ※料金はGoogle Flightsの目安です。実際の空き状況はスカイスキャナーでご確認ください
+    </div>
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()
 }
  
