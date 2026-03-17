@@ -444,6 +444,326 @@ table.dt{width:100%;border-collapse:collapse}
   }
 }
 
+
+/* ══════════════════════════════════════════════
+   旅行プランカード（Travel Plan Cards）
+   .travel-plan-wrap 以下
+══════════════════════════════════════════════ */
+.travel-plan-wrap {
+  margin-top: 12px;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+.tp-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--subtle);
+  margin-bottom: 10px;
+  letter-spacing: .03em;
+}
+
+/* ── タブ ── */
+.tp-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.tp-tabs::-webkit-scrollbar { display: none; }
+.tp-tab {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--cream2);
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .18s;
+  min-width: 72px;
+}
+.tp-tab.active {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  border-color: transparent;
+  color: var(--ink);
+  box-shadow: 0 3px 10px rgba(201,168,76,.25);
+}
+.tp-tab-label { font-size: 12px; font-weight: 700; }
+.tp-tab-days  { font-size: 10px; opacity: .75; }
+
+/* ── パネル ── */
+.tp-panel { animation: fadeUp .2s ease both; }
+
+/* ── サマリーカード ── */
+.tp-summary {
+  background: linear-gradient(135deg, rgba(100,149,237,.08), rgba(100,149,237,.03));
+  border: 1px solid rgba(100,149,237,.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.tp-summary-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 8px;
+  line-height: 1.4;
+  font-family: 'Fraunces', serif;
+}
+.tp-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tp-tag {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: var(--cream2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.tp-tag-blue {
+  background: rgba(100,149,237,.13);
+  color: #4a7de8;
+  border-color: rgba(100,149,237,.25);
+  font-weight: 700;
+}
+.tp-highlight {
+  font-size: 11.5px;
+  color: var(--ink3);
+  line-height: 1.6;
+}
+
+/* ── 日程ブロック ── */
+.tp-day {
+  margin-bottom: 20px;
+}
+.tp-day-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tp-day-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6495ed, #4a7de8);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(100,149,237,.3);
+}
+.tp-day-info { flex: 1; min-width: 0; }
+.tp-day-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: 'Fraunces', serif;
+}
+.tp-day-loc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* ── 移動バナー ── */
+.tp-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201,168,76,.07);
+  border: 1px solid rgba(201,168,76,.2);
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  font-size: 11.5px;
+  color: var(--ink3);
+  line-height: 1.5;
+}
+.tp-transport-icon { font-size: 16px; flex-shrink: 0; }
+.tp-transport-text { flex: 1; }
+
+/* ── タイムライン ── */
+.tp-timeline { padding-left: 4px; }
+.tp-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.tp-item-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 36px;
+}
+.tp-item-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.tp-item-line {
+  width: 2px;
+  flex: 1;
+  min-height: 14px;
+  background: linear-gradient(to bottom, rgba(100,149,237,.35), rgba(100,149,237,.1));
+  margin: 4px 0;
+}
+.tp-item-body {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 12px;
+}
+.tp-item-time {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6495ed;
+  margin-bottom: 4px;
+  letter-spacing: .03em;
+}
+.tp-item-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.tp-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
+  margin-bottom: 4px;
+}
+.tp-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--subtle);
+}
+.tp-item-note {
+  color: var(--muted);
+  border-left: 2px solid var(--border);
+  padding-left: 6px;
+}
+
+/* ── 宿泊カード ── */
+.tp-hotel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(201,168,76,.06);
+  border: 1.5px solid rgba(201,168,76,.2);
+  border-radius: 12px;
+  padding: 11px 14px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.tp-hotel-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.tp-hotel-icon { font-size: 22px; flex-shrink: 0; }
+.tp-hotel-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tp-hotel-area {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.tp-hotel-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.tp-hotel-price {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--gold);
+}
+.tp-hotel-price span { font-size: 10px; font-weight: 400; color: var(--muted); }
+.tp-hotel-btn {
+  font-size: 11px;
+  color: var(--gold);
+  text-decoration: none;
+  border: 1px solid rgba(201,168,76,.35);
+  border-radius: 6px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.tp-hotel-btn:hover {
+  background: rgba(201,168,76,.1);
+}
+.tp-hotel-note {
+  font-size: 10.5px;
+  color: var(--subtle);
+}
+
+/* ── 詳細相談ボタン ── */
+.tp-more-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(100,149,237,.07);
+  border: 1.5px solid rgba(100,149,237,.2);
+  border-radius: 12px;
+  color: #4a7de8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .18s;
+  text-align: center;
+}
+.tp-more-btn:hover {
+  background: rgba(100,149,237,.13);
+}
+
+/* ── モバイル調整 ── */
+@media (max-width: 768px) {
+  .tp-tab        { padding: 7px 12px; min-width: 64px; }
+  .tp-tab-label  { font-size: 11.5px; }
+  .tp-item-name  { font-size: 12.5px; }
+  .tp-item-card  { padding: 8px 10px; }
+  .tp-hotel      { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tp-hotel-right{ flex-direction: row; align-items: center; gap: 10px; }
+}
+
 /* ── サイドバー sb-* クラス定義（shared.jsのbuildSidebarに対応） ── */
 .sb-logo { padding:18px 16px 14px; border-bottom:1px solid rgba(255,255,255,.07);
   font-family:'Fraunces',serif; font-size:18px; font-weight:900; color:#fff;
