@@ -129,8 +129,11 @@ class BaseAgent:
         text = last_assistant_msg.content or "{}"
         # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
         def extract_json(s):
+            import re as _re
             # コードブロック除去
-            s = s.replace("```json", "").replace("```", "").strip()
+            s = _re.sub(r'```json\s*', '', s)
+            s = _re.sub(r'```\s*',     '', s)
+            s = s.strip()
             # 純粋JSONなら直接パース
             try:
                 return json.loads(s)
@@ -144,11 +147,42 @@ class BaseAgent:
                     return json.loads(s[start:end+1])
                 except Exception:
                     pass
+            # 途中切れ対策: JSONDecodeErrorの位置まで切り詰めて再試行
+            if start != -1:
+                try:
+                    json.loads(s[start:])
+                except json.JSONDecodeError as e:
+                    try:
+                        return json.loads(s[start:start+e.pos])
+                    except Exception:
+                        pass
             return None
 
         parsed = extract_json(text)
         if parsed is None:
-            parsed = {"ai": self.AI_TYPE, "message": text, "suggestions": []}
+            # JSON全体の取り出しに失敗した場合: messageフィールドだけ正規表現で救済
+            import re as _re2
+            m = _re2.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+            fallback_msg = m.group(1) if m else ""
+            # plansも救済試行
+            plans_rescued = []
+            try:
+                pm = _re2.search(r'"plans"\s*:\s*(\[)', text)
+                if pm:
+                    chunk = text[pm.start(1):]
+                    depth, i = 0, 0
+                    for i, c in enumerate(chunk):
+                        if c == '[': depth += 1
+                        elif c == ']':
+                            depth -= 1
+                            if depth == 0: break
+                    plans_rescued = json.loads(chunk[:i+1])
+            except Exception:
+                pass
+            parsed = {"ai": self.AI_TYPE, "message": fallback_msg or text[:200], "suggestions": []}
+            if plans_rescued:
+                parsed["plans"] = plans_rescued
+            print(f"[base] JSON抽出失敗 fallback: msg={bool(fallback_msg)} plans={len(plans_rescued)}")
 
         parsed["ai"] = self.AI_TYPE
 
