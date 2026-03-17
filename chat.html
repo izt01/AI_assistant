@@ -418,7 +418,16 @@ function scrollBottom(force = false) {
 function parseMarkdown(text) {
   // JSON生テキストが来た場合は空文字にする（plansはカードで表示するため）
   const cleaned = text.replace(/```json/g,'').replace(/```/g,'').trim()
-  if(cleaned.startsWith('{') && cleaned.includes('"plans"')) return ''
+  if(cleaned.startsWith('{') && cleaned.includes('"plans"')) {
+  try {
+    const p = JSON.parse(cleaned)
+    return p.message ? parseMarkdown(p.message) : ''  // messageを取り出して再帰
+  } catch(e) {
+    // パース失敗時: JSONより前のテキストを使う
+    const ji = text.search(/{[\s\S]*"(?:message|plans)"/)
+    return ji > 0 ? parseMarkdown(text.slice(0, ji).trim()) : ''
+  }
+}
  
   let s = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
