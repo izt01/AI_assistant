@@ -129,17 +129,14 @@ class BaseAgent:
         text = last_assistant_msg.content or "{}"
         # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
         def extract_json(s):
-            import re
-            # コードブロック・前後テキストを除去
-            s = re.sub(r'```json\s*', '', s)
-            s = re.sub(r'```\s*',     '', s)
-            s = s.strip()
+            # コードブロック除去
+            s = s.replace("```json", "").replace("```", "").strip()
             # 純粋JSONなら直接パース
             try:
                 return json.loads(s)
             except Exception:
                 pass
-            # 最初の { から最後の } を抽出（途中切れ対策）
+            # 最初の { から最後の } を抽出
             start = s.find("{")
             end   = s.rfind("}")
             if start != -1 and end != -1 and end > start:
@@ -147,16 +144,6 @@ class BaseAgent:
                     return json.loads(s[start:end+1])
                 except Exception:
                     pass
-            # さらに fallback: json.JSONDecodeError の pos まで切り詰めて再試行
-            if start != -1:
-                try:
-                    chunk = s[start:]
-                    json.loads(chunk)
-                except json.JSONDecodeError as e:
-                    try:
-                        return json.loads(chunk[:e.pos])
-                    except Exception:
-                        pass
             return None
 
         parsed = extract_json(text)
@@ -185,6 +172,10 @@ class BaseAgent:
                     if t == "hotels":
                         data["source"] = data.get("source", "rakuten")  # ★ 将来: 'agoda' | 'booking'
                         parsed["_hotels"] = data
+
+                    # 航空券結果（旅行AI）
+                    if t == "flights":
+                        parsed["_flights"] = data
 
                     # 商品結果（買い物AI・家電AI・DIY AI）
                     if t == "products":

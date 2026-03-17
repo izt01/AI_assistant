@@ -350,6 +350,11 @@ table.dt{width:100%;border-collapse:collapse}
   .topbar         { display: none !important; }
   .main-wrap      { margin-left: 0 !important; }
 
+  /* チャット画面: ページ全体スクロール防止 */
+  body.chat-page  { overflow: hidden; height: 100dvh; height: 100svh; }
+  body.chat-page .app-layout { min-height: unset; height: 100%; overflow: hidden; }
+  body.chat-page .main-wrap  { min-height: unset; height: 100%; overflow: hidden; }
+
   /* モバイル専用要素を表示 */
   .mobile-nav     { display: flex; }
   .mobile-header  { display: flex; }
@@ -389,11 +394,16 @@ table.dt{width:100%;border-collapse:collapse}
   .err-msg        { color: #f87171; }
 
   /* チャット画面 */
-  .chat-shell     { height: calc(100svh - 52px - 60px); }
+  .chat-shell     {
+    height: calc(100svh - 52px - 60px);
+    height: calc(100dvh - 52px - 60px);
+    flex: 1;
+    min-height: 0;
+  }
   .chat-msgs      { padding: 12px; }
   .msg-bubble     { max-width: 85%; font-size: 13.5px; }
   .chat-input-area { padding: 10px 12px; }
-  .chat-topbar    { padding: 10px 14px; }
+  .chat-topbar    { display: none !important; }  /* モバイルはmobile-headerに統合 */
   .chat-ai-name   { font-size: 14px; }
   .chat-input-row textarea { font-size: 16px; /* iOS ズーム防止 */ }
 
