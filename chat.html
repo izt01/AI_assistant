@@ -421,17 +421,18 @@ async function sendMsg() {
     // replyがJSON全体になってしまった場合の安全策
     // （base.pyが古い版の場合など、サーバーがJSON全体をreplyとして返すケースに対応）
     let reply = resp.reply || ''
-    let extraPlans = resp.extra && resp.extra._travel_plans ? resp.extra._travel_plans : null
+    // extra.plans（base.pyが直接渡す）→ _travel_plans → replyのJSON の優先順で取得
+    let extraPlans = (resp.extra && resp.extra.plans)
+                  || (resp.extra && resp.extra._travel_plans)
+                  || null
  
-    if(reply.trimStart().startsWith('{') && reply.includes('"plans"')) {
+    if(!extraPlans && reply.trimStart().startsWith('{') && reply.includes('"plans"')) {
       try {
         const parsed = JSON.parse(reply)
         if(parsed.message) reply = parsed.message
-        if(parsed.plans && !extraPlans) extraPlans = parsed.plans
+        if(parsed.plans) extraPlans = parsed.plans
         console.log('[Travel] replyからplansを抽出:', extraPlans?.length, '案')
-      } catch(e) {
-        // パース失敗 → そのまま表示
-      }
+      } catch(e) { /* パース失敗 → そのまま表示 */ }
     }
  
     messages.push({ role:'assistant', content:reply })
@@ -1179,96 +1180,136 @@ function showCompareTable() {
 // ─── 旅行プランカード描画 ────────────────────────────────────────
 let _lastTravelPlans = []
  
+function travelActivityIcon(activity) {
+  const a = activity || ''
+  if (/新幹線|電車|鉄道|JR|jr|列車/.test(a)) return '🚄'
+  if (/バス|bus/.test(a)) return '🚌'
+  if (/飛行機|空港|フライト|航空/.test(a)) return '✈️'
+  if (/タクシー|cab/.test(a)) return '🚕'
+  if (/船|フェリー|クルーズ/.test(a)) return '🚢'
+  if (/自転車|レンタサイクル/.test(a)) return '🚴'
+  if (/車|ドライブ|レンタカー/.test(a)) return '🚗'
+  if (/朝食|モーニング|朝ごはん/.test(a)) return '🍳'
+  if (/昼食|ランチ|昼ごはん/.test(a)) return '🍱'
+  if (/夕食|ディナー|夜ごはん|夜食/.test(a)) return '🍽️'
+  if (/温泉|大浴場|お風呂/.test(a)) return '♨️'
+  if (/チェックイン|check.in|ホテル着/.test(a)) return '🏨'
+  if (/チェックアウト|check.out|出発/.test(a)) return '🧳'
+  if (/神社|寺|仏|shrine|temple/.test(a)) return '⛩️'
+  if (/城|お城|castle/.test(a)) return '🏯'
+  if (/博物館|美術館|資料館|museum/.test(a)) return '🏛️'
+  if (/公園|garden|庭園/.test(a)) return '🌿'
+  if (/海|ビーチ|beach/.test(a)) return '🏖️'
+  if (/山|登山|hiking/.test(a)) return '⛰️'
+  if (/買い物|ショッピング|土産|みやげ/.test(a)) return '🛍️'
+  if (/カフェ|cafe|コーヒー/.test(a)) return '☕'
+  if (/散策|散歩|観光|見学|巡り/.test(a)) return '🗺️'
+  if (/写真|撮影|フォト/.test(a)) return '📸'
+  return '📍'
+}
+ 
 function renderTravelPlans(plans) {
-  if(!plans || !plans.length) return
+  if (!plans || !plans.length) return
   _lastTravelPlans = plans
  
   const wrap = document.createElement('div')
-  wrap.className = 'travel-plan-cards'
- 
-  // タブ切り替えUI
-  const planIds = plans.map(p => p.plan_id || String(Math.random()))
-  const tabId   = 'tabs-' + Date.now()
+  wrap.className = 'travel-plan-wrap'
+  const tabId = 'tp-' + Date.now()
  
   wrap.innerHTML = `
-    <div style="font-size:12px;color:var(--subtle);margin-bottom:8px;font-weight:600">
-      ✈️ 旅行プラン ${plans.length}案
-    </div>
+    <div class="tp-header">✈️ 旅行プラン ${plans.length}案</div>
  
     <!-- プランタブ -->
-    <div id="${tabId}" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="tp-tabs" id="${tabId}">
       ${plans.map((p, i) => `
-        <button onclick="switchTravelPlan('${tabId}',${i})"
+        <button class="tp-tab ${i===0?'active':''}"
           id="${tabId}-tab-${i}"
-          style="padding:6px 14px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;transition:all .15s;
-            ${i===0
-              ? 'background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;font-weight:700'
-              : 'background:var(--cream2);border:1px solid var(--border);color:var(--muted)'}">
-          プラン${p.plan_id || i+1}
+          onclick="switchTravelPlan('${tabId}',${i})">
+          <span class="tp-tab-label">${p.theme || ('プラン' + (p.plan_id||i+1))}</span>
+          ${p.total_days ? `<span class="tp-tab-days">${p.total_days}日</span>` : ''}
         </button>`).join('')}
     </div>
  
     <!-- プランパネル -->
     ${plans.map((p, pi) => `
-      <div id="${tabId}-panel-${pi}" style="display:${pi===0?'block':'none'}">
-        <!-- プランヘッダー -->
-        <div style="background:linear-gradient(135deg,rgba(100,149,237,.1),rgba(100,149,237,.05));border:1px solid rgba(100,149,237,.2);border-radius:12px;padding:14px;margin-bottom:12px">
-          <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px">${p.title||'旅行プラン'}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--muted)">
-            ${p.theme    ? `<span style="background:rgba(100,149,237,.15);color:#4a7de8;padding:2px 9px;border-radius:20px;font-weight:600">${p.theme}</span>` : ''}
-            ${p.total_days ? `<span>📅 ${p.total_days}日間</span>` : ''}
-            ${p.budget_per_person ? `<span>💴 ${p.budget_per_person}/人</span>` : ''}
+      <div id="${tabId}-panel-${pi}" class="tp-panel" style="display:${pi===0?'block':'none'}">
+ 
+        <!-- サマリーカード -->
+        <div class="tp-summary">
+          <div class="tp-summary-title">${p.title || '旅行プラン'}</div>
+          <div class="tp-summary-tags">
+            ${p.theme            ? `<span class="tp-tag tp-tag-blue">${p.theme}</span>` : ''}
+            ${p.total_days       ? `<span class="tp-tag">📅 ${p.total_days}日間</span>` : ''}
+            ${p.budget_per_person? `<span class="tp-tag">💴 ${p.budget_per_person}/人</span>` : ''}
           </div>
-          ${p.highlight ? `<div style="margin-top:6px;font-size:11.5px;color:var(--ink3)">✨ ${p.highlight}</div>` : ''}
+          ${p.highlight ? `<div class="tp-highlight">✨ ${p.highlight}</div>` : ''}
         </div>
  
-        <!-- 日程タイムライン -->
+        <!-- 日程 -->
         ${(p.days||[]).map((d, di) => `
-          <div style="margin-bottom:14px">
-            <!-- 日付ヘッダー -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              <div style="width:32px;height:32px;background:linear-gradient(135deg,#6495ed,#4a7de8);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${d.day||di+1}</div>
-              <div>
-                <div style="font-size:13px;font-weight:700;color:var(--ink)">${d.date_label||`${d.day||di+1}日目`}</div>
-                <div style="font-size:11px;color:var(--muted)">${d.location||''}</div>
+          <div class="tp-day">
+ 
+            <!-- 日付バー -->
+            <div class="tp-day-header">
+              <div class="tp-day-badge">${d.day||di+1}</div>
+              <div class="tp-day-info">
+                <div class="tp-day-label">${d.date_label || ((d.day||di+1)+'日目')}</div>
+                ${d.location ? `<div class="tp-day-loc">📍 ${d.location}</div>` : ''}
               </div>
-              ${d.transport ? `<div style="margin-left:auto;font-size:10.5px;color:var(--subtle);text-align:right;max-width:140px;line-height:1.4">${d.transport}</div>` : ''}
             </div>
  
-            <!-- スケジュール -->
-            <div style="margin-left:16px;border-left:2px solid rgba(100,149,237,.25);padding-left:14px">
-              ${(d.schedule||[]).map(s => `
-                <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-start">
-                  <div style="min-width:40px;font-size:11px;font-weight:700;color:#6495ed;padding-top:1px">${s.time||''}</div>
-                  <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px">
-                    <div style="font-size:12.5px;font-weight:600;color:var(--ink)">${s.activity||''}</div>
-                    ${s.duration ? `<div style="font-size:10.5px;color:var(--subtle);margin-top:1px">⏱ ${s.duration}</div>` : ''}
-                    ${s.note     ? `<div style="font-size:10.5px;color:var(--muted);margin-top:3px;border-top:1px solid var(--border);padding-top:3px">💡 ${s.note}</div>` : ''}
+            <!-- 移動情報バナー -->
+            ${d.transport ? `
+              <div class="tp-transport">
+                <span class="tp-transport-icon">🚄</span>
+                <span class="tp-transport-text">${d.transport}</span>
+              </div>` : ''}
+ 
+            <!-- タイムライン -->
+            <div class="tp-timeline">
+              ${(d.schedule||[]).map((s, si) => `
+                <div class="tp-item">
+                  <div class="tp-item-left">
+                    <div class="tp-item-icon">${travelActivityIcon(s.activity)}</div>
+                    ${si < (d.schedule||[]).length-1 ? '<div class="tp-item-line"></div>' : ''}
+                  </div>
+                  <div class="tp-item-body">
+                    ${s.time ? `<div class="tp-item-time">${s.time}</div>` : ''}
+                    <div class="tp-item-card">
+                      <div class="tp-item-name">${s.activity||''}</div>
+                      <div class="tp-item-meta">
+                        ${s.duration ? `<span>⏱ ${s.duration}</span>` : ''}
+                        ${s.note     ? `<span class="tp-item-note">💡 ${s.note}</span>` : ''}
+                      </div>
+                    </div>
                   </div>
                 </div>`).join('')}
             </div>
  
-            <!-- ホテル -->
+            <!-- 宿泊カード -->
             ${d.hotel ? `
-              <div style="margin-left:16px;padding-left:14px;margin-top:6px">
-                <div style="background:rgba(100,149,237,.06);border:1px solid rgba(100,149,237,.2);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                  <span style="font-size:18px">🏨</span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:12px;font-weight:700;color:var(--ink)">${d.hotel.name||''}</div>
-                    ${d.hotel.area        ? `<div style="font-size:10.5px;color:var(--muted)">📍 ${d.hotel.area}</div>` : ''}
-                    ${d.hotel.booking_note? `<div style="font-size:10.5px;color:var(--subtle)">🔗 ${d.hotel.booking_note}</div>` : ''}
-                    ${d.hotel.price       ? `<div style="font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:var(--gold)">¥${Number(d.hotel.price).toLocaleString()}〜/泊</div>` : ''}
+              <div class="tp-hotel">
+                <div class="tp-hotel-left">
+                  <span class="tp-hotel-icon">🏨</span>
+                  <div>
+                    <div class="tp-hotel-name">${d.hotel.name||''}</div>
+                    ${d.hotel.area ? `<div class="tp-hotel-area">📍 ${d.hotel.area}</div>` : ''}
                   </div>
-                  ${d.hotel.url ? `<a href="${d.hotel.url}" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none;border:1px solid rgba(201,168,76,.3);border-radius:6px;padding:4px 10px;white-space:nowrap">予約 →</a>` : ''}
+                </div>
+                <div class="tp-hotel-right">
+                  ${d.hotel.price ? `<div class="tp-hotel-price">¥${Number(d.hotel.price).toLocaleString()}<span>/泊〜</span></div>` : ''}
+                  ${d.hotel.url
+                    ? `<a href="${d.hotel.url}" target="_blank" class="tp-hotel-btn">予約 →</a>`
+                    : (d.hotel.booking_note ? `<div class="tp-hotel-note">${d.hotel.booking_note}</div>` : '')}
                 </div>
               </div>` : ''}
           </div>
         `).join('')}
  
-        <!-- このプランで相談ボタン -->
-        <button onclick="sendChip('プラン${p.plan_id||pi+1}でもっと詳しく教えて')"
-          style="width:100%;margin-top:6px;padding:10px;background:rgba(100,149,237,.08);border:1px solid rgba(100,149,237,.25);border-radius:10px;color:#4a7de8;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">
-          プラン${p.plan_id||pi+1}でさらに詳しく相談する →
+        <!-- 詳細相談ボタン -->
+        <button class="tp-more-btn"
+          onclick="sendChip('プラン${p.plan_id||pi+1}でもっと詳しく教えて')">
+          プラン${p.plan_id||pi+1}の詳細を相談する →
         </button>
       </div>
     `).join('')}
@@ -1279,28 +1320,14 @@ function renderTravelPlans(plans) {
 }
  
 function switchTravelPlan(tabId, idx) {
-  // 全パネルを非表示
-  document.querySelectorAll(`[id^="${tabId}-panel-"]`).forEach((el, i) => {
-    el.style.display = 'none'
-  })
-  // 全タブをリセット
-  document.querySelectorAll(`[id^="${tabId}-tab-"]`).forEach(el => {
-    el.style.background   = 'var(--cream2)'
-    el.style.border       = '1px solid var(--border)'
-    el.style.color        = 'var(--muted)'
-    el.style.fontWeight   = 'normal'
-  })
-  // 選択したパネルを表示
+  // 全パネル非表示・全タブ非アクティブ
+  document.querySelectorAll(`[id^="${tabId}-panel-"]`).forEach(el => el.style.display = 'none')
+  document.querySelectorAll(`[id^="${tabId}-tab-"]`).forEach(el => el.classList.remove('active'))
+  // 選択パネル表示・タブアクティブ
   const panel = document.getElementById(`${tabId}-panel-${idx}`)
-  if(panel) panel.style.display = 'block'
-  // 選択したタブをアクティブに
+  if (panel) panel.style.display = 'block'
   const tab = document.getElementById(`${tabId}-tab-${idx}`)
-  if(tab) {
-    tab.style.background = 'linear-gradient(135deg,var(--gold),var(--gold2))'
-    tab.style.border     = 'none'
-    tab.style.color      = 'var(--ink)'
-    tab.style.fontWeight = '700'
-  }
+  if (tab) tab.classList.add('active')
   scrollBottom()
 }
  
