@@ -156,6 +156,27 @@ def db_init_lumina_tables():
         solo_or_group     VARCHAR(20) DEFAULT 'any',
         updated_at        TIMESTAMP   NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS lu_pref_health (
+        user_id             UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
+        health_goals        TEXT[]  DEFAULT '{}',   -- 目標（減量・筋力アップ・睡眠改善 等）
+        disliked_exercises  TEXT[]  DEFAULT '{}',   -- 嫌いな運動（絶対に提案しない）
+        liked_exercises     TEXT[]  DEFAULT '{}',   -- 好きな運動
+        exercise_freq       VARCHAR(30) DEFAULT 'unknown', -- 運動頻度（daily/weekly/rarely/none）
+        available_time_min  INT,                    -- 1回の運動に使える時間（分）
+        health_constraints  TEXT[]  DEFAULT '{}',   -- 身体的制約（膝が痛い・腰痛 等）
+        diet_style          VARCHAR(50),            -- 食事スタイル（標準・低糖質・ベジタリアン 等）
+        updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS lu_pref_diy (
+        user_id             UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
+        skill_level         VARCHAR(20) DEFAULT 'beginner', -- beginner/intermediate/advanced
+        owned_tools         TEXT[]  DEFAULT '{}',   -- 持っている工具
+        disliked_methods    TEXT[]  DEFAULT '{}',   -- 苦手な工法・工具（絶対に提案しない）
+        preferred_materials TEXT[]  DEFAULT '{}',   -- 好きな素材（木材・アイアン 等）
+        past_projects       TEXT[]  DEFAULT '{}',   -- 過去に作ったもの（参考用）
+        budget_range        VARCHAR(20),            -- DIY予算帯
+        updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS lu_constraints (
         user_id                 UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
         food_allergies          TEXT[]  DEFAULT '{}',
@@ -377,6 +398,9 @@ with app.app_context():
         "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS prefers_car BOOLEAN DEFAULT FALSE",
         "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS mobility_notes TEXT",
         "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS travel_companions TEXT[] DEFAULT '{}'",
+        # lu_pref_health / lu_pref_diy 新テーブル（既存ユーザー向け初期行挿入）
+        "INSERT INTO lu_pref_health (user_id) SELECT id FROM lu_users WHERE is_active=TRUE ON CONFLICT DO NOTHING",
+        "INSERT INTO lu_pref_diy (user_id) SELECT id FROM lu_users WHERE is_active=TRUE ON CONFLICT DO NOTHING",
     ]
     for sql in migrations:
         try:
@@ -467,7 +491,8 @@ def get_user_context(user_id):
     for tbl, key in [("lu_profiles","profile"),("lu_pref_food","food"),
                      ("lu_pref_shopping","shopping"),("lu_pref_travel","travel"),
                      ("lu_pref_restaurant","restaurant"),("lu_constraints","constraints"),
-                     ("lu_match_scores","match_score")]:
+                     ("lu_match_scores","match_score"),
+                     ("lu_pref_health","health_pref"),("lu_pref_diy","diy_pref")]:
         row  = db_exec(f"SELECT * FROM {tbl} WHERE user_id=%s", (user_id,), fetch="one")
         data = {k: safe_json(v) for k, v in dict(row).items()} if row else {}
         ctx[key] = data
@@ -501,6 +526,27 @@ def get_user_context(user_id):
     except Exception:
         ctx["learned_prefs"] = {}
 
+    # lu_learning_log から直近の学習イベント（reaction/action）を取得
+    try:
+        rows = db_exec(
+            "SELECT ai_type, learned_key, learned_val, source, confidence, created_at "
+            "FROM lu_learning_log WHERE user_id=%s "
+            "ORDER BY created_at DESC LIMIT 30",
+            (user_id,), fetch="all"
+        ) or []
+        learning_events = []
+        for r in rows:
+            learning_events.append({
+                "ai_type":   r["ai_type"],
+                "key":       r["learned_key"],
+                "val":       r["learned_val"],
+                "source":    r["source"],
+                "confidence": float(r["confidence"] or 0),
+            })
+        ctx["learning_events"] = learning_events
+    except Exception:
+        ctx["learning_events"] = []
+
     return ctx
 
 def build_context_injection(user_id, ai_type):
@@ -531,6 +577,28 @@ def build_context_injection(user_id, ai_type):
         s = ctx.get("shopping", {})
         if s.get("liked_brands"):    lines.append(f"好きなブランド: {', '.join(s['liked_brands'])}")
         if s.get("disliked_brands"): lines.append(f"苦手なブランド: {', '.join(s['disliked_brands'])}")
+
+    if ai_type in ("health", "general"):
+        h = ctx.get("health_pref", {})
+        if h.get("health_goals"):       lines.append(f"健康目標: {', '.join(h['health_goals'])}")
+        if h.get("liked_exercises"):    lines.append(f"好きな運動: {', '.join(h['liked_exercises'])}")
+        if h.get("disliked_exercises"): lines.append(f"⚠️ 嫌いな運動（絶対に提案しないこと）: {', '.join(h['disliked_exercises'])}")
+        if h.get("exercise_freq") and h["exercise_freq"] != "unknown":
+            lines.append(f"現在の運動頻度: {h['exercise_freq']}")
+        if h.get("available_time_min"): lines.append(f"1回に使える時間: {h['available_time_min']}分")
+        if h.get("health_constraints"): lines.append(f"⚠️ 身体的制約（負荷をかけないこと）: {', '.join(h['health_constraints'])}")
+        if h.get("diet_style"):         lines.append(f"食事スタイル: {h['diet_style']}")
+
+    if ai_type in ("diy", "general"):
+        d = ctx.get("diy_pref", {})
+        if d.get("skill_level") and d["skill_level"] != "beginner":
+            lines.append(f"DIYスキルレベル: {d['skill_level']}")
+        elif d.get("skill_level") == "beginner":
+            lines.append("DIYスキル: 初心者（難しい工程は省略・代替案を示すこと）")
+        if d.get("owned_tools"):         lines.append(f"持っている工具: {', '.join(d['owned_tools'])}")
+        if d.get("disliked_methods"):    lines.append(f"⚠️ 苦手な工法・工具（絶対に提案しないこと）: {', '.join(d['disliked_methods'])}")
+        if d.get("preferred_materials"): lines.append(f"好きな素材: {', '.join(d['preferred_materials'])}")
+        if d.get("budget_range"):        lines.append(f"DIY予算帯: {d['budget_range']}")
 
     c = ctx.get("constraints", {})
     cl = []
@@ -566,11 +634,49 @@ def build_context_injection(user_id, ai_type):
             elif p["confidence"] >= 2:  # like（推測レベルは除外）
                 shown_likes.append(f"{p['key']}: {val}")
     if shown_likes:
-        lines.append(f"会話から学習した好み（積極的に活用すること）:")
+        lines.append("会話から学習した好み（積極的に活用すること）:")
         for x in shown_likes[:8]: lines.append(f"   ✓ {x}")
     if shown_dislikes:
-        lines.append(f"会話から学習した除外条件（絶対に提案しないこと）:")
+        lines.append("会話から学習した除外条件（絶対に提案しないこと）:")
         for x in shown_dislikes[:8]: lines.append(f"   🚫 {x}")
+
+    # ── lu_learning_log から直近のフィードバックパターンをAIに注入 ──
+    # 「最近どんな反応をされているか」をAIが把握し、提案スタイルを自動調整する
+    events = ctx.get("learning_events", [])
+    if events:
+        # このAIと関係するイベントだけ絞り込む
+        ai_events = [e for e in events if e["ai_type"] == ai_type or e["ai_type"] == "general"]
+
+        # reaction イベントを集計（直近10件）
+        reaction_events = [e for e in ai_events if e["source"] == "reaction"][:10]
+        neg_reactions  = [e for e in reaction_events if e["val"] in ("wrong","off_topic","boring")]
+        pos_reactions  = [e for e in reaction_events if e["val"] in ("love","helpful")]
+        # action イベント（実際に行動した実績）
+        action_events  = [e for e in ai_events if e["source"] == "feedback"][:5]
+
+        if neg_reactions:
+            lines.append(f"【最近のフィードバック傾向 - 要改善】（直近{len(neg_reactions)}件の否定的反応）:")
+            neg_types = {}
+            for e in neg_reactions:
+                neg_types[e["val"]] = neg_types.get(e["val"], 0) + 1
+            for k, v in neg_types.items():
+                advice = {
+                    "wrong":     "内容の事実確認を強化し、正確な情報のみ提案すること",
+                    "off_topic": "ユーザーの質問に直接答えること。話題がずれないよう注意",
+                    "boring":    "提案に具体性・意外性を加えること。毎回同じパターンを避ける",
+                    "too_long":  "回答をより簡潔にまとめること",
+                    "too_short": "もう少し詳しい情報・理由を添えること",
+                }.get(k, "提案の質を改善すること")
+                lines.append(f"   ⚠️ {k} が{v}回 → {advice}")
+
+        if pos_reactions:
+            lines.append(f"【最近のフィードバック傾向 - 好評】（直近{len(pos_reactions)}件の肯定的反応）:")
+            lines.append(f"   ✓ このパターンの提案を継続・強化すること")
+
+        if action_events:
+            lines.append("【実際に行動した実績（最優先で参考にすること）】:")
+            for e in action_events[:3]:
+                lines.append(f"   ✓ {e['key'].replace('action_','')}: {e['val']}")
 
     sc           = ctx.get("match_score", {})
     overall      = sc.get("overall_score", 0)
@@ -629,25 +735,75 @@ def build_context_injection(user_id, ai_type):
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
+# ── スコア成長イベント重み定義 ────────────────────────────────
+# 「何が起きたか」によって加算量を変える。125回会話しないとフェーズ4にならない問題を解消。
+# overall: 全AIに共通の累積スコア（フェーズ判定に使用）
+# ai固有: そのAIに特化したスコア（AI内での詳細度調整に使用）
+SCORE_WEIGHTS = {
+    # イベント名            overall  ai固有
+    "chat_normal":        (  0.4,   0.8),   # 通常会話（変更なし）
+    "chat_helpful":       (  2.0,   3.5),   # helpful評価（引き上げ: +0.5/+1.0）
+    "chat_not_helpful":   ( -0.2,  -0.8),   # not helpful（ペナルティ軽減）
+    "pref_dislike":       (  1.5,   2.5),   # 嫌いを明言（重要な学習イベント）
+    "pref_like":          (  1.0,   2.0),   # 好きを明言
+    "pref_allergy":       (  2.0,   3.0),   # アレルギー・絶対制約を明言
+    "proposal_rejected":  (  0.8,   1.5),   # 提案を却下（学習した証拠）
+    "proposal_accepted":  (  1.5,   2.5),   # 提案を採用
+    "action_done":        (  2.0,   4.0),   # 実際に行動した（最高重み）
+    "reaction_love":      (  2.5,   4.5),   # love反応
+    "reaction_helpful":   (  1.5,   2.5),   # helpful反応
+    "reaction_wrong":     ( -0.5,  -1.0),   # wrong反応
+    "reaction_off_topic": ( -0.3,  -0.5),   # off_topic反応
+}
+
+AI_SCORE_COL = {
+    "recipe":"food_score","gourmet":"food_score","travel":"travel_score",
+    "shopping":"shopping_score","health":"health_score",
+    "appliance":"home_score","diy":"diy_score",
+}
+
+def _apply_score_event(user_id: str, ai_type: str, event: str):
+    """成長イベントをスコアに反映する共通関数"""
+    w = SCORE_WEIGHTS.get(event, (0.4, 0.8))
+    d_overall, d_ai = w
+    col = AI_SCORE_COL.get(ai_type, "overall_score")
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO lu_match_scores (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
+            if d_overall >= 0:
+                cur.execute(
+                    f"UPDATE lu_match_scores SET "
+                    f"overall_score=LEAST(100,overall_score+%s), "
+                    f"{col}=LEAST(100,{col}+%s), "
+                    f"last_updated=NOW() WHERE user_id=%s",
+                    (d_overall, d_ai, user_id)
+                )
+            else:
+                cur.execute(
+                    f"UPDATE lu_match_scores SET "
+                    f"overall_score=GREATEST(0,overall_score+%s), "
+                    f"{col}=GREATEST(0,{col}+%s), "
+                    f"last_updated=NOW() WHERE user_id=%s",
+                    (d_overall, d_ai, user_id)
+                )
+        conn.commit()
+    except Exception as e:
+        print(f"[Score] {event} 更新エラー: {e}")
+
 def update_match_score(user_id, ai_type, rating=0):
-    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score","shopping":"shopping_score",
-           "health":"health_score","appliance":"home_score","diy":"diy_score"}.get(ai_type,"overall_score")
+    """後方互換ラッパー。既存の rating=1/-1/0 呼び出しを成長イベントに変換"""
     conn = get_db()
     with conn.cursor() as cur:
         cur.execute("INSERT INTO lu_match_scores (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
         if rating == 1:
-            cur.execute(f"UPDATE lu_match_scores SET helpful_count=helpful_count+1,"
-                        f"total_sessions=total_sessions+1,{col}=LEAST(100,{col}+2.5),"
-                        f"overall_score=LEAST(100,overall_score+1.5),last_updated=NOW() WHERE user_id=%s", (user_id,))
-        elif rating == -1:
-            cur.execute(f"UPDATE lu_match_scores SET not_helpful_count=not_helpful_count+1,"
-                        f"total_sessions=total_sessions+1,{col}=GREATEST(0,{col}-0.5),"
-                        f"last_updated=NOW() WHERE user_id=%s", (user_id,))
-        else:
-            cur.execute(f"UPDATE lu_match_scores SET total_sessions=total_sessions+1,"
-                        f"{col}=LEAST(100,{col}+0.8),overall_score=LEAST(100,overall_score+0.4),"
-                        f"last_updated=NOW() WHERE user_id=%s", (user_id,))
+            cur.execute(
+                f"UPDATE lu_match_scores SET helpful_count=helpful_count+1,"
+                f"total_sessions=total_sessions+1,last_updated=NOW() WHERE user_id=%s", (user_id,)
+            )
     conn.commit()
+    event = {1: "chat_helpful", -1: "chat_not_helpful"}.get(rating, "chat_normal")
+    _apply_score_event(user_id, ai_type, event)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -678,7 +834,8 @@ def register():
                     " VALUES (%s,%s,%s,%s,%s,NOW())",
                     (uid, nickname, email, hash_pw(password), plan))
         for tbl in ["lu_profiles","lu_pref_food","lu_pref_shopping","lu_pref_travel",
-                    "lu_pref_restaurant","lu_constraints","lu_match_scores"]:
+                    "lu_pref_restaurant","lu_constraints","lu_match_scores",
+                    "lu_pref_health","lu_pref_diy"]:
             cur.execute(f"INSERT INTO {tbl} (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (uid,))
     conn.commit()
 
@@ -800,6 +957,10 @@ PREF_CONFIG = {
                                             "max_meal_budget","max_hotel_budget","max_shopping_budget",
                                             "max_travel_time_min",
                                             "cannot_drive","prefers_car","mobility_notes","travel_companions"]),
+    "health":      ("lu_pref_health",     ["health_goals","disliked_exercises","liked_exercises",
+                                            "exercise_freq","available_time_min","health_constraints","diet_style"]),
+    "diy":         ("lu_pref_diy",        ["skill_level","owned_tools","disliked_methods",
+                                            "preferred_materials","past_projects","budget_range"]),
 }
 
 @app.route("/api/preferences", methods=["GET"])
@@ -1049,6 +1210,11 @@ def feedback():
     except Exception as e:
         print(f"[Feedback] {e}")
     update_match_score(uid, d.get("ai_type","general"), rating)
+    # 採用/却下は別途 proposal イベントとしてスコア加算
+    if outcome == "accepted":
+        _apply_score_event(uid, d.get("ai_type","general"), "proposal_accepted")
+    elif outcome == "rejected":
+        _apply_score_event(uid, d.get("ai_type","general"), "proposal_rejected")
     return jsonify({"ok": True})
 
 
@@ -1087,23 +1253,17 @@ def post_reaction():
         (rid, message_id, uid, reaction, detail or None)
     )
 
-    # スコアを更新（reaction種別ごとに加算値が異なる）
-    score_delta = REACTION_SCORE_MAP[reaction]
-    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score",
-           "shopping":"shopping_score","health":"health_score",
-           "appliance":"home_score","diy":"diy_score"}.get(ai_type, "overall_score")
-    if score_delta["overall"] != 0 or score_delta["ai"] != 0:
-        db_exec(
-            f"UPDATE lu_match_scores SET "
-            f"overall_score = LEAST(100, GREATEST(0, overall_score + %s)), "
-            f"{col} = LEAST(100, GREATEST(0, {col} + %s)), "
-            f"last_updated = NOW() WHERE user_id=%s",
-            (score_delta["overall"], score_delta["ai"], uid)
-        )
+    # 成長イベントとしてスコアを更新
+    reaction_event_map = {
+        "love": "reaction_love", "helpful": "reaction_helpful",
+        "wrong": "reaction_wrong", "off_topic": "reaction_off_topic",
+    }
+    event_key = reaction_event_map.get(reaction, "chat_normal")
+    _apply_score_event(uid, ai_type, event_key)
 
-    # lu_learning_log に学習イベントとして記録
-    _log_learning(uid, ai_type, f"reaction_{reaction}", reaction, source="reaction",
-                  confidence=abs(score_delta["ai"]))
+    # lu_learning_log に学習イベントとして記録（detail も保存）
+    _log_learning(uid, ai_type, f"reaction_{reaction}", detail or reaction,
+                  source="reaction", confidence=abs(SCORE_WEIGHTS.get(event_key, (0,0))[1]))
 
     # lu_usage_stats の avg_rating を更新
     _upsert_usage_stats(uid, ai_type)
@@ -1216,20 +1376,12 @@ def log_action():
         (aid, uid, d["ai_type"], d.get("proposal_id"), d["action_type"], d.get("note"))
     )
 
-    # 実際に行動した = 提案が「役立った」証拠 → スコアを加算
-    col = {"recipe":"food_score","gourmet":"food_score","travel":"travel_score",
-           "shopping":"shopping_score","health":"health_score",
-           "appliance":"home_score","diy":"diy_score"}.get(d["ai_type"], "overall_score")
-    db_exec(
-        f"UPDATE lu_match_scores SET "
-        f"overall_score=LEAST(100,overall_score+1.0), {col}=LEAST(100,{col}+2.0), "
-        f"last_updated=NOW() WHERE user_id=%s",
-        (uid,)
-    )
+    # 実際に行動した = 最大重みの成長イベント
+    _apply_score_event(uid, d["ai_type"], "action_done")
 
     # 行動ログを学習イベントとして記録
     _log_learning(uid, d["ai_type"], f"action_{d['action_type']}",
-                  d.get("note","実行"), source="feedback", confidence=2.0)
+                  d.get("note","実行"), source="feedback", confidence=4.0)
 
     # proposal が存在すれば accepted に更新
     if d.get("proposal_id"):

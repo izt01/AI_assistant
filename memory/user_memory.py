@@ -49,6 +49,17 @@ _PREF_TO_LU_MAP = {
     # 飲食店 → lu_pref_restaurant
     "restaurant_genre_like": ("lu_pref_restaurant", "liked_genres",         "append_array", None),
     "smoking_ng":            ("lu_pref_restaurant", "smoking_ok",           "set_bool_false", None),
+    # 健康 → lu_pref_health
+    "health_goal":           ("lu_pref_health",     "health_goals",         "append_array", None),
+    "exercise_like":         ("lu_pref_health",     "liked_exercises",      "append_array", None),
+    "exercise_dislike":      ("lu_pref_health",     "disliked_exercises",   "append_array", None),
+    "health_constraint":     ("lu_pref_health",     "health_constraints",   "append_array", None),
+    "diet_style":            ("lu_pref_health",     "diet_style",           "set_text",     None),
+    # DIY → lu_pref_diy
+    "diy_skill":             ("lu_pref_diy",        "skill_level",          "set_text",     None),
+    "owned_tool":            ("lu_pref_diy",        "owned_tools",          "append_array", None),
+    "diy_dislike":           ("lu_pref_diy",        "disliked_methods",     "append_array", None),
+    "preferred_material":    ("lu_pref_diy",        "preferred_materials",  "append_array", None),
 }
 
 
@@ -340,6 +351,13 @@ def extract_and_save_memory(user_id: str, ai_type: str, messages: list, session_
 - transport_preference: レンタカー (like, 4) ← 「車で行きたい」「レンタカー希望」
 - travel_with: 子連れ (neutral, 4) ← 「子どもと行く」「子どもがいる」
 - mobility_constraint: 歩行制限あり (dislike, 4) ← 「足が悪い」「長時間歩けない」
+- health_goal: 減量 (like, 3) ← 「体重を落としたい」「痩せたい」
+- exercise_dislike: ランニング (dislike, 4) ← 「走るのは嫌い」「ランニングは無理」
+- exercise_like: ウォーキング (like, 3) ← 「歩くのは好き」「散歩なら続けられる」
+- health_constraint: 膝痛 (dislike, 5) ← 「膝が痛い」「膝に負担をかけたくない」
+- diy_skill: beginner (neutral, 4) ← 「DIYは初めて」「不器用」
+- diy_dislike: 電動工具 (dislike, 4) ← 「電動工具は使いたくない」「怖い」
+- owned_tool: 電動ドリル (like, 3) ← 「ドリルは持っている」「電動ドリルがある」
 
 抽出できない項目はnullまたは空配列にする。
 """
