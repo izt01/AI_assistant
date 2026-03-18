@@ -168,6 +168,11 @@ def db_init_lumina_tables():
         max_hotel_budget        INT,
         max_shopping_budget     INT,
         max_travel_time_min     INT,
+        -- 移動・身体制約（会話から自動学習）
+        cannot_drive            BOOLEAN DEFAULT FALSE,
+        prefers_car             BOOLEAN DEFAULT FALSE,
+        mobility_notes          TEXT,
+        travel_companions       TEXT[]  DEFAULT '{}',
         updated_at              TIMESTAMP NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS lu_match_scores (
@@ -367,6 +372,11 @@ with app.app_context():
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP",
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS total_sessions INT DEFAULT 0",
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS favorite_ai VARCHAR(30)",
+        # 移動・身体制約カラム（lu_constraints 拡張）
+        "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS cannot_drive BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS prefers_car BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS mobility_notes TEXT",
+        "ALTER TABLE lu_constraints ADD COLUMN IF NOT EXISTS travel_companions TEXT[] DEFAULT '{}'",
     ]
     for sql in migrations:
         try:
@@ -463,6 +473,34 @@ def get_user_context(user_id):
         ctx[key] = data
     row = db_exec("SELECT nickname FROM lu_users WHERE id=%s", (user_id,), fetch="one")
     ctx["nickname"] = row["nickname"] if row else "ユーザー"
+
+    # user_preferences（会話学習した好き嫌い）も取得して ctx に追加
+    # lu_pref_* と補完関係にある：手動設定は lu_pref_*、会話学習は user_preferences
+    try:
+        from memory.db import get_conn as mem_get_conn
+        import psycopg2.extras
+        with mem_get_conn() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT ai_type, key, value, confidence FROM user_preferences "
+                    "WHERE user_id = %s ORDER BY confidence DESC",
+                    (user_id,)
+                )
+                rows = cur.fetchall()
+        prefs_by_ai = {}
+        for r in (rows or []):
+            ai = r["ai_type"]
+            if ai not in prefs_by_ai:
+                prefs_by_ai[ai] = []
+            prefs_by_ai[ai].append({
+                "key": r["key"],
+                "value": r["value"],
+                "confidence": r["confidence"],
+            })
+        ctx["learned_prefs"] = prefs_by_ai
+    except Exception:
+        ctx["learned_prefs"] = {}
+
     return ctx
 
 def build_context_injection(user_id, ai_type):
@@ -505,9 +543,34 @@ def build_context_injection(user_id, ai_type):
     if c.get("max_meal_budget"):      cl.append(f"食事上限: ¥{c['max_meal_budget']:,}/回")
     if c.get("max_shopping_budget"):  cl.append(f"買い物上限: ¥{c['max_shopping_budget']:,}")
     if c.get("max_travel_time_min"):  cl.append(f"移動時間上限: {c['max_travel_time_min']}分")
+    # 移動・身体制約（会話から自動学習されたもの）
+    if c.get("cannot_drive"):         cl.append("🚫 運転不可（レンタカー・自家用車プランは絶対に提案しないこと）")
+    if c.get("prefers_car"):          cl.append("🚗 車移動希望（レンタカー等を積極的に使うプランを提案）")
+    if c.get("mobility_notes"):       cl.append(f"身体制約: {c['mobility_notes']}（長距離歩行・急な階段等を避けること）")
+    if c.get("travel_companions"):    cl.append(f"同行者: {', '.join(c['travel_companions'])}（同行者に合わせた提案をすること）")
     if cl:
         lines.append("⚠️ 以下は絶対に守ること（除外ルール）:")
         for x in cl: lines.append(f"   - {x}")
+
+    # ── 会話学習した好み（user_preferences）をAIに注入 ──────────
+    # lu_pref_* で拾えなかった細かい好き嫌いを補完する
+    learned = ctx.get("learned_prefs", {})
+    # このAI + general の両方のprefsを対象にする
+    relevant_ai_keys = [ai_type, "general"]
+    shown_likes, shown_dislikes = [], []
+    for ak in relevant_ai_keys:
+        for p in learned.get(ak, []):
+            val = p["value"].replace("[嫌い]", "").strip()
+            if p["confidence"] < 0:  # dislike
+                shown_dislikes.append(f"{p['key']}: {val}")
+            elif p["confidence"] >= 2:  # like（推測レベルは除外）
+                shown_likes.append(f"{p['key']}: {val}")
+    if shown_likes:
+        lines.append(f"会話から学習した好み（積極的に活用すること）:")
+        for x in shown_likes[:8]: lines.append(f"   ✓ {x}")
+    if shown_dislikes:
+        lines.append(f"会話から学習した除外条件（絶対に提案しないこと）:")
+        for x in shown_dislikes[:8]: lines.append(f"   🚫 {x}")
 
     sc           = ctx.get("match_score", {})
     overall      = sc.get("overall_score", 0)
@@ -735,7 +798,8 @@ PREF_CONFIG = {
     "constraints": ("lu_constraints",     ["food_allergies","dietary_restrictions","require_non_smoking",
                                             "require_stroller_ok","require_pet_ok","hotel_blacklist",
                                             "max_meal_budget","max_hotel_budget","max_shopping_budget",
-                                            "max_travel_time_min"]),
+                                            "max_travel_time_min",
+                                            "cannot_drive","prefers_car","mobility_notes","travel_companions"]),
 }
 
 @app.route("/api/preferences", methods=["GET"])

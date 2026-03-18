@@ -15,6 +15,133 @@ from .db import get_conn
 
 client = OpenAI()
 
+# ── lu系テーブルへの同期ヘルパー ─────────────────────────────
+# user_preferences（TEXT型user_id）→ lu_pref_* / lu_constraints（UUID型user_id）へ
+# 会話学習した内容をLuminaの構造化プロファイルに反映する
+
+# preference key → (テーブル名, カラム名, 型, 操作方法)
+# 操作: "append_array"=TEXT[]に追加, "set_bool"=BOOLEAN, "set_text"=TEXT, "set_int"=INT
+_PREF_TO_LU_MAP = {
+    # 食の好み → lu_pref_food
+    "food_allergy":          ("lu_pref_food",       "allergies",            "append_array", None),
+    "food_dislike":          ("lu_pref_food",       "disliked_cuisines",    "append_array", None),
+    "cuisine_dislike":       ("lu_pref_food",       "disliked_cuisines",    "append_array", None),
+    "ingredient_dislike":    ("lu_pref_food",       "disliked_ingredients", "append_array", None),
+    "food_like":             ("lu_pref_food",       "liked_cuisines",       "append_array", None),
+    "cuisine_like":          ("lu_pref_food",       "liked_cuisines",       "append_array", None),
+    "ingredient_like":       ("lu_pref_food",       "liked_ingredients",    "append_array", None),
+    "spice_level":           ("lu_pref_food",       "spice_level",          "set_int_map",  {"低め":1,"普通":2,"辛め":3,"かなり辛い":4,"激辛":5}),
+    # 旅行 → lu_pref_travel
+    "travel_style":          ("lu_pref_travel",     "travel_styles",        "append_array", None),
+    "travel_budget":         ("lu_pref_travel",     "budget_range",         "set_text",     None),
+    # 制約 → lu_constraints
+    "food_allergy_strict":   ("lu_constraints",     "food_allergies",       "append_array", None),
+    "dietary_restriction":   ("lu_constraints",     "dietary_restrictions", "append_array", None),
+    # 移動・身体制約 → lu_constraints（新カラム）
+    "transport_constraint":  ("lu_constraints",     "cannot_drive",         "set_bool_true", None),
+    "transport_preference":  ("lu_constraints",     "prefers_car",          "set_bool_true", None),
+    "mobility_constraint":   ("lu_constraints",     "mobility_notes",       "set_text",     None),
+    "travel_with_children":  ("lu_constraints",     "travel_companions",    "append_array", None),
+    "travel_with":           ("lu_constraints",     "travel_companions",    "append_array", None),
+    # 買い物 → lu_pref_shopping
+    "liked_brand":           ("lu_pref_shopping",   "liked_brands",         "append_array", None),
+    "disliked_brand":        ("lu_pref_shopping",   "disliked_brands",      "append_array", None),
+    # 飲食店 → lu_pref_restaurant
+    "restaurant_genre_like": ("lu_pref_restaurant", "liked_genres",         "append_array", None),
+    "smoking_ng":            ("lu_pref_restaurant", "smoking_ok",           "set_bool_false", None),
+}
+
+
+def _sync_pref_to_lu_tables(user_id: str, ai_type: str, preferences: list):
+    """
+    user_preferences に保存した内容を lu_pref_* / lu_constraints にも反映する。
+    user_id は TEXT型（memory側）→ UUID型（lu側）に変換が必要。
+    lu_users が見つからない場合はスキップ（memory専用ユーザーの場合）。
+    """
+    if not preferences:
+        return
+
+    # lu_users の UUID を TEXT の user_id から引く
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # まず TEXT を UUID として直接検索（Railway では同じDB）
+                try:
+                    cur.execute(
+                        "SELECT id FROM lu_users WHERE id = %s::uuid",
+                        (user_id,)
+                    )
+                except Exception:
+                    return
+                row = cur.fetchone()
+                if not row:
+                    return
+                lu_uid = row[0] if isinstance(row, tuple) else row["id"]
+
+                for pref in preferences:
+                    key       = pref.get("key", "").lower().replace(" ", "_")
+                    value     = pref.get("value", "")
+                    sentiment = pref.get("sentiment", "like")
+                    conf      = abs(pref.get("confidence", 1))
+
+                    # sentiment=dislike で food_allergy → food_allergy_strict にも書く
+                    keys_to_process = [key]
+                    if sentiment == "dislike" and "allergy" in key:
+                        keys_to_process.append("food_allergy_strict")
+                    if sentiment == "dislike" and key in ("food_like", "cuisine_like"):
+                        keys_to_process = ["food_dislike", "cuisine_dislike"]
+
+                    for k in keys_to_process:
+                        mapping = _PREF_TO_LU_MAP.get(k)
+                        if not mapping:
+                            continue
+                        tbl, col, op, mapping_dict = mapping
+
+                        # confidence が低すぎる場合はスキップ（推測レベルは構造化DBに書かない）
+                        if conf < 2 and op != "set_bool_true":
+                            continue
+
+                        clean_val = value.replace("[嫌い]", "").strip()
+
+                        try:
+                            if op == "append_array":
+                                cur.execute(
+                                    f"UPDATE {tbl} SET {col} = array_append("
+                                    f"  array_remove({col}, %s), %s"
+                                    f"), updated_at = NOW() WHERE user_id = %s",
+                                    (clean_val, clean_val, lu_uid)
+                                )
+                            elif op == "set_text":
+                                cur.execute(
+                                    f"UPDATE {tbl} SET {col} = %s, updated_at = NOW() WHERE user_id = %s",
+                                    (clean_val, lu_uid)
+                                )
+                            elif op == "set_bool_true":
+                                cur.execute(
+                                    f"UPDATE {tbl} SET {col} = TRUE, updated_at = NOW() WHERE user_id = %s",
+                                    (lu_uid,)
+                                )
+                            elif op == "set_bool_false":
+                                cur.execute(
+                                    f"UPDATE {tbl} SET {col} = FALSE, updated_at = NOW() WHERE user_id = %s",
+                                    (lu_uid,)
+                                )
+                            elif op == "set_int_map" and mapping_dict:
+                                int_val = mapping_dict.get(clean_val)
+                                if int_val:
+                                    cur.execute(
+                                        f"UPDATE {tbl} SET {col} = %s, updated_at = NOW() WHERE user_id = %s",
+                                        (int_val, lu_uid)
+                                    )
+                        except Exception as e_inner:
+                            print(f"[Memory] lu_sync skip {tbl}.{col}: {e_inner}")
+
+            conn.commit()
+            print(f"[Memory] lu_pref 同期完了: {len(preferences)}件")
+    except Exception as e:
+        print(f"[Memory] lu_sync エラー: {e}")
+
+
 # ── 記憶の読み込み ──────────────────────────────────────────
 
 def load_memory(user_id: str, ai_type: str) -> dict:
@@ -280,6 +407,12 @@ def extract_and_save_memory(user_id: str, ai_type: str, messages: list, session_
 
             conn.commit()
         print(f"[Memory] 記憶を保存しました (user={user_id}, ai={ai_type})")
+
+        # ── lu_pref_* / lu_constraints への同期（優先度高）──
+        # 会話から学習した好み・制約を Lumina 構造化テーブルにも反映する
+        all_prefs = data.get("preferences") or []
+        if all_prefs:
+            _sync_pref_to_lu_tables(user_id, ai_type, all_prefs)
 
     except Exception as e:
         print(f"[Memory] 保存エラー: {e}")
