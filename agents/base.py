@@ -3,6 +3,7 @@
 - 記憶の注入（プロンプトへの組み込み）
 - Function Callingループの共通処理
 - 会話終了時の記憶保存
+- 深掘り質問（clarifier）による意図理解の強化
 を共通化する。各AIはこれを継承してSYSTEM_PROMPTとTOOLSだけ定義すればよい。
 """
 import json
@@ -10,8 +11,12 @@ import uuid
 from openai import OpenAI
 from memory import load_memory, build_memory_prompt, extract_and_save_memory
 from prompts import get_prompt
+from .clarifier import analyze_intent, count_clarification_questions, build_clarification_response
 
 client = OpenAI()
+
+# 深掘り質問を行うAIタイプ（ツール検索系は意図理解が特に重要）
+CLARIFY_ENABLED_TYPES = {"travel", "shopping", "appliance", "health", "gourmet", "recipe", "diy"}
 
 
 class BaseAgent:
@@ -83,9 +88,55 @@ class BaseAgent:
             )
         return self.get_system_prompt()
 
+    def _save_preferences_from_clarifier(self, user_id: str, preferences_found: list):
+        """clarifierが検出した好き嫌いをDBに即時保存する"""
+        if not preferences_found:
+            return
+        try:
+            from memory.db import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    for pref in preferences_found:
+                        key   = pref.get("key")
+                        value = pref.get("value")
+                        sentiment = pref.get("sentiment", "like")
+                        if not key or not value:
+                            continue
+                        # 嫌いなものは負のconfidenceで保存、好きなものは正
+                        confidence = -3 if sentiment == "dislike" else 2
+                        cur.execute("""
+                            INSERT INTO user_preferences (user_id, ai_type, key, value, confidence, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, NOW())
+                            ON CONFLICT (user_id, ai_type, key) DO UPDATE SET
+                                value      = EXCLUDED.value,
+                                confidence = LEAST(GREATEST(user_preferences.confidence + %s, -10), 10),
+                                updated_at = NOW()
+                        """, (user_id, self.AI_TYPE, key, value, confidence, confidence))
+                conn.commit()
+            print(f"[BaseAgent] 好み保存: {preferences_found}")
+        except Exception as e:
+            print(f"[BaseAgent] 好み保存エラー: {e}")
+
     def run(self, messages: list, user_id: str = "default") -> dict:
         """専門AIを実行してパース済みdictを返す"""
         session_id = str(uuid.uuid4())
+
+        # ── 深掘り質問フェーズ ──────────────────────────────
+        if self.AI_TYPE in CLARIFY_ENABLED_TYPES and len(messages) >= 1:
+            q_count = count_clarification_questions(messages)
+            intent  = analyze_intent(messages, self.AI_TYPE, q_count)
+
+            # clarifierが検出した好き嫌いを即時保存
+            if intent.get("preferences_found"):
+                self._save_preferences_from_clarifier(user_id, intent["preferences_found"])
+
+            # まだ意図が不明で質問回数が少ない → 深掘り質問を返す
+            if not intent["ready_to_propose"] and intent.get("next_question"):
+                return build_clarification_response(
+                    question=intent["next_question"],
+                    ai_type=self.AI_TYPE,
+                )
+
         system     = self.build_system(user_id)
         msgs       = [{"role": "system", "content": system}] + messages
 
