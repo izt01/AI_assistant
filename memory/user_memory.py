@@ -209,6 +209,10 @@ def extract_and_save_memory(user_id: str, ai_type: str, messages: list, session_
 - food_allergy: 甲殻類 (dislike, 5)
 - travel_style: 一人旅 (like, 3)
 - cooking_dislike: 揚げ物 (dislike, 3)
+- transport_constraint: 公共交通機関のみ (dislike, 5) ← 「免許がない」「車は運転できない」
+- transport_preference: レンタカー (like, 4) ← 「車で行きたい」「レンタカー希望」
+- travel_with: 子連れ (neutral, 4) ← 「子どもと行く」「子どもがいる」
+- mobility_constraint: 歩行制限あり (dislike, 4) ← 「足が悪い」「長時間歩けない」
 
 抽出できない項目はnullまたは空配列にする。
 """
