@@ -127,7 +127,7 @@ class BaseAgent:
             last_assistant_msg = msg
 
         text = last_assistant_msg.content or "{}"
-        # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
+        # JSONをロバストに抽出（コードブロック・前後テキスト・途中切れに対応）
         def extract_json(s):
             import re as _re
             # コードブロック除去
@@ -159,36 +159,40 @@ class BaseAgent:
             return None
 
         parsed = extract_json(text)
+        print(f"[base] extract_json: success={parsed is not None} len={len(text)}")
+
         if parsed is None:
-            # JSON全体の取り出しに失敗した場合: messageフィールドだけ正規表現で救済
+            # JSON取り出し完全失敗 → messageとplansだけ正規表現で救済
             import re as _re2
             m = _re2.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
             fallback_msg = m.group(1) if m else ""
-            # plansも救済試行
             plans_rescued = []
             try:
                 pm = _re2.search(r'"plans"\s*:\s*(\[)', text)
                 if pm:
                     chunk = text[pm.start(1):]
-                    depth, i = 0, 0
+                    depth, last_i = 0, 0
                     for i, c in enumerate(chunk):
                         if c == '[': depth += 1
                         elif c == ']':
                             depth -= 1
-                            if depth == 0: break
-                    plans_rescued = json.loads(chunk[:i+1])
+                            if depth == 0:
+                                last_i = i
+                                break
+                    plans_rescued = json.loads(chunk[:last_i+1])
             except Exception:
                 pass
-            parsed = {"ai": self.AI_TYPE, "message": fallback_msg or text[:200], "suggestions": []}
+            parsed = {"ai": self.AI_TYPE, "message": fallback_msg or "", "suggestions": []}
             if plans_rescued:
                 parsed["plans"] = plans_rescued
-            print(f"[base] JSON抽出失敗 fallback: msg={bool(fallback_msg)} plans={len(plans_rescued)}")
+            print(f"[base] fallback: msg={bool(fallback_msg)} plans={len(plans_rescued)}")
 
         parsed["ai"] = self.AI_TYPE
 
         # messageフィールドの正規化（message / reply どちらでも受け取れるように）
         if "message" in parsed and "reply" not in parsed:
             parsed["reply"] = parsed.pop("message")
+        print(f"[base] reply={repr(str(parsed.get('reply',''))[:80])} plans={len(parsed.get('plans',[]))}")
 
         # search_keyword が含まれていればフロントに渡す（楽天ブラウザ検索用）
         if parsed.get("search_keyword"):
