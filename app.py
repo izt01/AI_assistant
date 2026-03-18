@@ -868,8 +868,11 @@ def chat():
             def patched_build(_):
                 return original_build(uid) + "\n\n" + context_injection
             agent.build_system = patched_build
-            result = agent.run(messages_in, user_id=uid)
-            agent.build_system = original_build
+            try:
+                result = agent.run(messages_in, user_id=uid)
+            finally:
+                # clarifier が早期 return した場合も確実に復元
+                agent.build_system = original_build
         else:
             from openai import OpenAI
             client = OpenAI()
@@ -889,7 +892,8 @@ def chat():
     result["ai"]  = ai_type
     reply_text    = result.get("reply") or result.get("message", "")
     suggestions   = result.get("suggestions", [])
-    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions")}
+    needs_clarification = result.get("needs_clarification", False)
+    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions","needs_clarification")}
     msg_id_ai     = str(uuid.uuid4())
 
     with conn.cursor() as cur:
@@ -898,7 +902,9 @@ def chat():
                     (msg_id_ai, session_id, uid, reply_text, ai_type,
                      json.dumps(extra, ensure_ascii=False) if extra else None))
         cur.execute("UPDATE lu_sessions SET msg_count=msg_count+2 WHERE id=%s", (session_id,))
-        cur.execute("UPDATE lu_users SET usage_count=usage_count+1 WHERE id=%s", (uid,))
+        # 深掘り質問中（clarifier返答）はusage_countを消費しない
+        if not needs_clarification:
+            cur.execute("UPDATE lu_users SET usage_count=usage_count+1 WHERE id=%s", (uid,))
     conn.commit()
 
     # lu_proposals に提案を自動保存（gourmet/travel/shopping等でitem情報がある場合）
@@ -957,6 +963,7 @@ def chat():
     )
 
     return jsonify({"reply": reply_text, "suggestions": suggestions, "extra": extra,
+                    "needs_clarification": needs_clarification,
                     "session_id": session_id, "message_id": msg_id_ai,
                     "proposal_id": proposal_id,
                     "usage_count": user["usage_count"] + 1, "agent": agent_name or "general"})

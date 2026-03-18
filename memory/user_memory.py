@@ -100,22 +100,34 @@ def build_memory_prompt(memory: dict, ai_type: str, overall_score: float = 0.0) 
         if p.get("family"):     lines.append(f"  家族構成: {p['family']}")
 
     if memory["preferences"]:
-        lines.append(f"\n【{ai_type}での蓄積された好み・嗜好】")
-        # confidence高い順にソート済み（DBのORDER BY confidence DESCを活用）
-        for key, info in memory["preferences"].items():
-            conf_val = info["confidence"]
-            if conf_val >= 7:
-                conf_label = "（確実・最重要）"  # 迷わず前提として使う
-            elif conf_val >= 3:
-                conf_label = "（確実）"          # 確認なしで使う
-            else:
-                conf_label = "（推測）"          # 一言確認してから使う
+        likes    = {k: v for k, v in memory["preferences"].items() if v["confidence"] >= 0}
+        dislikes = {k: v for k, v in memory["preferences"].items() if v["confidence"] < 0}
 
-            # スコアが高いほど確信度の高い好みを前面に出す
-            if overall_score >= 25 and conf_val >= 3:
-                lines.append(f"  ★ {key}: {info['value']} {conf_label}")
-            else:
-                lines.append(f"  {key}: {info['value']} {conf_label}")
+        if likes:
+            lines.append(f"\n【{ai_type}での好み・嗜好（積極的に活用すること）】")
+            for key, info in likes.items():
+                conf_val = info["confidence"]
+                if conf_val >= 7:
+                    conf_label = "（確実・最重要）"
+                elif conf_val >= 3:
+                    conf_label = "（確実）"
+                else:
+                    conf_label = "（推測）"
+                display_val = info["value"].replace("[嫌い]", "")
+                if overall_score >= 25 and conf_val >= 3:
+                    lines.append(f"  ★ {key}: {display_val} {conf_label}")
+                else:
+                    lines.append(f"  {key}: {display_val} {conf_label}")
+
+        if dislikes:
+            lines.append(f"\n【⚠️ {ai_type}での絶対除外リスト（提案に絶対含めないこと）】")
+            for key, info in dislikes.items():
+                conf_val = abs(info["confidence"])
+                display_val = info["value"].replace("[嫌い]", "")
+                if conf_val >= 4:
+                    lines.append(f"  🚫 {key}: {display_val}（絶対NG・確定）")
+                else:
+                    lines.append(f"  ✕ {key}: {display_val}（NG・要確認）")
 
     if memory["rejections"]:
         lines.append("\n【過去に却下された提案（絶対に繰り返さないこと）】")
@@ -165,15 +177,40 @@ def extract_and_save_memory(user_id: str, ai_type: str, messages: list, session_
     "family": "家族構成（あれば）"
   }},
   "preferences": [
-    {{"key": "項目名", "value": "値", "confidence": 確信度1-5}}
+    {{"key": "項目名", "value": "値", "confidence": 確信度1-5, "sentiment": "like/dislike/neutral"}}
   ],
   "proposals": [
     {{"content": "提案内容の要約", "outcome": "accepted/rejected/unknown", "reason": "理由（あれば）"}}
   ]
 }}
 
+## 抽出のルール
+- 好き嫌い・得意不得意は必ず抽出する（最重要）
+  - 「〇〇は嫌い」「〇〇は苦手」「〇〇はやりたくない」→ sentiment: "dislike", confidence: 4
+  - 「〇〇が好き」「〇〇なら続けられる」「〇〇は得意」→ sentiment: "like", confidence: 3
+  - アレルギー・食事制限 → sentiment: "dislike", confidence: 5（最高確信度）
+- 理由・動機の抽出（なぜそうしたいか）
+  - 「ゆっくりしたいから旅行」→ travel_motivation: 癒し・リラックス
+  - 「体重を落としたい」→ health_goal: 減量
+- 好みの強さ（confidence）の基準:
+  - 5: アレルギー・絶対条件（変わらない）
+  - 4: 「嫌い」「苦手」と明言
+  - 3: 「好き」「気に入った」と明言
+  - 2: 行動から推測（選んだ・使った）
+  - 1: 文脈から弱く推測
+- dislike の preference は confidence を負の値で保存するためそのまま返す
+  （DB側で sentiment=dislike を -confidence として扱う）
+
+## 抽出例
+- spice_level: 辛め (like, 3)
+- budget_feel: コスパ重視 (like, 2)
+- travel_motivation: 癒し・温泉 (like, 3)
+- exercise_dislike: ランニング (dislike, 4)
+- food_allergy: 甲殻類 (dislike, 5)
+- travel_style: 一人旅 (like, 3)
+- cooking_dislike: 揚げ物 (dislike, 3)
+
 抽出できない項目はnullまたは空配列にする。
-preferenceの例: spice_level=辛め, budget_feel=コスパ重視, travel_style=アクティブ, exercise_habit=週2回
 """
     try:
         res = client.chat.completions.create(
@@ -204,20 +241,25 @@ preferenceの例: spice_level=辛め, budget_feel=コスパ重視, travel_style=
                           profile.get("family")))
 
                 # 好み更新（confidence を累積）
+                # sentiment=dislike は confidence を負値で保存（好き=正、嫌い=負）
                 for pref in (data.get("preferences") or []):
                     if not pref.get("key") or not pref.get("value"):
                         continue
+                    raw_conf  = pref.get("confidence", 1)
+                    sentiment = pref.get("sentiment", "like")
+                    # 嫌い・苦手・アレルギーは負のconfidenceで保存
+                    conf_val  = -abs(raw_conf) if sentiment == "dislike" else abs(raw_conf)
+                    # dislike は value に [DISLIKE] プレフィックスを付けて区別可能にする
+                    stored_val = f"[嫌い]{pref['value']}" if sentiment == "dislike" else pref["value"]
                     cur.execute("""
                         INSERT INTO user_preferences (user_id, ai_type, key, value, confidence, updated_at)
                         VALUES (%s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (user_id, ai_type, key) DO UPDATE SET
                             value      = EXCLUDED.value,
-                            confidence = LEAST(user_preferences.confidence + %s, 10.0),
+                            confidence = LEAST(GREATEST(user_preferences.confidence + %s, -10.0), 10.0),
                             updated_at = NOW()
                     """, (user_id, ai_type,
-                          pref["key"], pref["value"],
-                          pref.get("confidence", 1),
-                          pref.get("confidence", 1)))
+                          pref["key"], stored_val, conf_val, conf_val))
 
                 # 提案履歴保存
                 for prop in (data.get("proposals") or []):
