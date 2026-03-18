@@ -537,19 +537,44 @@ async function sendMsg() {
     // replyにJSONが混入している場合、messageだけ取り出してplansも救済
     const looksJson = reply.replace(/```json|```/g,'').trimStart().startsWith('{')
     if(looksJson) {
+      const cleaned = reply.replace(/```json/g,'').replace(/```/g,'').trim()
+
+      // ① まず正常パースを試みる
+      let parsedOk = false
       try {
-        const cleaned = reply.replace(/```json/g,'').replace(/```/g,'').trim()
-        const parsed  = JSON.parse(cleaned)
-        // messageフィールドをreplyに差し替え（JSON生テキストをバブルに出さない）
+        const parsed = JSON.parse(cleaned)
         if(parsed.message) reply = parsed.message
-        // plansがまだ取れていなければreplyのJSONから救済
         if(parsed.plans && parsed.plans.length && !extraPlans) {
           extraPlans = parsed.plans
-          console.log('[Travel] replyからplansを救済:', extraPlans.length, '案')
+          console.log('[Travel] replyからplans救済(正常):', extraPlans.length, '案')
         }
-      } catch(e) {
-        // JSONパース失敗 → replyをそのまま表示（ただし先頭のコードブロックは除去）
-        reply = reply.replace(/```json/g,'').replace(/```/g,'').trim()
+        parsedOk = true
+      } catch(e) { /* 途中切れの可能性 */ }
+
+      // ② パース失敗時: 正規表現でmessageとplansを個別に抽出
+      if(!parsedOk) {
+        const mMsg = cleaned.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/)
+        if(mMsg) reply = mMsg[1].replace(/\\n/g,'\n').replace(/\\"/g,'"')
+        else reply = ''
+
+        if(!extraPlans) {
+          try {
+            const plansMatch = cleaned.match(/"plans"\s*:\s*(\[)/)
+            if(plansMatch) {
+              const start = cleaned.indexOf(plansMatch[1], cleaned.indexOf('"plans"'))
+              let depth = 0, end = start
+              for(let i = start; i < cleaned.length; i++) {
+                if(cleaned[i] === '[') depth++
+                else if(cleaned[i] === ']') { depth--; if(depth === 0){ end = i; break } }
+              }
+              const plansStr = cleaned.slice(start, end+1)
+              extraPlans = JSON.parse(plansStr)
+              console.log('[Travel] replyからplans救済(正規表現):', extraPlans.length, '案')
+            }
+          } catch(e2) {
+            console.warn('[Travel] plans抽出失敗:', e2.message)
+          }
+        }
       }
     }
  
