@@ -114,8 +114,16 @@ class BaseAgent:
                         """, (user_id, self.AI_TYPE, key, value, confidence, confidence))
                 conn.commit()
             print(f"[BaseAgent] 好み保存: {preferences_found}")
+
         except Exception as e:
             print(f"[BaseAgent] 好み保存エラー: {e}")
+
+        # ── lu_pref_* / lu_constraints への即時同期（try/except を分離）──
+        try:
+            from memory.user_memory import _sync_pref_to_lu_tables
+            _sync_pref_to_lu_tables(user_id, self.AI_TYPE, preferences_found)
+        except Exception as e2:
+            print(f"[BaseAgent] lu_sync エラー: {e2}")
 
     def run(self, messages: list, user_id: str = "default") -> dict:
         """専門AIを実行してパース済みdictを返す"""
