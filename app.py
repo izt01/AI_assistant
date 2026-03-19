@@ -1996,27 +1996,32 @@ def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
     """
     OpenAI Usage API を呼び出してトークン使用量を取得する。
-    新APIエンドポイント（v2）を試し、失敗したら旧エンドポイントにフォールバック。
+    2025年以降の仕様変更対応版：UNIXタイムスタンプ形式で呼び出す
     """
-    import urllib.request
+    import urllib.request, urllib.error
+    from datetime import datetime
+    errors = []
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    errors = []
 
-    # ── 新API: /v1/organization/usage/completions ──
-    # (2024年リリース・モデル別詳細が取得可能)
+    # ── ① 新仕様 /v1/organization/usage/completions（UNIXタイムスタンプ） ──
     try:
+        start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+        end_dt   = datetime.strptime(end_date, "%Y-%m-%d")
+        end_ts   = int(end_dt.replace(hour=23, minute=59, second=59).timestamp())
+
         url = (
             f"https://api.openai.com/v1/organization/usage/completions"
-            f"?start_time={start_date}T00:00:00Z&end_time={end_date}T23:59:59Z"
+            f"?start_time={start_ts}&end_time={end_ts}"
             f"&group_by=model&limit=100"
         )
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        # data.data[].results[].input_tokens, output_tokens, num_model_requests, model
+
         by_model = {}
         for bucket in data.get("data", []):
             for result in bucket.get("results", []):
@@ -2026,12 +2031,18 @@ def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
                 by_model[model]["input"]    += result.get("input_tokens", 0)
                 by_model[model]["output"]   += result.get("output_tokens", 0)
                 by_model[model]["requests"] += result.get("num_model_requests", 0)
-        if by_model:
-            return {"ok": True, "source": "v2", "by_model": by_model}
+        print(f"[OpenAI Usage] organization/usage 成功: {len(by_model)}モデル")
+        return {"ok": True, "source": "v2_org", "by_model": by_model}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:300]
+        err_detail = f"v2_org HTTP{e.code}: {body}"
+        errors.append(err_detail)
+        print(f"[OpenAI Usage] {err_detail}")
     except Exception as e:
-        errors.append(f"v2: {e}")
+        errors.append(f"v2_org: {e}")
+        print(f"[OpenAI Usage] v2_org エラー: {e}")
 
-    # ── 旧API: /v1/usage ──
+    # ── ② 旧API /v1/usage（まだ動く環境向けフォールバック） ──
     try:
         url = f"https://api.openai.com/v1/usage?date={start_date}"
         req = urllib.request.Request(url, headers=headers)
@@ -2046,11 +2057,16 @@ def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
             by_model[model]["output"]   += item.get("n_generated_tokens_total", 0)
             by_model[model]["requests"] += item.get("n_requests", 0)
         if by_model:
-            return {"ok": True, "source": "v1", "by_model": by_model}
+            print(f"[OpenAI Usage] v1/usage 成功: {len(by_model)}モデル")
+            return {"ok": True, "source": "v1_legacy", "by_model": by_model}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        errors.append(f"v1_legacy HTTP{e.code}: {body}")
+        print(f"[OpenAI Usage] v1/usage HTTP{e.code}: {body}")
     except Exception as e:
-        errors.append(f"v1: {e}")
+        errors.append(f"v1_legacy: {e}")
 
-    # ── Billing Usage API（クレジット消費額） ──
+    # ── ③ Billing API（最終フォールバック） ──
     try:
         url = (
             f"https://api.openai.com/v1/dashboard/billing/usage"
@@ -2059,16 +2075,22 @@ def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        total_cents = data.get("total_usage", 0)  # セント単位
+        total_cents = data.get("total_usage", 0)
+        print(f"[OpenAI Usage] billing API 成功: ${total_cents/100:.4f}")
         return {
             "ok": True,
             "source": "billing",
             "cost_usd_direct": round(total_cents / 100, 4),
             "by_model": {},
         }
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        errors.append(f"billing HTTP{e.code}: {body}")
+        print(f"[OpenAI Usage] billing HTTP{e.code}: {body}")
     except Exception as e:
         errors.append(f"billing: {e}")
 
+    print(f"[OpenAI Usage] 全エンドポイント失敗: {errors}")
     return {"ok": False, "errors": errors}
 
 
