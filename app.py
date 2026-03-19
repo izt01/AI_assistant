@@ -1730,12 +1730,29 @@ def admin_change_plan(uid):
 @admin_required
 def admin_deactivate_user(uid):
     db_exec("UPDATE lu_users SET is_active=FALSE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (uid,))
-    return jsonify({"ok": True})
+    # 反映確認（commit後の状態をログ）
+    row = db_exec("SELECT is_active FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    print(f"[Admin] deactivate uid={uid} → is_active={row['is_active'] if row else 'not found'}")
+    return jsonify({"ok": True, "is_active": False})
+
+@app.route("/api/admin/users/<uid>/reactivate", methods=["POST"])
+@admin_required
+def admin_reactivate_user(uid):
+    """停止中のアカウントを再有効化する"""
+    db_exec("UPDATE lu_users SET is_active=TRUE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (uid,))
+    row = db_exec("SELECT is_active FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    print(f"[Admin] reactivate uid={uid} → is_active={row['is_active'] if row else 'not found'}")
+    return jsonify({"ok": True, "is_active": True})
 
 @app.route("/api/admin/users/<uid>", methods=["DELETE"])
 @admin_required
 def admin_delete_user(uid):
+    # 削除前に対象ユーザーの存在確認
+    row = db_exec("SELECT id, nickname FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,), fetch="one")
+    if not row:
+        return jsonify({"error": "ユーザーが見つかりません"}), 404
     db_exec("DELETE FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,))
+    print(f"[Admin] deleted uid={uid} nickname={row['nickname'] if row else '?'}")
     return jsonify({"ok": True})
 
 @app.route("/api/admin/costs", methods=["GET"])
@@ -1861,47 +1878,200 @@ def admin_ai_usage():
     counts = {r["ai_type"]: r["c"] for r in rows}
     return jsonify({"counts": counts})
 
+# ── OpenAI モデル別コスト定義（$/1M tokens）───────────────────
+OPENAI_MODEL_COSTS = {
+    "gpt-4o":                     {"input": 2.50,  "output": 10.00},
+    "gpt-4o-2024-11-20":          {"input": 2.50,  "output": 10.00},
+    "gpt-4o-2024-08-06":          {"input": 2.50,  "output": 10.00},
+    "gpt-4o-mini":                {"input": 0.15,  "output": 0.60},
+    "gpt-4o-mini-2024-07-18":     {"input": 0.15,  "output": 0.60},
+    "gpt-4-turbo":                {"input": 10.00, "output": 30.00},
+    "gpt-4-turbo-2024-04-09":     {"input": 10.00, "output": 30.00},
+    "gpt-4":                      {"input": 30.00, "output": 60.00},
+    "gpt-3.5-turbo":              {"input": 0.50,  "output": 1.50},
+    "gpt-3.5-turbo-0125":         {"input": 0.50,  "output": 1.50},
+    "o1":                         {"input": 15.00, "output": 60.00},
+    "o1-mini":                    {"input": 3.00,  "output": 12.00},
+    "o3-mini":                    {"input": 1.10,  "output": 4.40},
+    "_default":                   {"input": 2.50,  "output": 10.00},
+}
+
+def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """モデル名からコストを計算（$/1M tokens）"""
+    # モデル名の部分一致でコストを検索
+    for key in OPENAI_MODEL_COSTS:
+        if key != "_default" and key in model:
+            rates = OPENAI_MODEL_COSTS[key]
+            return (input_tokens * rates["input"] + output_tokens * rates["output"]) / 1_000_000
+    rates = OPENAI_MODEL_COSTS["_default"]
+    return (input_tokens * rates["input"] + output_tokens * rates["output"]) / 1_000_000
+
+def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
+    """
+    OpenAI Usage API を呼び出してトークン使用量を取得する。
+    新APIエンドポイント（v2）を試し、失敗したら旧エンドポイントにフォールバック。
+    """
+    import urllib.request
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    errors = []
+
+    # ── 新API: /v1/organization/usage/completions ──
+    # (2024年リリース・モデル別詳細が取得可能)
+    try:
+        url = (
+            f"https://api.openai.com/v1/organization/usage/completions"
+            f"?start_time={start_date}T00:00:00Z&end_time={end_date}T23:59:59Z"
+            f"&group_by=model&limit=100"
+        )
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        # data.data[].results[].input_tokens, output_tokens, num_model_requests, model
+        by_model = {}
+        for bucket in data.get("data", []):
+            for result in bucket.get("results", []):
+                model = result.get("model", "unknown")
+                if model not in by_model:
+                    by_model[model] = {"input": 0, "output": 0, "requests": 0}
+                by_model[model]["input"]    += result.get("input_tokens", 0)
+                by_model[model]["output"]   += result.get("output_tokens", 0)
+                by_model[model]["requests"] += result.get("num_model_requests", 0)
+        if by_model:
+            return {"ok": True, "source": "v2", "by_model": by_model}
+    except Exception as e:
+        errors.append(f"v2: {e}")
+
+    # ── 旧API: /v1/usage ──
+    try:
+        url = f"https://api.openai.com/v1/usage?date={start_date}"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        by_model = {}
+        for item in data.get("data", []):
+            model = item.get("snapshot_id", item.get("model", "unknown"))
+            if model not in by_model:
+                by_model[model] = {"input": 0, "output": 0, "requests": 0}
+            by_model[model]["input"]    += item.get("n_context_tokens_total", 0)
+            by_model[model]["output"]   += item.get("n_generated_tokens_total", 0)
+            by_model[model]["requests"] += item.get("n_requests", 0)
+        if by_model:
+            return {"ok": True, "source": "v1", "by_model": by_model}
+    except Exception as e:
+        errors.append(f"v1: {e}")
+
+    # ── Billing Usage API（クレジット消費額） ──
+    try:
+        url = (
+            f"https://api.openai.com/v1/dashboard/billing/usage"
+            f"?start_date={start_date}&end_date={end_date}"
+        )
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        total_cents = data.get("total_usage", 0)  # セント単位
+        return {
+            "ok": True,
+            "source": "billing",
+            "cost_usd_direct": round(total_cents / 100, 4),
+            "by_model": {},
+        }
+    except Exception as e:
+        errors.append(f"billing: {e}")
+
+    return {"ok": False, "errors": errors}
+
+
 @app.route("/api/admin/openai-usage", methods=["GET"])
 @admin_required
 def admin_openai_usage():
-    """OpenAI Usage APIから当月の使用量・費用を取得"""
-    import urllib.request, urllib.error
+    """OpenAI Usage API から利用状況をリアルタイム取得（マルチエンドポイント対応）"""
     from datetime import date
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
-        return jsonify({"error": "OPENAI_API_KEY 未設定"}), 500
-    today = date.today()
-    start = today.replace(day=1).strftime("%Y-%m-%d")
-    end   = today.strftime("%Y-%m-%d")
-    try:
-        req = urllib.request.Request(
-            f"https://api.openai.com/v1/usage?date={start}",
-            headers={"Authorization": f"Bearer {api_key}"}
-        )
-        with urllib.request.urlopen(req, timeout=8) as r:
-            usage_data = json.loads(r.read())
-        # トークン数集計
-        total_ctx = sum(d.get("n_context_tokens_total", 0) for d in usage_data.get("data", []))
-        total_gen = sum(d.get("n_generated_tokens_total", 0) for d in usage_data.get("data", []))
-        # 簡易コスト計算（gpt-4o-mini想定: input $0.15/1M, output $0.60/1M）
-        cost_usd = (total_ctx * 0.15 + total_gen * 0.60) / 1_000_000
-        return jsonify({
-            "ok": True,
-            "period": {"start": start, "end": end},
-            "input_tokens": total_ctx,
-            "output_tokens": total_gen,
-            "cost_usd": round(cost_usd, 4),
-            "cost_jpy": round(cost_usd * 150),
-            "dashboard_url": "https://platform.openai.com/usage",
-        })
-    except Exception as e:
-        # Usage API失敗時はダッシュボードURLだけ返す
+        return jsonify({"ok": False, "error": "OPENAI_API_KEY 未設定"}), 500
+
+    today      = date.today()
+    month_str  = request.args.get("month")   # YYYY-MM 形式（省略時は当月）
+    if month_str:
+        try:
+            import calendar
+            y, m   = int(month_str[:4]), int(month_str[5:7])
+            start  = f"{y:04d}-{m:02d}-01"
+            last_d = calendar.monthrange(y, m)[1]
+            end    = f"{y:04d}-{m:02d}-{last_d:02d}"
+        except Exception:
+            start = today.replace(day=1).strftime("%Y-%m-%d")
+            end   = today.strftime("%Y-%m-%d")
+    else:
+        start = today.replace(day=1).strftime("%Y-%m-%d")
+        end   = today.strftime("%Y-%m-%d")
+
+    result = _fetch_openai_usage(api_key, start, end)
+
+    if not result["ok"]:
         return jsonify({
             "ok": False,
-            "error": str(e),
+            "errors": result.get("errors", []),
             "dashboard_url": "https://platform.openai.com/usage",
-            "note": "OpenAI Usage APIの取得に失敗しました。ダッシュボードで直接確認してください。"
+            "note": "OpenAI Usage APIの取得に失敗しました。APIキーにusage:readスコープが必要な場合があります。",
         })
+
+    by_model     = result.get("by_model", {})
+    total_input  = sum(v["input"]    for v in by_model.values())
+    total_output = sum(v["output"]   for v in by_model.values())
+    total_reqs   = sum(v["requests"] for v in by_model.values())
+
+    # コスト計算（直接取得できた場合はそちら優先）
+    if result.get("cost_usd_direct") is not None:
+        total_cost = result["cost_usd_direct"]
+    else:
+        total_cost = sum(_calc_cost(m, v["input"], v["output"]) for m, v in by_model.items())
+
+    # モデル別詳細（コスト付き）
+    models_detail = []
+    for model, tok in sorted(by_model.items(), key=lambda x: -x[1]["input"]):
+        cost = _calc_cost(model, tok["input"], tok["output"])
+        models_detail.append({
+            "model":         model,
+            "input_tokens":  tok["input"],
+            "output_tokens": tok["output"],
+            "requests":      tok["requests"],
+            "cost_usd":      round(cost, 4),
+            "cost_jpy":      round(cost * 150),
+        })
+
+    # 当月予算との比較
+    budget_row = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
+    budget_usd = float(budget_row["value"]) if budget_row else 100.0
+    used_pct   = round(total_cost / budget_usd * 100, 1) if budget_usd else 0
+
+    return jsonify({
+        "ok":             True,
+        "source":         result.get("source", "unknown"),
+        "period":         {"start": start, "end": end},
+        "total": {
+            "input_tokens":  total_input,
+            "output_tokens": total_output,
+            "requests":      total_reqs,
+            "cost_usd":      round(total_cost, 4),
+            "cost_jpy":      round(total_cost * 150),
+        },
+        "budget": {
+            "budget_usd": budget_usd,
+            "used_pct":   used_pct,
+        },
+        "models":         models_detail,
+        "dashboard_url":  "https://platform.openai.com/usage",
+        # 後方互換フィールド（既存dashboard.htmlが参照）
+        "input_tokens":   total_input,
+        "output_tokens":  total_output,
+        "cost_usd":       round(total_cost, 4),
+        "cost_jpy":       round(total_cost * 150),
+    })
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
