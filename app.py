@@ -1729,31 +1729,65 @@ def admin_change_plan(uid):
 @app.route("/api/admin/users/<uid>/deactivate", methods=["POST"])
 @admin_required
 def admin_deactivate_user(uid):
-    db_exec("UPDATE lu_users SET is_active=FALSE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (uid,))
-    # 反映確認（commit後の状態をログ）
-    row = db_exec("SELECT is_active FROM lu_users WHERE id=%s", (uid,), fetch="one")
-    print(f"[Admin] deactivate uid={uid} → is_active={row['is_active'] if row else 'not found'}")
-    return jsonify({"ok": True, "is_active": False})
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE lu_users SET is_active=FALSE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE",
+                (uid,)
+            )
+            affected = cur.rowcount
+        conn.commit()
+        print(f"[Admin] deactivate uid={uid} affected={affected}")
+        if affected == 0:
+            return jsonify({"ok": False, "error": "対象ユーザーが見つかりません（管理者アカウントは変更不可）"}), 404
+        return jsonify({"ok": True, "is_active": False})
+    except Exception as e:
+        print(f"[Admin] deactivate error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/admin/users/<uid>/reactivate", methods=["POST"])
 @admin_required
 def admin_reactivate_user(uid):
     """停止中のアカウントを再有効化する"""
-    db_exec("UPDATE lu_users SET is_active=TRUE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE", (uid,))
-    row = db_exec("SELECT is_active FROM lu_users WHERE id=%s", (uid,), fetch="one")
-    print(f"[Admin] reactivate uid={uid} → is_active={row['is_active'] if row else 'not found'}")
-    return jsonify({"ok": True, "is_active": True})
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE lu_users SET is_active=TRUE, updated_at=NOW() WHERE id=%s AND is_admin=FALSE",
+                (uid,)
+            )
+            affected = cur.rowcount
+        conn.commit()
+        print(f"[Admin] reactivate uid={uid} affected={affected}")
+        if affected == 0:
+            return jsonify({"ok": False, "error": "対象ユーザーが見つかりません（管理者アカウントは変更不可）"}), 404
+        return jsonify({"ok": True, "is_active": True})
+    except Exception as e:
+        print(f"[Admin] reactivate error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/admin/users/<uid>", methods=["DELETE"])
 @admin_required
 def admin_delete_user(uid):
-    # 削除前に対象ユーザーの存在確認
-    row = db_exec("SELECT id, nickname FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,), fetch="one")
-    if not row:
-        return jsonify({"error": "ユーザーが見つかりません"}), 404
-    db_exec("DELETE FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,))
-    print(f"[Admin] deleted uid={uid} nickname={row['nickname'] if row else '?'}")
-    return jsonify({"ok": True})
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            # 存在確認
+            cur.execute("SELECT id, nickname FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"ok": False, "error": "ユーザーが見つかりません（管理者アカウントは削除不可）"}), 404
+            nickname = row["nickname"] if row else "?"
+            # 削除実行
+            cur.execute("DELETE FROM lu_users WHERE id=%s AND is_admin=FALSE", (uid,))
+            affected = cur.rowcount
+        conn.commit()
+        print(f"[Admin] deleted uid={uid} nickname={nickname} affected={affected}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"[Admin] delete error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/admin/costs", methods=["GET"])
 @admin_required
