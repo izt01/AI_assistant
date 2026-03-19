@@ -150,35 +150,69 @@ class BaseAgent:
 
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
 
-        for i in range(3):
+        # GPT-4oが「了解しました。少々お待ちください」などの中間テキストを
+        # ツール呼び出し前に返すパターンを検知するパターン群
+        INTERIM_PATTERNS = [
+            "お待ちください", "調べます", "探します", "提案します",
+            "確認します", "検索します", "プランを", "ご提案",
+            "少々", "しばらく", "おすすめ", "調べて",
+        ]
+
+        for i in range(5):  # 最大5回（通常: ①中間テキスト ②ツール呼び出し ③最終返答）
             kwargs = {
                 "model":      "gpt-4o",
-                "max_tokens": 4000,  # ツール呼び出し＋JSONプラン生成に対応
+                "max_tokens": 4000,
                 "messages":   msgs,
             }
             if self.TOOLS:
                 kwargs["tools"] = self.TOOLS
-                # 1回目はtool呼び出しを強制、2回目以降はauto
                 kwargs["tool_choice"] = "auto"
 
             res = client.chat.completions.create(**kwargs)
             msg = res.choices[0].message
 
-            if not getattr(msg, "tool_calls", None):
-                last_assistant_msg = msg
-                break
+            # ── ツール呼び出しがある場合 → ツールを実行してループ続行 ──
+            if getattr(msg, "tool_calls", None):
+                msgs.append(msg)
+                for tc in msg.tool_calls:
+                    args   = json.loads(tc.function.arguments)
+                    fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
+                    result = fn(args)
+                    print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
+                    msgs.append({
+                        "role":         "tool",
+                        "tool_call_id": tc.id,
+                        "content":      json.dumps(result, ensure_ascii=False),
+                    })
+                continue  # ツール結果を渡して次のループへ
 
-            msgs.append(msg)
-            for tc in msg.tool_calls:
-                args   = json.loads(tc.function.arguments)
-                fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
-                result = fn(args)
-                print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
+            # ── テキスト返答の場合 ──
+            content_text = (msg.content or "").strip()
+
+            # 中間返答パターン（了解テキスト）かつまだリトライ余地がある場合
+            # → コンテキストに追加してプランを出すよう促す
+            is_interim = (
+                self.TOOLS  # ツールを持つAIのみ対象
+                and i < 3   # 最初の3回まで中間返答を許容
+                and any(p in content_text for p in INTERIM_PATTERNS)
+                and len(content_text) < 200  # 短いテキスト（本格的な返答ではない）
+                and not content_text.lstrip().startswith("{")  # JSONでない
+            )
+
+            if is_interim:
+                print(f"[Base] 中間返答を検知（{i+1}回目）: {content_text[:60]}... → リトライ")
+                msgs.append(msg)
+                # 「続けてプランや検索結果を出力してください」と促す
                 msgs.append({
-                    "role":         "tool",
-                    "tool_call_id": tc.id,
-                    "content":      json.dumps(result, ensure_ascii=False),
+                    "role":    "user",
+                    "content": "続けて、具体的なプランや検索結果を出力してください。",
                 })
+                continue
+
+            # 最終的な返答として確定
+            last_assistant_msg = msg
+            break
+
         else:
             last_assistant_msg = msg
 
