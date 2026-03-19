@@ -43,15 +43,15 @@ async function apiRequest(path, opts={}){
 }
 
 function _forceLogout(reason=''){
-  // 多重発火防止
+  // 既にログアウト処理中なら何もしない（多重発火防止）
   if(_forceLogout._running) return
   _forceLogout._running = true
   clearToken()
-  if(reason) {
-    // ログアウト理由をsessionStorageに保存してlogin画面で表示
+  if(reason){
     sessionStorage.setItem('logout_reason', reason)
   }
-  location.href = 'login.html'
+  // 少し遅延してから遷移（非同期処理が中途半端に終わらないように）
+  setTimeout(()=>{ location.href = 'login.html' }, 50)
 }
 _forceLogout._running = false
 
@@ -60,17 +60,24 @@ async function requireAuth(){
   try {
     const cached=getCachedUser()
     if(cached){
-      apiRequest('/auth/me').then(d=>{if(d.user)setCachedUser(d.user)}).catch(()=>{})
-      // 定期セッション監視を起動（初回のみ）
-      _startSessionWatcher()
-      return cached
+      // キャッシュがあっても必ずサーバーで有効性を確認する
+      // （停止・削除されたアカウントをキャッシュで通過させない）
+      try {
+        const d = await apiRequest('/auth/me')  // ← await で待つ
+        setCachedUser(d.user)
+        _startSessionWatcher()
+        return d.user
+      } catch(e) {
+        // 401 → apiRequest 内で _forceLogout 発火済み
+        return null
+      }
     }
     const d=await apiRequest('/auth/me')
     setCachedUser(d.user)
     _startSessionWatcher()
     return d.user
   } catch(e){
-    if(e.status===401){ clearToken(); location.href='login.html' }
+    if(e.status===401){ _forceLogout(e.error||'セッションが無効です') }
     return null
   }
 }
