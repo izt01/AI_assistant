@@ -153,7 +153,7 @@ class BaseAgent:
         for i in range(3):
             kwargs = {
                 "model":      "gpt-4o",
-                "max_tokens": 1500,
+                "max_tokens": 4000,  # ツール呼び出し＋JSONプラン生成に対応
                 "messages":   msgs,
             }
             if self.TOOLS:

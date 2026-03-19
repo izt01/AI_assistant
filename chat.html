@@ -215,7 +215,8 @@
 <script src="shared.js"></script>
 <script>
  
-const _aiParam = new URLSearchParams(location.search).get('ai') || 'all';
+const _aiParam    = new URLSearchParams(location.search).get('ai') || 'all';
+const _resumeSessionId = new URLSearchParams(location.search).get('session_id') || null;
 const _aiNames = {all:'総合AI',travel:'旅行AI',cooking:'料理AI',shopping:'買い物AI',diy:'DIY AI',home:'家電AI',health:'健康AI'};
 buildMobileHeader(_aiNames[_aiParam]||'チャット', 'dashboard.html',
   '<button class="mh-action" onclick="clearChat()" title="リセット" style="font-size:16px">↺</button>');
@@ -266,6 +267,53 @@ async function loadConfig() {
  
 loadConfig()
 requireAuth().then(u => { if(u){ user=u; init() } })
+
+// セッション復元（URLにsession_idがある場合）
+async function resumeSession(sid) {
+  try {
+    const d = await apiRequest(`/chat/sessions/${sid}/messages`)
+    if(!d.messages || d.messages.length === 0) return false
+
+    // セッションIDを復元
+    currentSessionId = sid
+
+    // 過去のメッセージをUIに復元
+    const msgArea = document.getElementById('chat-msgs')
+
+    // 「過去の会話を再開しました」バナーを表示
+    const banner = document.createElement('div')
+    banner.style.cssText = 'text-align:center;padding:8px 16px;margin:4px 0;font-size:11.5px;color:var(--muted);background:var(--cream2);border-radius:20px;border:1px solid var(--border)'
+    banner.textContent = `📂 過去の会話を再開 · ${d.messages.length}件のメッセージを復元`
+    msgArea.appendChild(banner)
+
+    // メッセージを復元
+    for (const m of d.messages) {
+      if(m.role === 'user') {
+        addMessage('user', m.content)
+        messages.push({ role: 'user', content: m.content })
+      } else if(m.role === 'assistant') {
+        addMessage('ai', m.content)
+        messages.push({ role: 'assistant', content: m.content })
+        // extraがあればカード類も復元（ホテル・商品カードなど）
+        if(m.extra) {
+          try {
+            const extra = typeof m.extra === 'string' ? JSON.parse(m.extra) : m.extra
+            // ホテルカード復元
+            if(extra._hotels && extra._hotels.length > 0) renderHotelCards(extra._hotels, msgArea)
+            // 旅行プラン復元
+            if(extra.plans && extra.plans.length > 0) renderTravelPlans(extra.plans, msgArea)
+          } catch(e) { /* extra復元失敗は無視 */ }
+        }
+      }
+    }
+
+    scrollBottom(true)
+    return true
+  } catch(e) {
+    console.warn('[resumeSession] 復元失敗:', e)
+    return false
+  }
+}
  
 // ─── 楽天市場 ブラウザ直接検索（買い物AI・家電AI）─────────
 async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPrice=null) {
@@ -301,7 +349,7 @@ async function searchRakutenDirect(keyword, maxResults=6, minPrice=null, maxPric
 }
  
 // ─── 初期化 ──────────────────────────────────────────────────
-function init() {
+async function init() {
   buildSidebar('chat-'+aiParam)
   buildHeader('AIチャット')
  
@@ -321,7 +369,18 @@ function init() {
   if(mhTitle) mhTitle.textContent = `${ai.icon} ${ai.name}`
  
   updateUsageBadge()
- 
+
+  // ── セッション復元（ダッシュボードの「最近の会話」から遷移した場合）──
+  if(_resumeSessionId) {
+    const restored = await resumeSession(_resumeSessionId)
+    if(restored) {
+      // 復元成功 → グリーティングは表示しない。チップも出さない
+      return
+    }
+    // 復元失敗 → 通常の新規会話として始める
+  }
+
+  // 通常の新規会話開始
   const greeting = ai.greetings[Math.floor(Math.random()*ai.greetings.length)]
   addMessage('ai', greeting)
  
@@ -509,11 +568,18 @@ async function sendMsg() {
   showTyping()
  
   try {
+    // messages が長くなりすぎるとコンテキスト超過でツール呼び出しが失敗するため
+    // 直近 20 件（最新のやり取り10往復分）だけ送る
+    const MESSAGES_LIMIT = 20
+    const trimmedMessages = messages.length > MESSAGES_LIMIT
+      ? messages.slice(-MESSAGES_LIMIT)
+      : messages
+
     const resp = await apiRequest('/chat', {
       method: 'POST',
       body: {
         ai_type:    aiParam,
-        messages:   messages,
+        messages:   trimmedMessages,
         session_id: currentSessionId,
         lat:        window._userLat || null,
         lng:        window._userLng || null,

@@ -46,6 +46,9 @@ _AREA_CODE_MAP = {
     "富良野":("hokkaido","furano"),  "知床":("hokkaido","abashiri"),
     "仙台":("miyagi","sendai"),      "宮城":("miyagi","sendai"),
     "松島":("miyagi","matsushima"),  "青森":("aomori","aomori"),
+    "弘前":("aomori","hirosaki"),     "八戸":("aomori","hachinohe"),
+    "盛岡":("iwate","morioka"),       "岩手":("iwate","morioka"),
+    "平泉":("iwate","hiraizumi"),     "花巻":("iwate","hanamaki"),
     "秋田":("akita","akita"),        "山形":("yamagata","yamagata"),
     "蔵王":("yamagata","zao"),       "福島":("fukushima","fukushima"),
     # ── 関東 ──
@@ -96,10 +99,54 @@ _AREA_CODE_MAP = {
     "石垣":("okinawa","ishigaki"),   "宮古":("okinawa","miyakojima"),
 }
 
+# 都道府県名 → middleClassCode のフォールバックマップ
+# エリアコードマップにない地名でも都道府県レベルで検索できるようにする
+_PREF_FALLBACK = {
+    "北海道": ("hokkaido","sapporo"),
+    "青森県": ("aomori","aomori"),   "青森": ("aomori","aomori"),
+    "岩手県": ("iwate","morioka"),   "岩手": ("iwate","morioka"),
+    "宮城県": ("miyagi","sendai"),   "宮城": ("miyagi","sendai"),
+    "秋田県": ("akita","akita"),     "秋田": ("akita","akita"),
+    "山形県": ("yamagata","yamagata"),"山形": ("yamagata","yamagata"),
+    "福島県": ("fukushima","fukushima"),"福島": ("fukushima","fukushima"),
+    "茨城県": ("ibaraki","mito"),    "茨城": ("ibaraki","mito"),
+    "栃木県": ("tochigi","nikko"),   "群馬県": ("gunma","kusatsu"),
+    "埼玉県": ("saitama","omiya"),   "千葉県": ("chiba","chiba"),
+    "東京都": ("tokyo","tokyo"),     "神奈川県": ("kanagawa","yokohama"),
+    "新潟県": ("niigata","niigata"), "富山県": ("toyama","toyama"),
+    "石川県": ("ishikawa","kanazawa"),"福井県": ("fukui","fukui"),
+    "山梨県": ("yamanashi","kofu"),  "長野県": ("nagano","nagano"),
+    "岐阜県": ("gifu","gifu"),       "静岡県": ("shizuoka","shizuoka"),
+    "愛知県": ("aichi","nagoya"),    "三重県": ("mie","ise"),
+    "滋賀県": ("shiga","ootsu"),     "京都府": ("kyoto","shi"),
+    "大阪府": ("osaka","osaka"),     "兵庫県": ("hyogo","kobe"),
+    "奈良県": ("nara","nara"),       "和歌山県": ("wakayama","wakayama"),
+    "鳥取県": ("tottori","tottori"), "島根県": ("shimane","matsue"),
+    "岡山県": ("okayama","okayama"), "広島県": ("hiroshima","hiroshima"),
+    "山口県": ("yamaguchi","yamaguchi"),"徳島県": ("tokushima","tokushima"),
+    "香川県": ("kagawa","takamatsu"),"愛媛県": ("ehime","matsuyama"),
+    "高知県": ("kochi","kochi"),     "福岡県": ("fukuoka","fukuoka"),
+    "佐賀県": ("saga","saga"),       "長崎県": ("nagasaki","nagasaki"),
+    "熊本県": ("kumamoto","kumamoto"),"大分県": ("oita","beppu"),
+    "宮崎県": ("miyazaki","miyazaki"),"鹿児島県": ("kagoshima","kagoshima"),
+    "沖縄県": ("okinawa","naha"),
+}
+
 def _keyword_to_area_codes(keyword: str) -> tuple | None:
-    """都市名・地名から (middleClassCode, smallClassCode) を返す。見つからなければNone。"""
+    """
+    都市名・地名から (middleClassCode, smallClassCode) を返す。
+    1. 完全一致 → 2. 部分一致 → 3. 都道府県名フォールバック → None
+    """
+    # 1. 完全一致
+    if keyword in _AREA_CODE_MAP:
+        return _AREA_CODE_MAP[keyword]
+    # 2. keywordにエリア名が含まれる（例: "金沢駅周辺" → "金沢"）
     for name, codes in _AREA_CODE_MAP.items():
         if name in keyword:
+            return codes
+    # 3. 都道府県名フォールバック（例: "弘前市" → 青森県の主要エリアで検索）
+    for pref, codes in _PREF_FALLBACK.items():
+        if pref in keyword:
             return codes
     return None
 
@@ -196,7 +243,71 @@ def search_hotels(keyword: str, checkin: str = "", checkout: str = "", adult_num
                 "checkout":     checkout,
                 "adult_num":    adult_num,
             })
-        return {"available": True, "type": "hotels", "hotels": hotels, "adult_num": adult_num}
+        # ── 0件のとき都道府県レベルで再検索 ──────────────────────
+        if not hotels and small_code != "":
+            # まず都道府県の主要都市（smallCode なし）で再検索
+            fallback_params = {**params}
+            fallback_params.pop("smallClassCode", None)
+            fallback_params.pop("detailClassCode", None)
+            fallback_params["hits"] = max_results
+
+            for _attempt2 in range(2):
+                r2 = requests.get(
+                    "https://openapi.rakuten.co.jp/engine/api/Travel/SimpleHotelSearch/20170426",
+                    params=fallback_params,
+                    headers=_auth_headers(),
+                    timeout=8,
+                )
+                print(f"[Rakuten Hotels] fallback middle={middle_code} only → status={r2.status_code}")
+                if r2.status_code != 429:
+                    break
+                import time as _time2; _time2.sleep(1.5)
+
+            data2 = r2.json()
+            if not data2.get("error"):
+                for h in data2.get("hotels", []):
+                    try:
+                        if isinstance(h, dict) and "hotel" in h:
+                            i = h["hotel"][0]["hotelBasicInfo"]
+                        elif isinstance(h, list):
+                            i = h[0].get("hotelBasicInfo", {})
+                        else:
+                            i = h.get("hotelBasicInfo", {})
+                    except (KeyError, IndexError, TypeError):
+                        continue
+                    if not i:
+                        continue
+                    hotel_no = i.get("hotelNo", "")
+                    checkin_fmt = checkin.replace("-", "") if checkin else ""
+                    deep_url = f"https://hotel.travel.rakuten.co.jp/hotelinfo/plan/{hotel_no}"
+                    if checkin_fmt:
+                        deep_url += f"?f_hizuke={checkin_fmt}&f_otona_su={adult_num}&f_heya_su=1&f_syu=ch"
+                    hotels.append({
+                        "name":         i.get("hotelName"),
+                        "price":        i.get("hotelMinCharge"),
+                        "area":         i.get("address1", "") + i.get("address2", ""),
+                        "access":       i.get("access"),
+                        "review":       i.get("reviewAverage"),
+                        "review_count": i.get("reviewCount"),
+                        "url":          i.get("hotelInformationUrl"),
+                        "image":        i.get("hotelImageUrl"),
+                        "hotel_no":     hotel_no,
+                        "deep_url":     deep_url,
+                        "checkin":      checkin,
+                        "checkout":     checkout,
+                        "adult_num":    adult_num,
+                        "fallback_area": True,  # 代替エリアで見つかったフラグ
+                    })
+                if hotels:
+                    print(f"[Rakuten Hotels] fallback で {len(hotels)} 件取得")
+
+        result = {"available": True, "type": "hotels", "hotels": hotels, "adult_num": adult_num}
+        if not hotels:
+            result["reason"] = f"楽天トラベルで'{keyword}'周辺のホテルが見つかりませんでした"
+            result["searched_area"] = middle_code
+        elif any(h.get("fallback_area") for h in hotels):
+            result["fallback_notice"] = f"'{keyword}'エリアが見つからなかったため、{middle_code}の近隣エリアで検索しました"
+        return result
     except Exception as e:
         print(f"[Rakuten Hotels] エラー: {e}")
         return {"available": False, "reason": str(e)}
