@@ -249,6 +249,7 @@ def db_init_lumina_tables():
         cost_usd      NUMERIC(10,4) DEFAULT 0,
         recorded_at   TIMESTAMP NOT NULL DEFAULT NOW()
     );
+    CREATE INDEX IF NOT EXISTS idx_admin_cost_logs_month ON admin_cost_logs(month, recorded_at DESC);
     -- 管理者: 登録カード情報（本番ではStripe連携）
     CREATE TABLE IF NOT EXISTS admin_cards (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -401,6 +402,8 @@ with app.app_context():
         # lu_pref_health / lu_pref_diy 新テーブル（既存ユーザー向け初期行挿入）
         "INSERT INTO lu_pref_health (user_id) SELECT id FROM lu_users WHERE is_active=TRUE ON CONFLICT DO NOTHING",
         "INSERT INTO lu_pref_diy (user_id) SELECT id FROM lu_users WHERE is_active=TRUE ON CONFLICT DO NOTHING",
+        # admin_cost_logs 拡張（自前トークン記録用）
+        "CREATE INDEX IF NOT EXISTS idx_admin_cost_logs_month ON admin_cost_logs(month, recorded_at DESC)",
     ]
     for sql in migrations:
         try:
@@ -2097,71 +2100,78 @@ def _fetch_openai_usage(api_key: str, start_date: str, end_date: str) -> dict:
 @app.route("/api/admin/openai-usage", methods=["GET"])
 @admin_required
 def admin_openai_usage():
-    """OpenAI Usage API から利用状況をリアルタイム取得（マルチエンドポイント対応）"""
+    """
+    自前トークン記録から使用量・コストを集計して返す。
+    OpenAI Usage APIへの接続は不要（チャットのたびにbase.pyが記録したデータを使用）。
+    """
+    import calendar
     from datetime import date
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key:
-        return jsonify({"ok": False, "error": "OPENAI_API_KEY 未設定"}), 500
 
-    today      = date.today()
-    month_str  = request.args.get("month")   # YYYY-MM 形式（省略時は当月）
+    today     = date.today()
+    month_str = request.args.get("month")  # YYYY-MM 形式
+
     if month_str:
         try:
-            import calendar
             y, m   = int(month_str[:4]), int(month_str[5:7])
+            target_month = f"{y:04d}-{m:02d}"
             start  = f"{y:04d}-{m:02d}-01"
             last_d = calendar.monthrange(y, m)[1]
             end    = f"{y:04d}-{m:02d}-{last_d:02d}"
         except Exception:
+            target_month = today.strftime("%Y-%m")
             start = today.replace(day=1).strftime("%Y-%m-%d")
             end   = today.strftime("%Y-%m-%d")
     else:
+        target_month = today.strftime("%Y-%m")
         start = today.replace(day=1).strftime("%Y-%m-%d")
         end   = today.strftime("%Y-%m-%d")
 
-    result = _fetch_openai_usage(api_key, start, end)
+    # admin_cost_logs から対象月のデータを集計
+    rows = db_exec(
+        """SELECT model,
+                  SUM(input_tokens)  AS input_tokens,
+                  SUM(output_tokens) AS output_tokens,
+                  SUM(cost_usd)      AS cost_usd,
+                  COUNT(*)           AS requests
+           FROM admin_cost_logs
+           WHERE month = %s
+           GROUP BY model
+           ORDER BY SUM(cost_usd) DESC""",
+        (target_month,), fetch="all"
+    ) or []
 
-    if not result["ok"]:
-        return jsonify({
-            "ok": False,
-            "errors": result.get("errors", []),
-            "dashboard_url": "https://platform.openai.com/usage",
-            "note": "OpenAI Usage APIの取得に失敗しました。APIキーにusage:readスコープが必要な場合があります。",
-        })
-
-    by_model     = result.get("by_model", {})
-    total_input  = sum(v["input"]    for v in by_model.values())
-    total_output = sum(v["output"]   for v in by_model.values())
-    total_reqs   = sum(v["requests"] for v in by_model.values())
-
-    # コスト計算（直接取得できた場合はそちら優先）
-    if result.get("cost_usd_direct") is not None:
-        total_cost = result["cost_usd_direct"]
-    else:
-        total_cost = sum(_calc_cost(m, v["input"], v["output"]) for m, v in by_model.items())
-
-    # モデル別詳細（コスト付き）
+    # モデル別詳細
     models_detail = []
-    for model, tok in sorted(by_model.items(), key=lambda x: -x[1]["input"]):
-        cost = _calc_cost(model, tok["input"], tok["output"])
+    total_input = total_output = total_reqs = 0
+    total_cost  = 0.0
+
+    for r in rows:
+        inp  = int(r["input_tokens"]  or 0)
+        out  = int(r["output_tokens"] or 0)
+        cost = float(r["cost_usd"]    or 0)
+        reqs = int(r["requests"]      or 0)
+        total_input  += inp
+        total_output += out
+        total_cost   += cost
+        total_reqs   += reqs
         models_detail.append({
-            "model":         model,
-            "input_tokens":  tok["input"],
-            "output_tokens": tok["output"],
-            "requests":      tok["requests"],
+            "model":         r["model"],
+            "input_tokens":  inp,
+            "output_tokens": out,
+            "requests":      reqs,
             "cost_usd":      round(cost, 4),
             "cost_jpy":      round(cost * 150),
         })
 
-    # 当月予算との比較
+    # 予算との比較
     budget_row = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
     budget_usd = float(budget_row["value"]) if budget_row else 100.0
     used_pct   = round(total_cost / budget_usd * 100, 1) if budget_usd else 0
 
     return jsonify({
-        "ok":             True,
-        "source":         result.get("source", "unknown"),
-        "period":         {"start": start, "end": end},
+        "ok":    True,
+        "source": "self_recorded",  # 自前記録であることを明示
+        "period": {"start": start, "end": end},
         "total": {
             "input_tokens":  total_input,
             "output_tokens": total_output,
@@ -2173,13 +2183,13 @@ def admin_openai_usage():
             "budget_usd": budget_usd,
             "used_pct":   used_pct,
         },
-        "models":         models_detail,
-        "dashboard_url":  "https://platform.openai.com/usage",
-        # 後方互換フィールド（既存dashboard.htmlが参照）
-        "input_tokens":   total_input,
-        "output_tokens":  total_output,
-        "cost_usd":       round(total_cost, 4),
-        "cost_jpy":       round(total_cost * 150),
+        "models":        models_detail,
+        "dashboard_url": "https://platform.openai.com/usage",
+        # 後方互換フィールド
+        "input_tokens":  total_input,
+        "output_tokens": total_output,
+        "cost_usd":      round(total_cost, 4),
+        "cost_jpy":      round(total_cost * 150),
     })
 
 @app.route("/api/health", methods=["GET"])

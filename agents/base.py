@@ -149,6 +149,10 @@ class BaseAgent:
         msgs       = [{"role": "system", "content": system}] + messages
 
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
+        # トークン使用量の累積（APIコールのたびに加算）
+        _total_input_tokens  = 0
+        _total_output_tokens = 0
+        _model_used          = "gpt-4o"
 
         # GPT-4oが「了解しました。少々お待ちください」などの中間テキストを
         # ツール呼び出し前に返すパターンを検知するパターン群
@@ -170,6 +174,12 @@ class BaseAgent:
 
             res = client.chat.completions.create(**kwargs)
             msg = res.choices[0].message
+
+            # トークン使用量を累積
+            if hasattr(res, "usage") and res.usage:
+                _total_input_tokens  += res.usage.prompt_tokens or 0
+                _total_output_tokens += res.usage.completion_tokens or 0
+                _model_used = res.model or "gpt-4o"
 
             # ── ツール呼び出しがある場合 → ツールを実行してループ続行 ──
             if getattr(msg, "tool_calls", None):
@@ -218,6 +228,37 @@ class BaseAgent:
 
         if last_assistant_msg is None:
             last_assistant_msg = msg
+
+        # ── トークン使用量をDBに記録（コスト自前計算） ──────────────
+        if _total_input_tokens > 0 or _total_output_tokens > 0:
+            try:
+                # モデル別コスト計算（$/1M tokens）
+                MODEL_COSTS = {
+                    "gpt-4o":           {"input": 2.50,  "output": 10.00},
+                    "gpt-4o-mini":      {"input": 0.15,  "output": 0.60},
+                    "gpt-4-turbo":      {"input": 10.00, "output": 30.00},
+                    "o1":               {"input": 15.00, "output": 60.00},
+                    "o1-mini":          {"input": 3.00,  "output": 12.00},
+                    "o3-mini":          {"input": 1.10,  "output": 4.40},
+                }
+                model_key = next((k for k in MODEL_COSTS if k in _model_used), "gpt-4o")
+                rates = MODEL_COSTS[model_key]
+                cost_usd = (_total_input_tokens * rates["input"] + _total_output_tokens * rates["output"]) / 1_000_000
+
+                from memory.db import get_conn as _mem_conn
+                with _mem_conn() as _conn:
+                    with _conn.cursor() as _cur:
+                        _cur.execute(
+                            """INSERT INTO admin_cost_logs
+                               (id, month, model, input_tokens, output_tokens, cost_usd, recorded_at)
+                               VALUES (gen_random_uuid(),
+                                       to_char(NOW(),'YYYY-MM'),
+                                       %s, %s, %s, %s, NOW())""",
+                            (_model_used, _total_input_tokens, _total_output_tokens, round(cost_usd, 6))
+                        )
+                    _conn.commit()
+            except Exception as _e:
+                print(f"[Cost] トークン記録エラー: {_e}")
 
         text = last_assistant_msg.content or "{}"
         # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
