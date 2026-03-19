@@ -50,8 +50,7 @@ function _forceLogout(reason=''){
   if(reason){
     sessionStorage.setItem('logout_reason', reason)
   }
-  // 少し遅延してから遷移（非同期処理が中途半端に終わらないように）
-  setTimeout(()=>{ location.href = 'login.html' }, 50)
+  location.href = "login.html"
 }
 _forceLogout._running = false
 
