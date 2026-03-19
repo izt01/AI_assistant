@@ -430,6 +430,13 @@ def auth_required(f):
             return jsonify({"error": "認証が必要です"}), 401
         try:
             data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            # まず is_active を問わず存在確認し、停止か削除かを区別する
+            user = db_exec("SELECT * FROM lu_users WHERE id=%s", (data["sub"],), fetch="one")
+            if not user:
+                return jsonify({"error": "アカウントが見つかりません"}), 401
+            if not user.get("is_active"):
+                return jsonify({"error": "このアカウントは管理者により停止されています。お心当たりがある場合はサポートにお問い合わせください。"}), 401
+            # is_active=TRUE のユーザーのみ g.current_user にセット
             user = db_exec("SELECT * FROM lu_users WHERE id=%s AND is_active=TRUE",
                            (data["sub"],), fetch="one")
             if not user:
