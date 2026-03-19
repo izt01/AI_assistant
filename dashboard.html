@@ -190,7 +190,7 @@ async function init() {
         const timeStr = diff < 3600000 ? `${Math.round(diff/60000)}分前`
           : diff < 86400000 ? `${Math.round(diff/3600000)}時間前`
           : `${Math.round(diff/86400000)}日前`
-        return `<div class="recent-chat" onclick="location.href='chat.html?ai=${s.ai_type}'">
+        return `<div class="recent-chat" onclick="location.href='chat.html?ai=${s.ai_type}&session_id=${s.id}'">
           <div class="rc-icon" style="background:${AI_COLORS[s.ai_type]||AI_COLORS.all}">${AI_ICONS[s.ai_type]||'✦'}</div>
           <div style="flex:1;min-width:0">
             <div class="rc-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title||s.ai_type+' AIとの会話'}</div>

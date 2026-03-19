@@ -1560,6 +1560,52 @@ def update_favorite_note(fid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/chat/sessions/<sid>/messages", methods=["GET"])
+@auth_required
+def get_session_messages(sid):
+    """セッションの全メッセージを返す（会話の続き機能用）"""
+    uid = str(g.current_user["id"])
+    # セッションの所有者確認
+    session = db_exec(
+        "SELECT id, ai_type, title FROM lu_sessions WHERE id=%s AND user_id=%s",
+        (sid, uid), fetch="one"
+    )
+    if not session:
+        return jsonify({"error": "セッションが見つかりません"}), 404
+
+    rows = db_exec(
+        "SELECT role, content, ai_type, extra, created_at "
+        "FROM lu_messages WHERE session_id=%s ORDER BY created_at ASC",
+        (sid,), fetch="all"
+    ) or []
+
+    messages = []
+    for r in rows:
+        m = {
+            "role":    r["role"],
+            "content": r["content"],
+            "ai_type": r["ai_type"],
+        }
+        # extraフィールド（ホテル・プランなどのカード表示用データ）
+        if r.get("extra"):
+            try:
+                m["extra"] = json.loads(r["extra"]) if isinstance(r["extra"], str) else r["extra"]
+            except Exception:
+                pass
+        if r.get("created_at"):
+            m["created_at"] = r["created_at"].isoformat()
+        messages.append(m)
+
+    return jsonify({
+        "session": {
+            "id":      str(session["id"]),
+            "ai_type": session["ai_type"],
+            "title":   session["title"],
+        },
+        "messages": messages,
+    })
+
+
 @app.route("/api/chat/sessions", methods=["GET"])
 @auth_required
 def list_sessions():
