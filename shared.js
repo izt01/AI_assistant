@@ -33,9 +33,27 @@ async function apiRequest(path, opts={}){
   const res=await fetch(`${API_BASE}${path}`,{...opts,headers,
     body:opts.body?JSON.stringify(opts.body):undefined})
   const data=await res.json().catch(()=>({}))
+  if(res.status===401){
+    // どのAPIでも401が返ったら即強制ログアウト（停止・期限切れ両対応）
+    _forceLogout(data.error||'セッションが無効です')
+    throw {status:401,...data}
+  }
   if(!res.ok) throw {status:res.status,...data}
   return data
 }
+
+function _forceLogout(reason=''){
+  // 多重発火防止
+  if(_forceLogout._running) return
+  _forceLogout._running = true
+  clearToken()
+  if(reason) {
+    // ログアウト理由をsessionStorageに保存してlogin画面で表示
+    sessionStorage.setItem('logout_reason', reason)
+  }
+  location.href = 'login.html'
+}
+_forceLogout._running = false
 
 async function requireAuth(){
   if(!getToken()){ location.href='login.html'; return null }
@@ -43,14 +61,33 @@ async function requireAuth(){
     const cached=getCachedUser()
     if(cached){
       apiRequest('/auth/me').then(d=>{if(d.user)setCachedUser(d.user)}).catch(()=>{})
+      // 定期セッション監視を起動（初回のみ）
+      _startSessionWatcher()
       return cached
     }
     const d=await apiRequest('/auth/me')
-    setCachedUser(d.user); return d.user
+    setCachedUser(d.user)
+    _startSessionWatcher()
+    return d.user
   } catch(e){
     if(e.status===401){ clearToken(); location.href='login.html' }
     return null
   }
+}
+
+// 定期セッション監視（30秒ごとに /auth/me を叩いて停止・期限切れを検出）
+let _sessionWatcherTimer = null
+function _startSessionWatcher(){
+  if(_sessionWatcherTimer) return  // 重複起動防止
+  _sessionWatcherTimer = setInterval(async()=>{
+    try {
+      const d = await apiRequest('/auth/me')
+      if(d.user) setCachedUser(d.user)
+    } catch(e){
+      // 401 は apiRequest 内の _forceLogout が処理するので何もしない
+      // その他のエラー（ネット切断等）は無視して次回に持ち越す
+    }
+  }, 30_000)  // 30秒
 }
 
 async function logout(){

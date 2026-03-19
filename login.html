@@ -86,6 +86,23 @@ body{background:var(--ink)}
 
 <script src="shared.js"></script>
 <script>
+// 強制ログアウト後の理由表示
+(function(){
+  const reason = sessionStorage.getItem('logout_reason')
+  if(reason){
+    sessionStorage.removeItem('logout_reason')
+    // DOMが準備できたら表示
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const err = document.getElementById('err-banner')
+      const txt = document.getElementById('err-text')
+      if(err && txt){
+        txt.textContent = reason
+        err.style.display = 'flex'
+      }
+    })
+  }
+})()
+
 function togglePw(){
   const el=document.getElementById('pw')
   el.type=el.type==='password'?'text':'password'
