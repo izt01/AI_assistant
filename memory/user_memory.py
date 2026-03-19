@@ -10,6 +10,7 @@
 これらをプロンプトに注入することで、使うほど精度が上がる。
 """
 import json
+import psycopg2.extras
 from openai import OpenAI
 from .db import get_conn
 

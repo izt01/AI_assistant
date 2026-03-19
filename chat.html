@@ -578,8 +578,20 @@ async function sendMsg() {
       }
     }
  
+    // reply が空（JSONパース結果が空、または message フィールドなし）の場合の代替処理
+    if(!reply && extraPlans && extraPlans.length) {
+      // 旅行プランはカードで表示するので reply 空でも問題なし（何も表示しない）
+      reply = ''
+    } else if(!reply && resp.extra && (resp.extra._hotels || resp.extra._products || resp.extra._places)) {
+      // ホテル・商品・スポットカードがある場合も同様
+      reply = ''
+    } else if(!reply) {
+      // それ以外で reply が空なら汎用メッセージ
+      reply = '少々お待ちください。もう一度お試しください。'
+      console.warn('[Chat] reply が空でした。サーバーレスポンス:', resp)
+    }
     messages.push({ role:'assistant', content:reply })
-    addMessage('ai', reply)
+    if(reply) addMessage('ai', reply)
  
     if(resp.learning_applied > 0) {
       toast(`✦ AIがあなたの好みを${resp.learning_applied}件学習しました`, '')
