@@ -209,30 +209,68 @@ async function loadDashboard(){
       <div class="ai-usage-count">${fmtN(aiData[a]||0)}</div>
     </div>`).join('')
 
-  // コスト詳細（OpenAI実費 + ダッシュボードリンク）
+  // コスト詳細（OpenAI実費リアルタイム）
   const oaiOk = openai?.ok
+  const t = openai?.total || {}
+  const b = openai?.budget || {}
+  const models = openai?.models || []
+  const topModels = models.slice(0, 3)
+  const usedPct = b.used_pct ?? openai?.cost_usd ? Math.round((openai.cost_usd||0)/((b.budget_usd||100))*100) : dash.cost.used_pct
+
   document.getElementById('cost-detail').innerHTML = `
     <div style="margin-bottom:14px">
       ${oaiOk
-        ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">📡 OpenAI Usage API から自動取得（当月）</div>
-           <div style="display:flex;flex-direction:column;gap:8px">
+        ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+             📡 OpenAI Usage API から自動取得
+             <span style="margin-left:6px;opacity:.6">${openai.period?.start} 〜 ${openai.period?.end}</span>
+           </div>
+           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
              ${[
-               ['入力トークン', fmtN(openai.input_tokens)+'tok', ''],
-               ['出力トークン', fmtN(openai.output_tokens)+'tok', ''],
-               ['費用(USD)',    fmt$(openai.cost_usd,4), 'color:var(--gold2)'],
-               ['費用(円換算)', '¥'+openai.cost_jpy.toLocaleString(), 'color:var(--muted)'],
+               ['費用(USD)',    fmt$(t.cost_usd||openai.cost_usd,4), 'color:var(--gold2);font-size:16px;font-weight:600'],
+               ['費用(円換算)', '¥'+(t.cost_jpy||openai.cost_jpy||0).toLocaleString(), 'color:var(--muted)'],
+               ['入力トークン', fmtN(t.input_tokens||openai.input_tokens||0)+'tok', ''],
+               ['出力トークン', fmtN(t.output_tokens||openai.output_tokens||0)+'tok', ''],
              ].map(([l,v,st])=>`
-               <div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:8px">
+               <div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:6px">
                  <span style="font-size:12px;color:var(--muted)">${l}</span>
                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;${st}">${v}</span>
                </div>`).join('')}
+           </div>
+           ${topModels.length ? `
+             <div style="font-size:11px;color:var(--muted);margin-bottom:6px">上位モデル</div>
+             ${topModels.map(m=>`
+               <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px">
+                 <span class="model-badge" style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);color:#93c5fd">${m.model}</span>
+                 <span style="color:var(--gold2);font-family:'JetBrains Mono',monospace">${fmt$(m.cost_usd,4)}</span>
+               </div>`).join('')}` : ''}
+           <div style="margin-top:12px">
+             <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
+               <span>予算消化率</span><span style="color:${usedPct>=90?'#f87171':usedPct>=70?'#fbbf24':'#4ade80'}">${usedPct}%</span>
+             </div>
+             <div class="progress-bar" style="height:7px">
+               <div class="progress-fill ${usedPct>=90?'danger':usedPct>=70?'warning':''}" style="width:${Math.min(usedPct,100)}%"></div>
+             </div>
            </div>`
-        : `<div class="alert-bar info" style="font-size:12px">⚠ OpenAI Usage APIの自動取得に失敗しました。<br>下記リンクから直接確認してください。</div>`
+        : `<div class="alert-bar info" style="font-size:12px;margin-bottom:10px">
+             ⚠ Usage API 自動取得失敗<br>
+             <a href="https://platform.openai.com/usage" target="_blank" style="color:var(--gold)">↗ OpenAI Dashboardで確認</a>
+           </div>
+           ${[
+             ['今月費用(推定)', fmt$(dash.cost.used_usd), ''],
+             ['予算残高',       fmt$(dash.cost.balance_usd), dash.cost.balance_usd>=0?'color:#4ade80':'color:#f87171'],
+           ].map(([l,v,st])=>`
+             <div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:6px">
+               <span style="font-size:12px;color:var(--muted)">${l}</span>
+               <span style="font-family:'JetBrains Mono',monospace;font-size:13px;${st}">${v}</span>
+             </div>`).join('')}`
       }
     </div>
     <a href="https://platform.openai.com/usage" target="_blank"
        class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:8px;gap:8px">
-      ↗ OpenAI Dashboardで確認
+      ↗ OpenAI Dashboard
+    </a>
+    <a href="admin-charges.html?tab=costs" class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:8px">
+      📊 詳細コスト分析 →
     </a>
     <a href="admin-charges.html" class="btn btn-gold" style="width:100%;justify-content:center">
       + チャージ・予算管理

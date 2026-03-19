@@ -131,12 +131,32 @@
 
       <!-- 月次コストタブ -->
       <div class="tab-pane" id="pane-costs">
+        <!-- 月選択バー -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+          <button class="btn btn-ghost btn-sm" onclick="shiftMonth(-1)">◀ 前月</button>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;min-width:80px;text-align:center" id="month-label">—</div>
+          <button class="btn btn-ghost btn-sm" id="next-month-btn" onclick="shiftMonth(1)">翌月 ▶</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadOpenAIUsage()" style="margin-left:auto">↻ 更新</button>
+          <a href="https://platform.openai.com/usage" target="_blank" class="btn btn-ghost btn-sm">↗ OpenAI Dashboard</a>
+        </div>
+        <!-- リアルタイムKPI -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="usage-kpis"></div>
+        <!-- 取得状況バー -->
+        <div id="usage-status" style="margin-bottom:16px"></div>
+        <!-- モデル別テーブル -->
         <div class="admin-section">
           <div class="admin-section-hdr">
-            <div class="admin-section-title">月次APIコスト（モデル別）</div>
-            <div style="font-size:11.5px;color:var(--muted)">※ OpenAI Dashboardから手動記録したデータ</div>
+            <div class="admin-section-title">モデル別利用状況</div>
+            <div style="font-size:11px;color:var(--muted)" id="usage-source-label"></div>
           </div>
           <div id="cost-list"><div class="spinner"></div></div>
+        </div>
+        <!-- 手動記録（過去データ補完用）-->
+        <div class="admin-section" style="margin-top:16px">
+          <div class="admin-section-hdr">
+            <div class="admin-section-title">手動記録（APIで取得できない過去月の補完）</div>
+          </div>
+          <div id="cost-manual-list"><div class="spinner"></div></div>
         </div>
       </div>
 
@@ -335,11 +355,129 @@ async function loadHistory(){
     : '<div style="color:var(--subtle);font-size:13px;padding:20px 0">チャージ履歴がありません</div>'
 }
 
-// ── 月次コスト ────────────────────────────────────────────────
-async function loadCosts(){
+// ── OpenAI Usage リアルタイム取得 ────────────────────────────
+let _currentMonth = null  // YYYY-MM 形式
+
+function _getMonthStr(offset=0){
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset)
+  return d.toISOString().slice(0,7)
+}
+
+function shiftMonth(dir){
+  const cur = _currentMonth || _getMonthStr(0)
+  const [y,m] = cur.split('-').map(Number)
+  const next = new Date(y, m - 1 + dir, 1)
+  const nextStr = next.toISOString().slice(0,7)
+  // 未来月はNG
+  const todayStr = _getMonthStr(0)
+  if(nextStr > todayStr) return
+  _currentMonth = nextStr
+  loadOpenAIUsage()
+}
+
+async function loadOpenAIUsage(){
+  if(!_currentMonth) _currentMonth = _getMonthStr(0)
+  const todayStr = _getMonthStr(0)
+
+  // 翌月ボタンの有効/無効
+  document.getElementById('next-month-btn').disabled = (_currentMonth >= todayStr)
+  document.getElementById('month-label').textContent = _currentMonth
+
+  document.getElementById('cost-list').innerHTML = '<div class="spinner"></div>'
+  document.getElementById('usage-kpis').innerHTML = ''
+  document.getElementById('usage-status').innerHTML = ''
+
+  const data = await adminApi('/openai-usage?month=' + _currentMonth)
+
+  if(!data?.ok){
+    // 取得失敗 → フォールバック表示
+    document.getElementById('usage-status').innerHTML = `
+      <div class="alert-bar info" style="font-size:12px">
+        ⚠ OpenAI Usage APIの自動取得に失敗しました（${data?.errors?.join(' / ')||'不明なエラー'}）<br>
+        APIキーに <code>usage:read</code> スコープが必要です。または手動記録をご利用ください。<br>
+        <a href="https://platform.openai.com/usage" target="_blank" style="color:var(--gold)">↗ OpenAI Dashboardで直接確認</a>
+      </div>`
+    document.getElementById('cost-list').innerHTML = '<div style="color:var(--subtle);font-size:13px;padding:20px 0">データ取得失敗</div>'
+    loadCostManual()
+    return
+  }
+
+  const t = data.total || {}
+  const b = data.budget || {}
+  const SOURCE_LABELS = {v2:'新API(v2)', v1:'旧API(v1)', billing:'Billing API', unknown:'不明'}
+
+  document.getElementById('usage-source-label').textContent =
+    `取得元: ${SOURCE_LABELS[data.source]||data.source} · ${data.period?.start} 〜 ${data.period?.end}`
+
+  // KPIカード
+  const usedPct = b.used_pct || 0
+  document.getElementById('usage-kpis').innerHTML = [
+    ['今月の費用(USD)', fmt$(t.cost_usd||0,4), usedPct>=90?'red':usedPct>=70?'':'green'],
+    ['費用(円換算)',    '¥'+(t.cost_jpy||0).toLocaleString(), ''],
+    ['総リクエスト数',  fmtN(t.requests||0)+'件', ''],
+    ['予算消化率',      (usedPct||0)+'%', usedPct>=90?'red':usedPct>=70?'':''],
+  ].map(([l,v,c])=>`
+    <div class="kpi ${c}" style="margin-bottom:0">
+      <div class="kpi-label">${l}</div>
+      <div class="kpi-val ${c}">${v}</div>
+    </div>`).join('')
+
+  // モデル別テーブル
+  const models = data.models || []
+  document.getElementById('cost-list').innerHTML = models.length
+    ? `<table class="admin-table" style="width:100%">
+        <thead><tr>
+          <th>モデル</th>
+          <th style="text-align:right">入力トークン</th>
+          <th style="text-align:right">出力トークン</th>
+          <th style="text-align:right">リクエスト数</th>
+          <th style="text-align:right">費用(USD)</th>
+          <th style="text-align:right">費用(¥)</th>
+          <th style="min-width:120px">費用比率</th>
+        </tr></thead>
+        <tbody>
+          ${models.map(r=>{
+            const pct = t.cost_usd>0 ? Math.round(r.cost_usd/t.cost_usd*100) : 0
+            return `<tr>
+              <td><span class="model-badge">${r.model}</span></td>
+              <td class="mono" style="text-align:right">${fmtN(r.input_tokens)}</td>
+              <td class="mono" style="text-align:right">${fmtN(r.output_tokens)}</td>
+              <td class="mono" style="text-align:right">${fmtN(r.requests)}</td>
+              <td class="mono" style="text-align:right;color:var(--gold2)">${fmt$(r.cost_usd,4)}</td>
+              <td class="mono" style="text-align:right;color:var(--muted)">¥${(r.cost_jpy||0).toLocaleString()}</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden">
+                    <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:99px"></div>
+                  </div>
+                  <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;min-width:32px">${pct}%</div>
+                </div>
+              </td>
+            </tr>`}).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:1px solid var(--border2);font-weight:600">
+            <td>合計</td>
+            <td class="mono" style="text-align:right">${fmtN(t.input_tokens)}</td>
+            <td class="mono" style="text-align:right">${fmtN(t.output_tokens)}</td>
+            <td class="mono" style="text-align:right">${fmtN(t.requests)}</td>
+            <td class="mono" style="text-align:right;color:var(--gold2)">${fmt$(t.cost_usd,4)}</td>
+            <td class="mono" style="text-align:right;color:var(--muted)">¥${(t.cost_jpy||0).toLocaleString()}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>`
+    : '<div style="color:var(--subtle);font-size:13px;padding:20px 0">この期間の利用データがありません</div>'
+
+  // 手動記録（過去補完）も常時表示
+  loadCostManual()
+}
+
+// ── 手動記録（旧データ・過去月補完用）───────────────────────
+async function loadCostManual(){
   const data = await adminApi('/costs?months=12')
   const costs = data?.costs || []
-  // 月ごとにグループ化
   const byMonth = {}
   costs.forEach(c=>{
     if(!byMonth[c.month]) byMonth[c.month]={month:c.month,total:0,models:[]}
@@ -347,27 +485,30 @@ async function loadCosts(){
     byMonth[c.month].models.push(c)
   })
   const months = Object.values(byMonth).sort((a,b)=>b.month.localeCompare(a.month))
-
-  document.getElementById('cost-list').innerHTML = months.length
-    ? `<table class="admin-table">
-        <thead><tr><th>月</th><th>モデル</th><th>入力トークン</th><th>出力トークン</th><th>費用(USD)</th><th>費用(¥)</th></tr></thead>
+  document.getElementById('cost-manual-list').innerHTML = months.length
+    ? `<table class="admin-table" style="width:100%">
+        <thead><tr>
+          <th>月</th><th>モデル</th>
+          <th style="text-align:right">入力tok</th><th style="text-align:right">出力tok</th>
+          <th style="text-align:right">費用(USD)</th><th style="text-align:right">費用(¥)</th>
+        </tr></thead>
         <tbody>
           ${months.flatMap(m=>m.models.map((r,i)=>`
             <tr>
               ${i===0?`<td rowspan="${m.models.length}" class="mono" style="font-weight:600">${m.month}</td>`:''}
               <td><span class="model-badge">${r.model}</span></td>
-              <td class="mono">${fmtN(r.input_tokens)}</td>
-              <td class="mono">${fmtN(r.output_tokens)}</td>
-              <td class="mono" style="color:var(--gold2)">${fmt$(r.cost_usd,4)}</td>
-              <td class="mono" style="color:var(--muted)">${fmtJPY(r.cost_usd)}</td>
+              <td class="mono" style="text-align:right">${fmtN(r.input_tokens)}</td>
+              <td class="mono" style="text-align:right">${fmtN(r.output_tokens)}</td>
+              <td class="mono" style="text-align:right;color:var(--gold2)">${fmt$(r.cost_usd,4)}</td>
+              <td class="mono" style="text-align:right;color:var(--muted)">${fmtJPY(r.cost_usd)}</td>
             </tr>`)).join('')}
         </tbody>
-      </table>
-      <div style="font-size:11px;color:var(--subtle);margin-top:14px">
-        ※ APIコストデータはOpenAI Dashboardから手動でPOSTして記録します
-      </div>`
-    : '<div style="color:var(--subtle);font-size:13px;padding:20px 0">コストデータがありません。<br>OpenAI Dashboardで確認した費用を手動で記録してください。</div>'
+      </table>`
+    : '<div style="color:var(--subtle);font-size:13px">手動記録なし</div>'
 }
+
+// ── 旧名互換（タブ初回表示用）────────────────────────────────
+function loadCosts(){ loadOpenAIUsage() }
 
 // ── カード管理 ────────────────────────────────────────────────
 async function loadCards(){
@@ -442,6 +583,10 @@ async function saveSettings(){
 }
 
 init()
+
+// URLパラメータでタブを指定（例: admin-charges.html?tab=costs）
+const _urlTab = new URLSearchParams(location.search).get('tab')
+if(_urlTab) showTab(_urlTab)
 </script>
 </body>
 </html>

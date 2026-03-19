@@ -167,10 +167,8 @@
     </div>
 
     <div class="action-btns">
-      <button class="btn btn-ghost" style="justify-content:center" onclick="deactivateUser()">
-        ⚠ アカウントを無効化
-      </button>
-      <button class="btn btn-danger" style="justify-content:center;width:100%" onclick="deleteUser()">
+      <div id="status-action-area"></div>
+      <button class="btn btn-danger" style="justify-content:center;width:100%;margin-top:4px" onclick="deleteUser()">
         🗑 アカウントを完全削除
       </button>
     </div>
@@ -287,7 +285,18 @@ async function openDetail(uid){
   document.getElementById('d-plan').innerHTML     = `<span class="badge badge-${u.plan}">${u.plan.toUpperCase()}</span>`
   document.getElementById('d-usage').textContent  = fmtN(u.usage_count) + ' 回'
   document.getElementById('d-sessions').textContent = fmtN(data.sessions?.length||0) + ' 件'
-  document.getElementById('d-status').innerHTML   = `<span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効'}</span>`
+  document.getElementById('d-status').innerHTML   = `<span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効（ログイン不可）'}</span>`
+
+  // ステータスに応じてアクションボタンを切り替え
+  document.getElementById('status-action-area').innerHTML = u.is_active
+    ? `<button class="btn btn-ghost" style="justify-content:center;width:100%;color:#fb923c;border-color:rgba(251,146,60,.3)"
+         onclick="deactivateUser()">
+         ⚠ アカウントを停止（ログイン不可にする）
+       </button>`
+    : `<button class="btn btn-ghost" style="justify-content:center;width:100%;color:#4ade80;border-color:rgba(74,222,128,.3)"
+         onclick="reactivateUser()">
+         ✓ アカウントを再有効化（ログイン可能に戻す）
+       </button>`
   document.getElementById('d-created').textContent = fmtDate(u.created_at)
   document.getElementById('d-plan-select').value  = u.plan
 
@@ -329,29 +338,65 @@ async function changePlan(){
 
 // ── 無効化・削除 ──────────────────────────────────────────────
 async function deactivateUser(){
+  if(!_selectedUid){ adminToast('ユーザーが選択されていません','e'); return }
+  const name = document.getElementById('d-name').textContent || _selectedUid
   adminModal({
-    title:'アカウントを無効化しますか？',
-    body:'ユーザーはログインできなくなります。後から再有効化できます。',
-    okLabel:'無効化する',
+    title:`「${name}」を停止しますか？`,
+    body:'ユーザーはログインできなくなります。いつでも再有効化できます。',
+    okLabel:'停止する',
     okColor:'#f97316',
     onOk: async()=>{
       const res = await adminApi(`/users/${_selectedUid}/deactivate`,{method:'POST'})
-      if(res?.ok){ adminToast('アカウントを無効化しました','s'); closeDetailPanel(); loadUsers() }
-      else adminToast('無効化に失敗しました','e')
+      if(res?.ok){
+        adminToast('アカウントを停止しました','s')
+        await openDetail(_selectedUid)  // 詳細パネルを再読込してボタンを切り替え
+        loadUsers()
+      } else {
+        adminToast('停止に失敗しました: ' + (res?.error||'不明なエラー'), 'e')
+      }
+    }
+  })
+}
+
+async function reactivateUser(){
+  if(!_selectedUid){ adminToast('ユーザーが選択されていません','e'); return }
+  const name = document.getElementById('d-name').textContent || _selectedUid
+  adminModal({
+    title:`「${name}」を再有効化しますか？`,
+    body:'ユーザーは再度ログインできるようになります。',
+    okLabel:'再有効化する',
+    okColor:'#22c55e',
+    onOk: async()=>{
+      const res = await adminApi(`/users/${_selectedUid}/reactivate`,{method:'POST'})
+      if(res?.ok){
+        adminToast('アカウントを再有効化しました','s')
+        await openDetail(_selectedUid)  // 詳細パネルを再読込してボタンを切り替え
+        loadUsers()
+      } else {
+        adminToast('再有効化に失敗しました: ' + (res?.error||'不明なエラー'), 'e')
+      }
     }
   })
 }
 
 async function deleteUser(){
+  if(!_selectedUid){ adminToast('ユーザーが選択されていません','e'); return }
+  const name = document.getElementById('d-name').textContent || _selectedUid
   adminModal({
-    title:'⚠ 完全削除しますか？',
-    body:'この操作は<strong style="color:#f87171">取り消せません</strong>。会話履歴・プロフィールを含む全データが削除されます。',
+    title:`⚠ 「${name}」を完全削除しますか？`,
+    body:'この操作は<strong style="color:#f87171">絶対に取り消せません</strong>。<br>会話履歴・プロフィール・学習データを含む全データが完全に消去されます。',
     okLabel:'完全に削除する',
     okColor:'#ef4444',
     onOk: async()=>{
       const res = await adminApi(`/users/${_selectedUid}`,{method:'DELETE'})
-      if(res?.ok){ adminToast('アカウントを削除しました','s'); closeDetailPanel(); loadUsers(); init() }
-      else adminToast('削除に失敗しました','e')
+      if(res?.ok){
+        adminToast(`「${name}」を削除しました`,'s')
+        closeDetailPanel()
+        loadUsers()
+        init()
+      } else {
+        adminToast('削除に失敗しました: ' + (res?.error||'不明なエラー'), 'e')
+      }
     }
   })
 }
