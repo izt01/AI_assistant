@@ -287,16 +287,19 @@ async function openDetail(uid){
   document.getElementById('d-sessions').textContent = fmtN(data.sessions?.length||0) + ' 件'
   document.getElementById('d-status').innerHTML   = `<span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効（ログイン不可）'}</span>`
 
-  // ステータスに応じてアクションボタンを切り替え
-  document.getElementById('status-action-area').innerHTML = u.is_active
-    ? `<button class="btn btn-ghost" style="justify-content:center;width:100%;color:#fb923c;border-color:rgba(251,146,60,.3)"
-         onclick="deactivateUser()">
-         ⚠ アカウントを停止（ログイン不可にする）
-       </button>`
-    : `<button class="btn btn-ghost" style="justify-content:center;width:100%;color:#4ade80;border-color:rgba(74,222,128,.3)"
-         onclick="reactivateUser()">
-         ✓ アカウントを再有効化（ログイン可能に戻す）
-       </button>`
+  // ステータスに応じてアクションボタンを切り替え（onclickではなくaddEventListenerで設定）
+  const statusArea = document.getElementById('status-action-area')
+  statusArea.innerHTML = ''
+  const statusBtn = document.createElement('button')
+  statusBtn.className = 'btn btn-ghost'
+  statusBtn.style.cssText = u.is_active
+    ? 'justify-content:center;width:100%;color:#fb923c;border-color:rgba(251,146,60,.3)'
+    : 'justify-content:center;width:100%;color:#4ade80;border-color:rgba(74,222,128,.3)'
+  statusBtn.textContent = u.is_active
+    ? '⚠ アカウントを停止（ログイン不可にする）'
+    : '✓ アカウントを再有効化（ログイン可能に戻す）'
+  statusBtn.addEventListener('click', u.is_active ? deactivateUser : reactivateUser)
+  statusArea.appendChild(statusBtn)
   document.getElementById('d-created').textContent = fmtDate(u.created_at)
   document.getElementById('d-plan-select').value  = u.plan
 

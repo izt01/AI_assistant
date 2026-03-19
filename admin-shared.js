@@ -19,17 +19,33 @@ function requireAdmin(){
 // ── API ───────────────────────────────────────────────────────
 async function adminApi(path, opts={}){
   const token = getAdminToken()
-  const res = await fetch('/api/admin' + path, {
-    ...opts,
-    headers:{
-      'Content-Type':'application/json',
-      'Authorization': token ? `Bearer ${token}` : '',
-      ...(opts.headers||{})
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  })
-  if(res.status === 401 || res.status === 403){ adminLogout(); return null }
-  return res.json()
+  try {
+    const res = await fetch('/api/admin' + path, {
+      ...opts,
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+        ...(opts.headers||{})
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    })
+    if(res.status === 401 || res.status === 403){ adminLogout(); return null }
+    if(!res.ok){
+      // 5xx / 4xx エラー: JSONとして読めれば返す、無理なら{ok:false,error:...}を返す
+      try {
+        const errBody = await res.json()
+        console.error('[adminApi] error', res.status, path, errBody)
+        return { ok: false, error: errBody.error || `HTTP ${res.status}`, _status: res.status }
+      } catch(_) {
+        console.error('[adminApi] non-JSON error', res.status, path)
+        return { ok: false, error: `HTTP ${res.status}`, _status: res.status }
+      }
+    }
+    return res.json()
+  } catch(e) {
+    console.error('[adminApi] fetch failed', path, e)
+    return { ok: false, error: e.message || 'ネットワークエラー' }
+  }
 }
 
 // ── フォーマット ───────────────────────────────────────────────
