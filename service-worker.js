@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v11";  // v11: バナー表示時のレイアウト補正
+const CACHE_NAME = "lumina-pwa-v12";  // v12: フォールバック全AI検索対応
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];

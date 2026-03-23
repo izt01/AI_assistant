@@ -3,10 +3,22 @@ greeting: "DIY・修繕のご相談ですね！簡易モードでご案内しま
 
 steps:
   - id: "project"
-    message: "どんなDIYや修繕をお考えですか？（例：棚の取り付け、壁の穴修理など）"
+    message: "どんなDIYや修繕をお考えですか？（例：棚の取り付け、壁の穴修理、塗装など）"
     extract: "project"
+    next: "skill"
+
+  - id: "skill"
+    message: "DIYの経験はありますか？（例：初めて、少しある、慣れてる）"
+    extract: "skill"
+    next: "search"
+
+  - id: "search"
+    message: "「{project}」に必要な材料・工具を楽天市場で探します🔍"
+    action: "search_products"
+    result_message: "「{project}」に使える材料・工具をご紹介します。詳しい作業手順はサービス復旧後にAIがご案内します🔨"
+    fallback_message: "関連商品が見つかりませんでした。別のキーワードでお試しください。"
     next: "done"
 
   - id: "done"
-    message: "「{project}」についてのご相談ですね。現在メンテナンス中のため詳しい手順のご案内ができません。サービス復旧後にぜひまたご相談ください！"
+    message: "他に探したい材料や工具はありますか？"
     next: "project"

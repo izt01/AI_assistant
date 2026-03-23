@@ -5,8 +5,20 @@ steps:
   - id: "ingredient"
     message: "使いたい食材や作りたい料理を教えてください。（例：鶏肉、パスタ、野菜炒めなど）"
     extract: "ingredient"
+    next: "people"
+
+  - id: "people"
+    message: "何人分を作りますか？（例：1人、2人、4人など）"
+    extract: "people"
+    next: "search"
+
+  - id: "search"
+    message: "「{ingredient}」に関連する食材・食品を楽天市場で探します🔍"
+    action: "search_products"
+    result_message: "「{ingredient}」に関連する食材・食品をご紹介します。詳しいレシピはサービス復旧後にAIがご案内します😊"
+    fallback_message: "商品が見つかりませんでした。別の食材やキーワードで試してみてください。"
     next: "done"
 
   - id: "done"
-    message: "「{ingredient}」のレシピですね。現在メンテナンス中のため詳細なレシピのご案内ができません。サービス復旧後にぜひまたご相談ください！クックパッドやDelishKitchenで検索するとすぐに見つかりますよ😊"
+    message: "他に探したい食材や料理はありますか？"
     next: "ingredient"

@@ -89,8 +89,50 @@ def _run_search_action(action: str, context: dict) -> dict:
         return search_nearby(query=f"{area} {genre}", radius=500)
 
     elif action == "search_products":
-        item = context.get("item", "")
-        return search_products(keyword=item, max_results=6)
+        # AI種別によってキーワードの組み立て方を変える
+        ai_type_hint = context.get("_ai_type", "")
+
+        if ai_type_hint in ("recipe", "cooking"):
+            # 料理AI: 食材名で食品・食材を検索
+            ingredient = context.get("ingredient", "")
+            keyword = f"{ingredient} 食材" if ingredient else "食材"
+
+        elif ai_type_hint == "health":
+            # 健康AI: 悩み内容でサプリ・グッズを検索
+            concern = context.get("concern", "")
+            # 悩みカテゴリに応じてキーワードを補完
+            if any(k in concern for k in ["ダイエット", "痩せ", "体重"]):
+                keyword = f"{concern} サプリ ダイエット"
+            elif any(k in concern for k in ["筋トレ", "筋肉", "トレーニング"]):
+                keyword = f"{concern} 器具 トレーニング"
+            elif any(k in concern for k in ["睡眠", "不眠", "寝"]):
+                keyword = f"{concern} グッズ 睡眠改善"
+            elif any(k in concern for k in ["疲れ", "疲労", "だるい"]):
+                keyword = f"{concern} サプリ 疲労回復"
+            else:
+                keyword = f"{concern} 健康グッズ"
+
+        elif ai_type_hint == "diy":
+            # DIY AI: 作業内容で材料・工具を検索
+            project = context.get("project", "")
+            skill = context.get("skill", "")
+            if skill and "初めて" in skill or "初心者" in skill:
+                keyword = f"{project} DIY 初心者 セット"
+            else:
+                keyword = f"{project} DIY 材料 工具"
+
+        elif ai_type_hint in ("appliance", "home"):
+            # 家電AI: 商品名＋予算
+            item = context.get("item", "")
+            budget = context.get("budget", "")
+            keyword = f"{item} {budget}".strip() if budget else item
+
+        else:
+            # 買い物AI・その他: 商品名そのまま
+            item = context.get("item", "")
+            keyword = item
+
+        return search_products(keyword=keyword.strip(), max_results=6)
 
     return {}
 
@@ -137,6 +179,8 @@ def run_fallback(ai_type: str, messages: list, session_state: dict) -> dict:
 
     current_step_id = session_state.get("step", "done")
     context         = session_state.get("context", {})
+    # 検索キーワード構築でAI種別を参照できるよう context に注入
+    context["_ai_type"] = ai_type
 
     # ユーザーの最新メッセージを取得
     user_msg = ""
