@@ -1121,7 +1121,10 @@ def chat():
         from agents.fallback import run_fallback
         # セッションごとのフォールバック状態をextraフィールドに保存・復元
         fb_state = d.get("fallback_state") or {}
-        fb_result = run_fallback(agent_name or ai_type, messages_in, fb_state)
+        fb_ai    = agent_name or ai_type
+        print(f"[Fallback] run_fallback ai={fb_ai} state={fb_state}")
+        fb_result = run_fallback(fb_ai, messages_in, fb_state)
+        print(f"[Fallback] result reply={fb_result['reply'][:40]} next_state={fb_result['session_state']}")
 
         reply_text  = fb_result["reply"]
         extra       = fb_result["extra"]

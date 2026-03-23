@@ -24,7 +24,8 @@ AI_SCENARIO_MAP = {
     "diy":       "diy",
     "appliance": "appliance",
     "home":      "appliance",
-    "general":   "travel",  # 総合はとりあえず旅行
+    "general":   "travel",
+    "all":       "travel",   # 総合AIもとりあえず旅行シナリオ
 }
 
 
@@ -116,9 +117,19 @@ def run_fallback(ai_type: str, messages: list, session_state: dict) -> dict:
 
     # 初回（セッション開始）
     if not session_state or not session_state.get("step"):
-        session_state = {"step": steps[0]["id"] if steps else "done", "context": {}}
+        first_step = steps[0] if steps else None
+        # グリーティング + 最初の質問を一緒に返す
+        greeting = scenario.get("greeting", "ご相談をお聞きします。")
+        if first_step:
+            first_q = first_step.get("message", "")
+            reply_text = f"{greeting}\n\n{first_q}" if first_q else greeting
+            # 最初のステップは質問を出したので、次のステップを current step として設定
+            session_state = {"step": first_step["id"], "context": {}}
+        else:
+            reply_text = greeting
+            session_state = {"step": "done", "context": {}}
         return {
-            "reply":         scenario.get("greeting", "ご相談をお聞きします。"),
+            "reply":         reply_text,
             "extra":         {},
             "suggestions":   [],
             "session_state": session_state,
