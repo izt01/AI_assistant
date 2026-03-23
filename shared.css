@@ -210,9 +210,9 @@ table.dt{width:100%;border-collapse:collapse}
 #modal-root{position:fixed;inset:0;z-index:200;pointer-events:none;display:flex;align-items:center;justify-content:center;padding:20px}
 #modal-root.open{pointer-events:all}
 .m-backdrop{position:fixed;inset:0;background:rgba(26,22,16,.6);backdrop-filter:blur(6px);animation:fadeIn .2s ease}
-.m-box{background:var(--surface);border-radius:20px;padding:26px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:pop .25s ease both;position:relative;z-index:1}
+.m-box{background:var(--surface);border-radius:20px;padding:26px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:pop .25s ease both;position:relative;z-index:1;max-height:90vh;display:flex;flex-direction:column}
 .m-title{font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--ink);letter-spacing:-.02em;margin-bottom:7px}
-.m-body{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:18px}
+.m-body{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:18px;overflow-y:auto;flex:1;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .m-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .m-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:50%;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;color:var(--muted);transition:all .14s}
 .m-close:hover{background:var(--border);color:var(--ink)}
@@ -419,7 +419,7 @@ table.dt{width:100%;border-collapse:collapse}
   .row2, .row3    { grid-template-columns: 1fr; gap: 10px; }
 
   /* モーダルをフルスクリーン気味に */
-  .m-box          { margin: 0; max-width: 100%; border-radius: 20px 20px 0 0; position:fixed; bottom:0; left:0; right:0; }
+  .m-box          { margin: 0; max-width: 100%; border-radius: 20px 20px 0 0; position:fixed; bottom:0; left:0; right:0; max-height:85vh; }
   #modal-root     { align-items: flex-end; padding: 0; }
 
   /* トーストを上部に */
