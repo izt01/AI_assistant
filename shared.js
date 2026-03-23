@@ -253,35 +253,59 @@ async function refreshUsage(){
 // ── フォールバックモード（メンテナンス中）バナー管理 ─────────
 let _fallbackCheckTimer = null
 
-function _insertFallbackBanner(){
-  if(document.getElementById('fallback-banner')) return
+// ── バナー定義（3段階）────────────────────────────────────────
+const _BANNER_CONFIG = {
+  warning: {
+    bg:   'linear-gradient(135deg,#78350f,#92400e)',  // 茶色
+    icon: 'ℹ️',
+    text: `<strong>お知らせ:</strong> 現在、一時的にシステムメンテナンスを予定しております。
+           サービスに影響が出る可能性がありますが、できる限り通常通りご利用いただけるよう対応いたします。
+           ご不便をおかけし申し訳ございません。`,
+  },
+  critical: {
+    bg:   'linear-gradient(135deg,#7f1d1d,#991b1b)',  // 赤
+    icon: '🔧',
+    text: `<strong>【お知らせ】</strong>
+           現在、AIチャット機能は一時的にメンテナンス中です。ご不便をおかけし申し訳ございません。`,
+  },
+}
+
+function _applyBanner(level){
+  // 既存バナーを一旦除去
+  const old = document.getElementById('fallback-banner')
+  if(old){
+    // 同じレベルなら何もしない
+    if(old.dataset.level === level) return
+    old.remove()
+  }
+  const cfg = _BANNER_CONFIG[level]
+  if(!cfg) return
+
   const banner = document.createElement('div')
   banner.id = 'fallback-banner'
+  banner.dataset.level = level
   banner.style.cssText = [
     'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:99999',
-    'background:linear-gradient(135deg,#92400e,#78350f)',
+    `background:${cfg.bg}`,
     'color:#fef3c7', 'font-size:13px', 'font-weight:500',
-    'padding:10px 20px', 'text-align:center',
+    'padding:10px 24px', 'text-align:center', 'line-height:1.6',
     'display:flex', 'align-items:center', 'justify-content:center', 'gap:10px',
-    'box-shadow:0 2px 12px rgba(0,0,0,.3)',
+    'box-shadow:0 2px 12px rgba(0,0,0,.35)',
   ].join(';')
   banner.innerHTML = `
-    <span style="font-size:16px">🔧</span>
-    <span>現在、システムメンテナンス中です。そのため一部の機能に制限があります。</span>
-    <span style="font-size:11px;opacity:.7;margin-left:4px">（復旧後は自動で通常モードに戻ります）</span>
+    <span style="font-size:16px;flex-shrink:0">${cfg.icon}</span>
+    <span>${cfg.text}</span>
   `
-  // bodyが準備できていれば挿入、まだなら DOMContentLoaded を待つ
   if(document.body){
     document.body.appendChild(banner)
   } else {
-    document.addEventListener('DOMContentLoaded', ()=>{ document.body.appendChild(banner) })
+    document.addEventListener('DOMContentLoaded', ()=>{ document.body.appendChild(banner) }, {once:true})
   }
 }
 
 function showFallbackBanner(){
-  // 既に表示中なら何もしない
-  if(document.getElementById('fallback-banner')) return
-  _insertFallbackBanner()
+  // 後方互換: critical レベルで表示
+  _applyBanner('critical')
 }
 
 function hideFallbackBanner(){
@@ -292,8 +316,10 @@ function hideFallbackBanner(){
 async function checkFallbackMode(){
   try {
     const d = await fetch('/api/system/status').then(r=>r.json())
-    if(d.fallback_mode){
-      showFallbackBanner()
+    if(d.fallback_mode || d.budget_warning === 'critical'){
+      _applyBanner('critical')
+    } else if(d.budget_warning === 'warning'){
+      _applyBanner('warning')
     } else {
       hideFallbackBanner()
     }
