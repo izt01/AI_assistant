@@ -242,6 +242,14 @@ const tips = [
 document.getElementById('tip-text').textContent = tips[Math.floor(Math.random()*tips.length)]
 
 function startChat(ai) { location.href = 'chat.html?ai=' + ai }
+
+// フォールバックモードのバナーをページロード時に確認
+document.addEventListener('DOMContentLoaded', async ()=>{
+  try {
+    const d = await fetch('/api/config').then(r=>r.json())
+    if(d.fallback_mode && typeof showFallbackBanner === 'function') showFallbackBanner()
+  } catch(e){}
+})
 </script>
 <div id="mobile-nav-root"></div>
 </body>

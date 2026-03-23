@@ -343,24 +343,31 @@ async function loadFallbackStatus(){
   } catch(e){}
 }
 async function setFallbackMode(enabled){
-  const label = enabled ? 'ON（メンテナンスモードを開始）' : 'OFF（通常モードに復旧）'
-  adminModal({
-    title: `フォールバックモードを${label}にしますか？`,
-    body: enabled
-      ? 'ユーザーはAI会話の代わりにシナリオベースの簡易応答を受け取ります。'
-      : '通常のAI会話に戻します。OpenAI残高が十分あることを確認してください。',
-    okLabel: `${enabled ? 'ONにする' : 'OFFにする'}`,
-    okColor: enabled ? '#f97316' : '#22c55e',
-    onOk: async()=>{
-      const res = await adminApi('/fallback-mode', {method:'POST', body:{enabled}})
-      if(res?.ok){
-        adminToast(enabled ? '🔧 フォールバックモードをONにしました' : '✓ 通常モードに戻しました', 's')
-        loadFallbackStatus()
-      } else {
-        adminToast('切替に失敗しました', 'e')
-      }
+  const label = enabled ? 'ONにする（メンテナンス開始）' : 'OFFにする（通常に戻す）'
+  const msg   = enabled
+    ? 'フォールバックモードをONにします。\nユーザーはシナリオベースの簡易応答を受け取ります。\n\nよろしいですか？'
+    : '通常モードに戻します。\nOpenAI残高が十分あることを確認してください。\n\nよろしいですか？'
+  if(!window.confirm(msg)) return
+
+  const btn = enabled
+    ? document.getElementById('fallback-on-btn')
+    : document.getElementById('fallback-off-btn')
+  if(btn){ btn.disabled = true; btn.textContent = '処理中...' }
+
+  try {
+    const res = await adminApi('/fallback-mode', {method:'POST', body:{enabled}})
+    if(res?.ok){
+      adminToast(enabled ? '🔧 フォールバックモードをONにしました' : '✓ 通常モードに戻しました', 's')
+      loadFallbackStatus()
+    } else {
+      adminToast('切替に失敗しました: ' + (res?.error || '不明'), 'd')
     }
-  })
+  } catch(e) {
+    adminToast('エラーが発生しました: ' + e.message, 'd')
+  } finally {
+    if(btn){ btn.disabled = false }
+    loadFallbackStatus()
+  }
 }
 loadFallbackStatus()
 setInterval(loadFallbackStatus, 30_000)

@@ -337,6 +337,14 @@ function doDelete() {
   toast('アカウントを削除しました','s')
   setTimeout(()=>location.href='index.html',1200)
 }
+
+// フォールバックモードのバナーをページロード時に確認
+document.addEventListener('DOMContentLoaded', async ()=>{
+  try {
+    const d = await fetch('/api/config').then(r=>r.json())
+    if(d.fallback_mode && typeof showFallbackBanner === 'function') showFallbackBanner()
+  } catch(e){}
+})
 </script>
 <div id="mobile-nav-root"></div>
 </body>

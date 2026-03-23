@@ -269,7 +269,8 @@ def db_init_lumina_tables():
     INSERT INTO admin_settings(key,value) VALUES
         ('monthly_budget_usd','100'),
         ('alert_threshold_pct','80'),
-        ('maintenance_mode','false')
+        ('maintenance_mode','false'),
+        ('maintenance_mode_manual','false')  -- 手動ONの場合は自動復旧をスキップ
     ON CONFLICT(key) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_lu_messages_session ON lu_messages(session_id, created_at);
 
@@ -404,6 +405,8 @@ with app.app_context():
         "INSERT INTO lu_pref_diy (user_id) SELECT id FROM lu_users WHERE is_active=TRUE ON CONFLICT DO NOTHING",
         # admin_cost_logs 拡張（自前トークン記録用）
         "CREATE INDEX IF NOT EXISTS idx_admin_cost_logs_month ON admin_cost_logs(month, recorded_at DESC)",
+        # maintenance_mode_manual フラグの初期挿入（存在しない場合のみ）
+        "INSERT INTO admin_settings (key, value) VALUES ('maintenance_mode_manual','false') ON CONFLICT (key) DO NOTHING",
     ]
     for sql in migrations:
         try:
@@ -492,8 +495,9 @@ PLAN_LIMITS = {"free": 10, "pro": 50, "master": 200}
 def _check_and_update_fallback_mode():
     """
     OpenAI残高と使用量を比較してフォールバックモードを自動切替。
-    残高ゼロ → maintenance_mode=true
+    残高ゼロ → maintenance_mode=true（自動ON）
     残高あり → maintenance_mode=false（自動復旧）
+    ※ 管理者が手動でONにした場合（maintenance_mode_manual=true）は自動OFFをスキップ
     """
     try:
         # チャージ累計
@@ -506,18 +510,24 @@ def _check_and_update_fallback_mode():
 
         balance = charged_usd - used_usd
 
-        # 現在のモード
-        cur = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode'", fetch="one")
+        # 現在のモードと手動フラグ
+        cur    = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode'", fetch="one")
+        manual = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode_manual'", fetch="one")
         current_mode = (cur["value"] if cur else "false") == "true"
+        is_manual    = (manual["value"] if manual else "false") == "true"
 
         if balance <= 0 and not current_mode:
-            # 残高ゼロ → フォールバックモードON
-            db_exec("UPDATE admin_settings SET value='true', updated_at=NOW() WHERE key='maintenance_mode'")
-            print(f"[Fallback] 残高ゼロ（${balance:.4f}）→ メンテナンスモード ON")
-        elif balance > 0 and current_mode:
-            # 残高あり → フォールバックモードOFF（自動復旧）
+            # 残高ゼロ → 自動ON（手動フラグは立てない）
+            db_exec("UPDATE admin_settings SET value='true',  updated_at=NOW() WHERE key='maintenance_mode'")
+            db_exec("UPDATE admin_settings SET value='false', updated_at=NOW() WHERE key='maintenance_mode_manual'")
+            print(f"[Fallback] 残高ゼロ（${balance:.4f}）→ メンテナンスモード 自動ON")
+        elif balance > 0 and current_mode and not is_manual:
+            # 残高あり かつ 手動ONでない → 自動OFF（復旧）
             db_exec("UPDATE admin_settings SET value='false', updated_at=NOW() WHERE key='maintenance_mode'")
-            print(f"[Fallback] 残高回復（${balance:.4f}）→ メンテナンスモード OFF")
+            print(f"[Fallback] 残高回復（${balance:.4f}）→ メンテナンスモード 自動OFF")
+        elif balance > 0 and current_mode and is_manual:
+            # 残高あり かつ 手動ON中 → 自動OFFしない
+            print(f"[Fallback] 残高あり（${balance:.4f}）だが手動ONのため維持")
     except Exception as e:
         print(f"[Fallback] モードチェックエラー: {e}")
 
@@ -2320,8 +2330,14 @@ def admin_set_fallback_mode():
     """管理者がフォールバックモードを手動でON/OFFする"""
     d = request.json or {}
     enabled = d.get("enabled", False)
+    # maintenance_mode を更新
     db_exec(
         "UPDATE admin_settings SET value=%s, updated_at=NOW() WHERE key='maintenance_mode'",
+        ("true" if enabled else "false",)
+    )
+    # 手動フラグを更新（ON時はtrue、OFF時はfalse）
+    db_exec(
+        "UPDATE admin_settings SET value=%s, updated_at=NOW() WHERE key='maintenance_mode_manual'",
         ("true" if enabled else "false",)
     )
     print(f"[Fallback] 管理者が手動でフォールバックモードを {'ON' if enabled else 'OFF'} にしました")

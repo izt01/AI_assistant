@@ -276,6 +276,14 @@ function changeCard() {
   })
 }
 function addCard() { changeCard() }
+
+// フォールバックモードのバナーをページロード時に確認
+document.addEventListener('DOMContentLoaded', async ()=>{
+  try {
+    const d = await fetch('/api/config').then(r=>r.json())
+    if(d.fallback_mode && typeof showFallbackBanner === 'function') showFallbackBanner()
+  } catch(e){}
+})
 </script>
 <div id="mobile-nav-root"></div>
 </body>
