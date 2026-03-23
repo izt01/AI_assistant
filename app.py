@@ -412,6 +412,12 @@ with app.app_context():
         except Exception as e:
             print(f"[DB] Migration スキップ: {e}")
 
+    # 起動時フォールバックモードチェック（残高ゼロで自動ON）
+    try:
+        _check_and_update_fallback_mode()
+    except Exception as e:
+        print(f"[Fallback] 起動時チェックスキップ: {e}")
+
 
 # ══════════════════════════════════════════════════════════════
 #  JWT 認証
@@ -478,6 +484,51 @@ def admin_required(f):
     return wrapper
 
 PLAN_LIMITS = {"free": 10, "pro": 50, "master": 200}
+
+# ══════════════════════════════════════════════════════════════
+#  フォールバックモード管理
+# ══════════════════════════════════════════════════════════════
+
+def _check_and_update_fallback_mode():
+    """
+    OpenAI残高と使用量を比較してフォールバックモードを自動切替。
+    残高ゼロ → maintenance_mode=true
+    残高あり → maintenance_mode=false（自動復旧）
+    """
+    try:
+        # チャージ累計
+        charged = db_exec("SELECT COALESCE(SUM(amount_usd),0) as total FROM admin_openai_budget", fetch="one")
+        charged_usd = float(charged["total"] or 0) if charged else 0.0
+
+        # 使用累計（全期間）
+        used = db_exec("SELECT COALESCE(SUM(cost_usd),0) as total FROM admin_cost_logs", fetch="one")
+        used_usd = float(used["total"] or 0) if used else 0.0
+
+        balance = charged_usd - used_usd
+
+        # 現在のモード
+        cur = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode'", fetch="one")
+        current_mode = (cur["value"] if cur else "false") == "true"
+
+        if balance <= 0 and not current_mode:
+            # 残高ゼロ → フォールバックモードON
+            db_exec("UPDATE admin_settings SET value='true', updated_at=NOW() WHERE key='maintenance_mode'")
+            print(f"[Fallback] 残高ゼロ（${balance:.4f}）→ メンテナンスモード ON")
+        elif balance > 0 and current_mode:
+            # 残高あり → フォールバックモードOFF（自動復旧）
+            db_exec("UPDATE admin_settings SET value='false', updated_at=NOW() WHERE key='maintenance_mode'")
+            print(f"[Fallback] 残高回復（${balance:.4f}）→ メンテナンスモード OFF")
+    except Exception as e:
+        print(f"[Fallback] モードチェックエラー: {e}")
+
+
+def is_fallback_mode() -> bool:
+    """現在フォールバックモードか確認する"""
+    try:
+        row = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode'", fetch="one")
+        return (row["value"] if row else "false") == "true"
+    except Exception:
+        return False
 
 def hash_pw(pw):   return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 def check_pw(pw, h): return bcrypt.checkpw(pw.encode(), h.encode())
@@ -1053,6 +1104,42 @@ def chat():
     if not agent_name:
         agent_name = route(messages_in)
     print(f"[Router] user={uid} ai_type={ai_type} → agent={agent_name}")
+
+    # ── フォールバックモードチェック ─────────────────────────────
+    # 残高ゼロ or メンテナンスモード時はシナリオベースの返答に切り替える
+    if is_fallback_mode():
+        from agents.fallback import run_fallback
+        # セッションごとのフォールバック状態をextraフィールドに保存・復元
+        fb_state = d.get("fallback_state") or {}
+        fb_result = run_fallback(agent_name or ai_type, messages_in, fb_state)
+
+        reply_text  = fb_result["reply"]
+        extra       = fb_result["extra"]
+        suggestions = fb_result.get("suggestions", [])
+
+        # AIメッセージ保存
+        msg_id = str(uuid.uuid4())
+        extra_json = json.dumps(extra, ensure_ascii=False) if extra else None
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO lu_messages (id,session_id,user_id,role,content,ai_type,extra)"
+                " VALUES (%s,%s,%s,'assistant',%s,%s,%s)",
+                (msg_id, session_id, uid, reply_text, ai_type, extra_json)
+            )
+        conn.commit()
+
+        # フォールバックモード中は usage_count を消費しない
+        return jsonify({
+            "reply":         reply_text,
+            "suggestions":   suggestions,
+            "extra":         extra,
+            "session_id":    session_id,
+            "message_id":    msg_id,
+            "usage_count":   user["usage_count"],
+            "fallback_mode": True,
+            "fallback_state": fb_result["session_state"],
+        })
+    # ─────────────────────────────────────────────────────────────
 
     context_injection = build_context_injection(uid, agent_name)
 
@@ -1875,7 +1962,9 @@ def admin_add_charge():
         return jsonify({"error": "金額が無効です"}), 400
     db_exec("INSERT INTO admin_openai_budget(amount_usd,note,charged_by,card_last4) VALUES(%s,%s,%s,%s)",
             (amount, d.get("note",""), str(g.current_user["id"]), d.get("card_last4")))
-    return jsonify({"ok": True})
+    # チャージ後に残高を再チェック → フォールバックモードを自動解除
+    _check_and_update_fallback_mode()
+    return jsonify({"ok": True, "fallback_mode": is_fallback_mode()})
 
 @app.route("/api/admin/cards", methods=["GET"])
 @admin_required
@@ -2213,7 +2302,30 @@ def get_frontend_config():
     """フロントエンドが楽天APIを直接叩くために必要な公開設定を返す"""
     return jsonify({
         "rakuten_app_id": os.getenv("RAKUTEN_APP_ID", ""),
+        "fallback_mode":  is_fallback_mode(),  # フォールバックモードフラグ
     })
+
+@app.route("/api/system/status", methods=["GET"])
+def system_status():
+    """フロントが定期ポーリングするシステム状態エンドポイント（認証不要）"""
+    _check_and_update_fallback_mode()
+    return jsonify({
+        "fallback_mode": is_fallback_mode(),
+        "ok": True,
+    })
+
+@app.route("/api/admin/fallback-mode", methods=["POST"])
+@admin_required
+def admin_set_fallback_mode():
+    """管理者がフォールバックモードを手動でON/OFFする"""
+    d = request.json or {}
+    enabled = d.get("enabled", False)
+    db_exec(
+        "UPDATE admin_settings SET value=%s, updated_at=NOW() WHERE key='maintenance_mode'",
+        ("true" if enabled else "false",)
+    )
+    print(f"[Fallback] 管理者が手動でフォールバックモードを {'ON' if enabled else 'OFF'} にしました")
+    return jsonify({"ok": True, "fallback_mode": enabled})
 
 
 # ══════════════════════════════════════════════════════════════

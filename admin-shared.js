@@ -108,6 +108,37 @@ function adminModal({title='', body='', onOk=null, okLabel='実行', okColor='va
 }
 
 // ── サイドナビ描画 ─────────────────────────────────────────────
+// ── 管理画面用フォールバックバナー ──────────────────────────
+async function checkAdminFallbackBanner(){
+  try {
+    const d = await fetch('/api/system/status').then(r=>r.json())
+    const existing = document.getElementById('admin-fallback-banner')
+    if(d.fallback_mode && !existing){
+      const banner = document.createElement('div')
+      banner.id = 'admin-fallback-banner'
+      banner.style.cssText = [
+        'background:linear-gradient(135deg,#92400e,#78350f)',
+        'color:#fef3c7','font-size:12.5px','font-weight:500',
+        'padding:10px 20px','text-align:center',
+        'display:flex','align-items:center','justify-content:center','gap:8px',
+      ].join(';')
+      banner.innerHTML = `
+        <span>🔧</span>
+        <span>現在、システムメンテナンス中です。そのため一部の機能に制限があります。</span>
+        <span style="font-size:11px;opacity:.7">（残高回復後に自動復旧）</span>
+      `
+      document.body.insertBefore(banner, document.body.firstChild)
+    } else if(!d.fallback_mode && existing){
+      existing.remove()
+    }
+  } catch(e){}
+}
+// DOMContentLoaded 後にチェック・以後60秒ごとに確認
+document.addEventListener('DOMContentLoaded', ()=>{
+  checkAdminFallbackBanner()
+  setInterval(checkAdminFallbackBanner, 60_000)
+})
+
 function buildAdminNav(active='dashboard'){
   const nav_items = [
     {id:'dashboard', icon:'▣',  label:'ダッシュボード',  href:'admin-dashboard.html'},

@@ -254,6 +254,7 @@ let currentSessionId = null
 let lastMessageId  = null
 let lastProposalId = null
 let lastReactionDone = false
+let _fallbackState = null  // フォールバックモードのシナリオ進行状態
  
 // 楽天AppIDをバックエンドから取得
 let _rakutenAppId = ''
@@ -578,17 +579,20 @@ async function sendMsg() {
     const resp = await apiRequest('/chat', {
       method: 'POST',
       body: {
-        ai_type:    aiParam,
-        messages:   trimmedMessages,
-        session_id: currentSessionId,
-        lat:        window._userLat || null,
-        lng:        window._userLng || null,
+        ai_type:        aiParam,
+        messages:       trimmedMessages,
+        session_id:     currentSessionId,
+        lat:            window._userLat || null,
+        lng:            window._userLng || null,
+        fallback_state: _fallbackState || undefined,  // フォールバックシナリオ状態
       }
     })
  
     hideTyping()
     currentSessionId = resp.session_id
     lastMessageId    = resp.message_id
+    // フォールバックモードのシナリオ状態を保持
+    if(resp.fallback_state !== undefined) _fallbackState = resp.fallback_state
     lastProposalId   = resp.proposal_id || null
     lastReactionDone = false
  

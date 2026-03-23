@@ -1,0 +1,12 @@
+name: "DIY AI（メンテナンス中）"
+greeting: "DIY・修繕のご相談ですね！簡易モードでご案内します🔨"
+
+steps:
+  - id: "project"
+    message: "どんなDIYや修繕をお考えですか？（例：棚の取り付け、壁の穴修理など）"
+    extract: "project"
+    next: "done"
+
+  - id: "done"
+    message: "「{project}」についてのご相談ですね。現在メンテナンス中のため詳しい手順のご案内ができません。サービス復旧後にぜひまたご相談ください！"
+    next: "project"

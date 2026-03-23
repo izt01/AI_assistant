@@ -1,0 +1,24 @@
+name: "グルメAI（メンテナンス中）"
+greeting: "お店探しのご相談ですね！簡易モードでご案内します😊"
+
+steps:
+  - id: "area"
+    message: "どのエリアでお探しですか？（例：渋谷、新宿、大阪・梅田など）"
+    extract: "area"
+    next: "genre"
+
+  - id: "genre"
+    message: "どんな料理をご希望ですか？（例：和食、イタリアン、焼肉、ラーメンなど）"
+    extract: "genre"
+    next: "search"
+
+  - id: "search"
+    message: "{area}の{genre}を検索します🔍"
+    action: "search_nearby"
+    result_message: "{area}周辺の{genre}をご紹介します。"
+    fallback_message: "条件に合うお店が見つかりませんでした。エリアやジャンルを変えてお試しください。"
+    next: "done"
+
+  - id: "done"
+    message: "他にお探しのエリアやジャンルはありますか？"
+    next: "area"

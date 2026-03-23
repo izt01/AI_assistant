@@ -57,6 +57,28 @@
       <!-- アラートバー -->
       <div id="alert-area"></div>
 
+      <!-- フォールバックモード コントロールパネル -->
+      <div class="admin-section" id="fallback-panel" style="margin-bottom:16px;border:1px solid rgba(251,146,60,.25);background:rgba(251,146,60,.04)">
+        <div class="admin-section-hdr">
+          <div class="admin-section-title" style="color:#fb923c">🔧 フォールバックモード（メンテナンスモード）</div>
+          <div id="fallback-status-badge" style="font-size:12px;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.06)">確認中...</div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+          ONにすると、OpenAI APIを使わずシナリオベースで返答します。<br>
+          残高ゼロ時は自動でONになり、残高回復時に自動でOFFに戻ります。
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" id="fallback-on-btn" onclick="setFallbackMode(true)"
+            style="color:#f97316;border-color:rgba(249,115,22,.3)">
+            🔧 フォールバックモードをONにする
+          </button>
+          <button class="btn btn-ghost" id="fallback-off-btn" onclick="setFallbackMode(false)"
+            style="color:#4ade80;border-color:rgba(74,222,128,.3)">
+            ✓ 通常モードに戻す
+          </button>
+        </div>
+      </div>
+
       <!-- KPI -->
       <div class="kpi-grid" id="kpi-grid">
         <div class="kpi"><div class="kpi-label">総ユーザー数</div><div class="kpi-val" id="k-users">—</div><div class="kpi-icon">◉</div></div>
@@ -297,8 +319,51 @@ async function loadDashboard(){
 }
 
 loadDashboard()
-// 60秒ごとに自動更新
 setInterval(loadDashboard, 60000)
+
+// フォールバックモード状態を表示
+async function loadFallbackStatus(){
+  try {
+    const d = await fetch('/api/system/status').then(r=>r.json())
+    const badge = document.getElementById('fallback-status-badge')
+    const onBtn  = document.getElementById('fallback-on-btn')
+    const offBtn = document.getElementById('fallback-off-btn')
+    if(!badge) return
+    if(d.fallback_mode){
+      badge.textContent = '🔴 ON（メンテナンス中）'
+      badge.style.background = 'rgba(239,68,68,.15)'
+      badge.style.color = '#f87171'
+      onBtn.disabled = true; offBtn.disabled = false
+    } else {
+      badge.textContent = '🟢 OFF（通常稼働中）'
+      badge.style.background = 'rgba(74,222,128,.1)'
+      badge.style.color = '#4ade80'
+      onBtn.disabled = false; offBtn.disabled = true
+    }
+  } catch(e){}
+}
+async function setFallbackMode(enabled){
+  const label = enabled ? 'ON（メンテナンスモードを開始）' : 'OFF（通常モードに復旧）'
+  adminModal({
+    title: `フォールバックモードを${label}にしますか？`,
+    body: enabled
+      ? 'ユーザーはAI会話の代わりにシナリオベースの簡易応答を受け取ります。'
+      : '通常のAI会話に戻します。OpenAI残高が十分あることを確認してください。',
+    okLabel: `${enabled ? 'ONにする' : 'OFFにする'}`,
+    okColor: enabled ? '#f97316' : '#22c55e',
+    onOk: async()=>{
+      const res = await adminApi('/fallback-mode', {method:'POST', body:{enabled}})
+      if(res?.ok){
+        adminToast(enabled ? '🔧 フォールバックモードをONにしました' : '✓ 通常モードに戻しました', 's')
+        loadFallbackStatus()
+      } else {
+        adminToast('切替に失敗しました', 'e')
+      }
+    }
+  })
+}
+loadFallbackStatus()
+setInterval(loadFallbackStatus, 30_000)
 </script>
 </body>
 </html>
