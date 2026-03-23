@@ -253,8 +253,8 @@ async function refreshUsage(){
 // ── フォールバックモード（メンテナンス中）バナー管理 ─────────
 let _fallbackCheckTimer = null
 
-function showFallbackBanner(){
-  if(document.getElementById('fallback-banner')) return  // 既に表示中
+function _insertFallbackBanner(){
+  if(document.getElementById('fallback-banner')) return
   const banner = document.createElement('div')
   banner.id = 'fallback-banner'
   banner.style.cssText = [
@@ -270,16 +270,23 @@ function showFallbackBanner(){
     <span>現在、システムメンテナンス中です。そのため一部の機能に制限があります。</span>
     <span style="font-size:11px;opacity:.7;margin-left:4px">（復旧後は自動で通常モードに戻ります）</span>
   `
-  document.body.insertBefore(banner, document.body.firstChild)
-  // バナー分だけ本文をずらす
-  document.body.style.paddingTop = (parseInt(document.body.style.paddingTop||'0') + 44) + 'px'
+  // bodyが準備できていれば挿入、まだなら DOMContentLoaded を待つ
+  if(document.body){
+    document.body.appendChild(banner)
+  } else {
+    document.addEventListener('DOMContentLoaded', ()=>{ document.body.appendChild(banner) })
+  }
+}
+
+function showFallbackBanner(){
+  // 既に表示中なら何もしない
+  if(document.getElementById('fallback-banner')) return
+  _insertFallbackBanner()
 }
 
 function hideFallbackBanner(){
   const banner = document.getElementById('fallback-banner')
-  if(!banner) return
-  document.body.style.paddingTop = Math.max(0, parseInt(document.body.style.paddingTop||'0') - 44) + 'px'
-  banner.remove()
+  if(banner) banner.remove()
 }
 
 async function checkFallbackMode(){
@@ -299,6 +306,15 @@ function startFallbackWatcher(){
   // 60秒ごとに確認（復旧を自動検知）
   _fallbackCheckTimer = setInterval(checkFallbackMode, 60_000)
 }
+
+// ページロード直後に認証不要でフォールバックモードをチェック
+// requireAuth()を待たずにバナーを表示できる
+document.addEventListener('DOMContentLoaded', ()=>{
+  // admin-* ページは admin-shared.js が担当するのでスキップ
+  if(!location.pathname.includes('admin')) {
+    checkFallbackMode()
+  }
+})
 async function fetchMatchScore(){
   try{ return await apiRequest('/match-score') }
   catch{ return {overall_score:0,total_sessions:0} }

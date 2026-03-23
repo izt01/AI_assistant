@@ -263,9 +263,13 @@ async function loadConfig() {
     const d = await fetch('/api/config').then(r=>r.json())
     _rakutenAppId = d.rakuten_app_id || ''
     console.log('[Config] rakutenAppId取得:', _rakutenAppId ? '✓' : '未設定')
-    // フォールバックモードのバナーをページロード時に即表示
+    // フォールバックモードのバナーをDOMContentLoaded後に表示
     if(d.fallback_mode && typeof showFallbackBanner === 'function') {
-      showFallbackBanner()
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', ()=> showFallbackBanner(), {once:true})
+      } else {
+        showFallbackBanner()
+      }
     }
   } catch(e) { console.warn('[Config] 取得失敗', e) }
 }
