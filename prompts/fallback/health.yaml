@@ -1,12 +1,19 @@
 name: "健康AI（メンテナンス中）"
-greeting: "健康に関するご相談ですね。現在メンテナンス中のため、簡易モードでご案内します💚"
+greeting: "健康に関するご相談ですね。簡易モードでご案内します💚"
 
 steps:
   - id: "concern"
-    message: "どのような健康のお悩みやご相談がありますか？（例：ダイエット、運動不足、睡眠など）"
+    message: "どのような健康のお悩みがありますか？（例：ダイエット、筋トレ、睡眠改善、疲労回復など）"
     extract: "concern"
+    next: "search"
+
+  - id: "search"
+    message: "「{concern}」に関連するアイテムを検索します🔍"
+    action: "search_products"
+    result_message: "「{concern}」に関連するグッズ・サプリをご紹介します。具体的なアドバイスはサービス復旧後にAIがご案内します💚"
+    fallback_message: "関連商品が見つかりませんでした。別のキーワードでお試しください。"
     next: "done"
 
   - id: "done"
-    message: "「{concern}」についてのご相談ですね。現在メンテナンス中のため詳しいアドバイスができません。サービス復旧後にぜひまたご相談ください。緊急の場合は医療機関にご相談ください。"
+    message: "他にお悩みはありますか？"
     next: "concern"
