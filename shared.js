@@ -65,15 +65,16 @@ async function requireAuth(){
         const d = await apiRequest('/auth/me')  // ← await で待つ
         setCachedUser(d.user)
         _startSessionWatcher()
+        startFallbackWatcher()
         return d.user
       } catch(e) {
-        // 401 → apiRequest 内で _forceLogout 発火済み
         return null
       }
     }
     const d=await apiRequest('/auth/me')
     setCachedUser(d.user)
     _startSessionWatcher()
+    startFallbackWatcher()
     return d.user
   } catch(e){
     if(e.status===401){ _forceLogout(e.error||'セッションが無効です') }
@@ -247,6 +248,56 @@ function toggleSidebar(){ document.querySelector('.sidebar')?.classList.toggle('
 
 async function refreshUsage(){
   try{ const d=await apiRequest('/auth/me'); if(d.user) setCachedUser(d.user) }catch{}
+}
+
+// ── フォールバックモード（メンテナンス中）バナー管理 ─────────
+let _fallbackCheckTimer = null
+
+function showFallbackBanner(){
+  if(document.getElementById('fallback-banner')) return  // 既に表示中
+  const banner = document.createElement('div')
+  banner.id = 'fallback-banner'
+  banner.style.cssText = [
+    'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:99999',
+    'background:linear-gradient(135deg,#92400e,#78350f)',
+    'color:#fef3c7', 'font-size:13px', 'font-weight:500',
+    'padding:10px 20px', 'text-align:center',
+    'display:flex', 'align-items:center', 'justify-content:center', 'gap:10px',
+    'box-shadow:0 2px 12px rgba(0,0,0,.3)',
+  ].join(';')
+  banner.innerHTML = `
+    <span style="font-size:16px">🔧</span>
+    <span>現在、システムメンテナンス中です。そのため一部の機能に制限があります。</span>
+    <span style="font-size:11px;opacity:.7;margin-left:4px">（復旧後は自動で通常モードに戻ります）</span>
+  `
+  document.body.insertBefore(banner, document.body.firstChild)
+  // バナー分だけ本文をずらす
+  document.body.style.paddingTop = (parseInt(document.body.style.paddingTop||'0') + 44) + 'px'
+}
+
+function hideFallbackBanner(){
+  const banner = document.getElementById('fallback-banner')
+  if(!banner) return
+  document.body.style.paddingTop = Math.max(0, parseInt(document.body.style.paddingTop||'0') - 44) + 'px'
+  banner.remove()
+}
+
+async function checkFallbackMode(){
+  try {
+    const d = await fetch('/api/system/status').then(r=>r.json())
+    if(d.fallback_mode){
+      showFallbackBanner()
+    } else {
+      hideFallbackBanner()
+    }
+  } catch(e) { /* ネットワークエラーは無視 */ }
+}
+
+function startFallbackWatcher(){
+  if(_fallbackCheckTimer) return
+  checkFallbackMode()  // 即時チェック
+  // 60秒ごとに確認（復旧を自動検知）
+  _fallbackCheckTimer = setInterval(checkFallbackMode, 60_000)
 }
 async function fetchMatchScore(){
   try{ return await apiRequest('/match-score') }

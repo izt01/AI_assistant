@@ -1,0 +1,12 @@
+name: "料理AI（メンテナンス中）"
+greeting: "料理のご相談ですね！簡易モードでご案内します🍳"
+
+steps:
+  - id: "ingredient"
+    message: "使いたい食材や作りたい料理を教えてください。（例：鶏肉、パスタ、野菜炒めなど）"
+    extract: "ingredient"
+    next: "done"
+
+  - id: "done"
+    message: "「{ingredient}」のレシピですね。現在メンテナンス中のため詳細なレシピのご案内ができません。サービス復旧後にぜひまたご相談ください！クックパッドやDelishKitchenで検索するとすぐに見つかりますよ😊"
+    next: "ingredient"

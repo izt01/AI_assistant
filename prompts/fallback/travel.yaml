@@ -1,0 +1,40 @@
+# フォールバックモード：旅行AI シナリオ定義
+# OpenAI APIが使えない場合に、このシナリオに基づいてシステム的に返答する
+# steps: ユーザーから情報を収集するステップ
+# 各stepでユーザーの返答を受け取り、next_stepで次に進む
+# "search"ステップでツール検索を実行し、結果を返す
+
+name: "旅行AI（メンテナンス中）"
+greeting: "旅行のご相談ですね！現在メンテナンス中のため、簡易モードでご案内します。いくつかご質問させてください😊"
+
+steps:
+  - id: "destination"
+    message: "どちらへのご旅行をお考えですか？（例：金沢、京都、北海道など）"
+    extract: "destination"
+    next: "duration"
+
+  - id: "duration"
+    message: "旅行の日程はどのくらいをお考えですか？（例：1泊2日、2泊3日など）"
+    extract: "duration"
+    next: "people"
+
+  - id: "people"
+    message: "何名様での旅行ですか？（例：1人、2人、家族4人など）"
+    extract: "adult_num"
+    next: "budget"
+
+  - id: "budget"
+    message: "1泊あたりの宿泊予算はどのくらいですか？（例：5,000円、1万円、2万円など）"
+    extract: "budget"
+    next: "search"
+
+  - id: "search"
+    message: "ありがとうございます！{destination}のホテルを検索します🔍"
+    action: "search_hotels"
+    result_message: "{destination}のおすすめホテルをご紹介します。詳しくはサービス復旧後にAIがご案内いたします。"
+    fallback_message: "{destination}周辺のホテルが見つかりませんでした。他のエリアをご希望の場合は、場所を教えてください。"
+    next: "done"
+
+  - id: "done"
+    message: "他にご質問はありますか？旅行先を変えてもう一度検索することもできます。"
+    next: "destination"

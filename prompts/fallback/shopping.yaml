@@ -1,0 +1,19 @@
+name: "買い物AI（メンテナンス中）"
+greeting: "お買い物のご相談ですね！簡易モードでご案内します🛍️"
+
+steps:
+  - id: "item"
+    message: "お探しの商品を教えてください。（例：掃除機、スニーカー、プレゼントなど）"
+    extract: "item"
+    next: "search"
+
+  - id: "search"
+    message: "「{item}」を楽天市場で検索します🔍"
+    action: "search_products"
+    result_message: "楽天市場で「{item}」の検索結果をご紹介します。"
+    fallback_message: "検索結果が見つかりませんでした。別のキーワードでお試しください。"
+    next: "done"
+
+  - id: "done"
+    message: "他にお探しの商品はありますか？"
+    next: "item"

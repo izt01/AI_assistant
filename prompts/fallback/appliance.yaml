@@ -1,0 +1,24 @@
+name: "家電AI（メンテナンス中）"
+greeting: "家電・インテリアのご相談ですね！簡易モードでご案内します📺"
+
+steps:
+  - id: "item"
+    message: "お探しの家電や家具を教えてください。（例：冷蔵庫、ソファ、照明など）"
+    extract: "item"
+    next: "budget"
+
+  - id: "budget"
+    message: "ご予算はどのくらいですか？（例：3万円以内、5万円くらいなど）"
+    extract: "budget"
+    next: "search"
+
+  - id: "search"
+    message: "「{item}」を検索します🔍"
+    action: "search_products"
+    result_message: "「{item}」の検索結果をご紹介します。"
+    fallback_message: "検索結果が見つかりませんでした。"
+    next: "done"
+
+  - id: "done"
+    message: "他にお探しの商品はありますか？"
+    next: "item"
