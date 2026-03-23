@@ -270,13 +270,15 @@ const _BANNER_CONFIG = {
   },
 }
 
+const _BANNER_H = 48  // バナーの高さ（px）
+
 function _applyBanner(level){
   // 既存バナーを一旦除去
   const old = document.getElementById('fallback-banner')
   if(old){
-    // 同じレベルなら何もしない
     if(old.dataset.level === level) return
     old.remove()
+    _adjustLayoutForBanner(false)
   }
   const cfg = _BANNER_CONFIG[level]
   if(!cfg) return
@@ -296,11 +298,28 @@ function _applyBanner(level){
     <span style="font-size:16px;flex-shrink:0">${cfg.icon}</span>
     <span>${cfg.text}</span>
   `
-  if(document.body){
+  const insertBanner = () => {
     document.body.appendChild(banner)
-  } else {
-    document.addEventListener('DOMContentLoaded', ()=>{ document.body.appendChild(banner) }, {once:true})
+    _adjustLayoutForBanner(true)
   }
+  if(document.body) insertBanner()
+  else document.addEventListener('DOMContentLoaded', insertBanner, {once:true})
+}
+
+function _adjustLayoutForBanner(show){
+  // バナー分だけ各レイアウト要素をずらす
+  const h = show ? _BANNER_H : 0
+  // main-header（sticky top:0 を補正）
+  const header = document.querySelector('.main-header')
+  if(header) header.style.top = h + 'px'
+  // chat-shell の高さを補正（バナー分だけ縮める）
+  const chatShell = document.querySelector('.chat-shell')
+  if(chatShell) chatShell.style.height = `calc(100vh - var(--hh) - ${h}px)`
+  // モバイルヘッダーも補正
+  const mobileHeader = document.getElementById('mobile-header')
+  if(mobileHeader) mobileHeader.style.top = h + 'px'
+  // body の padding-top で他ページのスクロール基点を補正
+  document.body.style.paddingTop = h ? h + 'px' : ''
 }
 
 function showFallbackBanner(){
@@ -310,7 +329,10 @@ function showFallbackBanner(){
 
 function hideFallbackBanner(){
   const banner = document.getElementById('fallback-banner')
-  if(banner) banner.remove()
+  if(banner){
+    banner.remove()
+    _adjustLayoutForBanner(false)
+  }
 }
 
 async function checkFallbackMode(){
