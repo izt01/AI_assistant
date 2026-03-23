@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v12";  // v12: フォールバック全AI検索対応
+const CACHE_NAME = "lumina-pwa-v13";  // v13: 文字数制限2000文字
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];
