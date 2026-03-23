@@ -727,31 +727,40 @@ async function sendMsg() {
     if(aiParam === 'home' && resp.extra && resp.extra._products) {
       renderProductCards(resp.extra._products.items || [], 'appliance')
  
-    // 買い物AI(shopping): ブラウザから楽天を直接検索（リアルタイム検索）
-    } else if(aiParam === 'shopping' && _rakutenAppId) {
-      const kwFromAI = resp.extra && resp.extra._search_keyword
-      const kw = kwFromAI || (resp.extra?.needs_more_info ? null : extractShoppingKeyword(text, reply))
-      console.log('[Shopping] needs_more_info=', resp.extra?.needs_more_info, 'kw=', kw)
-      if(kw) {
-        const loadingEl = document.createElement('div')
-        loadingEl.id = 'product-loading'
-        loadingEl.style.cssText = 'text-align:center;padding:16px;color:var(--subtle);font-size:12px'
-        loadingEl.textContent = '🛍️ 楽天市場を検索中...'
-        document.getElementById('chat-msgs').appendChild(loadingEl)
-        scrollBottom()
-        ;(async () => {
-          const items = await searchRakutenDirect(kw, 6)
-          const el = document.getElementById('product-loading')
-          if(el) el.remove()
-          if(items && items.length > 0) {
-            renderProductCards(items, 'shopping')
-            if(resp.extra && resp.extra._nearby_stores) {
-              renderNearbyStores(resp.extra._nearby_stores.places || [], 'shopping')
+    // 買い物AI: バックエンドの _products を最優先、なければフロントから楽天直接検索
+    } else if(aiParam === 'shopping') {
+      if(resp.extra && resp.extra._products && resp.extra._products.items?.length > 0) {
+        // ① バックエンドが検索済みの結果をそのまま使用
+        renderProductCards(resp.extra._products.items, 'shopping')
+        if(resp.extra._nearby_stores) {
+          renderNearbyStores(resp.extra._nearby_stores.places || [], 'shopping')
+        }
+      } else if(_rakutenAppId) {
+        // ② バックエンド結果がない場合はフロントから楽天直接検索
+        const kwFromAI = resp.extra && resp.extra._search_keyword
+        const kw = kwFromAI || (resp.extra?.needs_more_info ? null : extractShoppingKeyword(text, reply))
+        console.log('[Shopping] フロント検索 kw=', kw)
+        if(kw) {
+          const loadingEl = document.createElement('div')
+          loadingEl.id = 'product-loading'
+          loadingEl.style.cssText = 'text-align:center;padding:16px;color:var(--subtle);font-size:12px'
+          loadingEl.textContent = '🛍️ 楽天市場を検索中...'
+          document.getElementById('chat-msgs').appendChild(loadingEl)
+          scrollBottom()
+          ;(async () => {
+            const items = await searchRakutenDirect(kw, 6)
+            const el = document.getElementById('product-loading')
+            if(el) el.remove()
+            if(items && items.length > 0) {
+              renderProductCards(items, 'shopping')
+              if(resp.extra && resp.extra._nearby_stores) {
+                renderNearbyStores(resp.extra._nearby_stores.places || [], 'shopping')
+              }
+            } else {
+              console.warn('[Shopping] 商品0件 kw='+kw)
             }
-          } else {
-            console.warn('[Shopping] 商品0件 kw='+kw)
-          }
-        })()
+          })()
+        }
       }
  
     // DIY AI(diy): バックエンドの _products を使用
@@ -762,6 +771,7 @@ async function sendMsg() {
     } else if(resp.extra && resp.extra._products) {
       renderProductCards(resp.extra._products.items || [])
     }
+ 
  
     addActionChips(aiParam, text)
     updateUsageBadge()

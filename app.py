@@ -666,6 +666,38 @@ def build_context_injection(user_id, ai_type):
         if s.get("liked_brands"):    lines.append(f"好きなブランド: {', '.join(s['liked_brands'])}")
         if s.get("disliked_brands"): lines.append(f"苦手なブランド: {', '.join(s['disliked_brands'])}")
 
+        # 買い物の優先軸をAIに注入（比較表や提案の軸に使用）
+        if ai_type == "shopping":
+            priority_labels = {
+                "priority_price":        ("価格の安さ", "price"),
+                "priority_practicality": ("実用性・コスパ", "practicality"),
+                "priority_novelty":      ("デザイン・おしゃれさ", "novelty"),
+                "priority_reliability":  ("耐久性・品質信頼性", "reliability"),
+            }
+            top_priorities = []
+            for col, (label, key) in priority_labels.items():
+                val = s.get(col, 3)
+                if isinstance(val, int) and val >= 4:
+                    top_priorities.append(label)
+            if top_priorities:
+                lines.append(f"【買い物の優先軸（比較表・提案に必ず反映すること）】: {' > '.join(top_priorities)}")
+                lines.append("→ 比較表を作るときは上記の優先軸を第1列・第1ソートキーにする")
+            # user_preferences からも好み軸を補完
+            learned = ctx.get("learned_prefs", {}).get("shopping", [])
+            price_keywords  = ["安い", "コスパ", "予算", "節約", "格安"]
+            quality_keywords = ["丈夫", "壊れにくい", "品質", "長持ち", "耐久"]
+            design_keywords  = ["デザイン", "おしゃれ", "見た目", "かっこいい", "かわいい"]
+            inferred = []
+            for pref in learned:
+                v = pref.get("value","")
+                if pref["confidence"] > 0:
+                    if any(k in v for k in price_keywords):   inferred.append("価格重視")
+                    if any(k in v for k in quality_keywords): inferred.append("耐久性重視")
+                    if any(k in v for k in design_keywords):  inferred.append("デザイン重視")
+            inferred = list(dict.fromkeys(inferred))  # 重複除去
+            if inferred:
+                lines.append(f"会話から推測した優先軸: {' / '.join(inferred)}（比較表・提案に活用すること）")
+
     if ai_type in ("health", "general"):
         h = ctx.get("health_pref", {})
         if h.get("health_goals"):       lines.append(f"健康目標: {', '.join(h['health_goals'])}")
