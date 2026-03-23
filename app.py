@@ -270,7 +270,8 @@ def db_init_lumina_tables():
         ('monthly_budget_usd','100'),
         ('alert_threshold_pct','80'),
         ('maintenance_mode','false'),
-        ('maintenance_mode_manual','false')  -- 手動ONの場合は自動復旧をスキップ
+        ('maintenance_mode_manual','false'),  -- 手動ONの場合は自動復旧をスキップ
+        ('budget_warning_mode','none')        -- none/warning(90%超)/critical(100%)
     ON CONFLICT(key) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_lu_messages_session ON lu_messages(session_id, created_at);
 
@@ -407,6 +408,8 @@ with app.app_context():
         "CREATE INDEX IF NOT EXISTS idx_admin_cost_logs_month ON admin_cost_logs(month, recorded_at DESC)",
         # maintenance_mode_manual フラグの初期挿入（存在しない場合のみ）
         "INSERT INTO admin_settings (key, value) VALUES ('maintenance_mode_manual','false') ON CONFLICT (key) DO NOTHING",
+        # budget_warning_mode の初期挿入
+        "INSERT INTO admin_settings (key, value) VALUES ('budget_warning_mode','none') ON CONFLICT (key) DO NOTHING",
     ]
     for sql in migrations:
         try:
@@ -494,10 +497,10 @@ PLAN_LIMITS = {"free": 10, "pro": 50, "master": 200}
 
 def _check_and_update_fallback_mode():
     """
-    OpenAI残高と使用量を比較してフォールバックモードを自動切替。
-    残高ゼロ → maintenance_mode=true（自動ON）
-    残高あり → maintenance_mode=false（自動復旧）
-    ※ 管理者が手動でONにした場合（maintenance_mode_manual=true）は自動OFFをスキップ
+    OpenAI残高と使用量を比較してフォールバックモードと警告レベルを自動切替。
+    - 消化率 < 90%  → budget_warning_mode=none
+    - 消化率 >= 90% → budget_warning_mode=warning（予告バナー）
+    - 残高ゼロ      → budget_warning_mode=critical + maintenance_mode=true
     """
     try:
         # チャージ累計
@@ -508,7 +511,8 @@ def _check_and_update_fallback_mode():
         used = db_exec("SELECT COALESCE(SUM(cost_usd),0) as total FROM admin_cost_logs", fetch="one")
         used_usd = float(used["total"] or 0) if used else 0.0
 
-        balance = charged_usd - used_usd
+        balance  = charged_usd - used_usd
+        used_pct = (used_usd / charged_usd * 100) if charged_usd > 0 else 0.0
 
         # 現在のモードと手動フラグ
         cur    = db_exec("SELECT value FROM admin_settings WHERE key='maintenance_mode'", fetch="one")
@@ -516,17 +520,30 @@ def _check_and_update_fallback_mode():
         current_mode = (cur["value"] if cur else "false") == "true"
         is_manual    = (manual["value"] if manual else "false") == "true"
 
+        # ── 予算警告レベルの自動更新 ──────────────────────────────
+        if balance <= 0:
+            new_warning = "critical"   # 残高ゼロ → フォールバック発動
+        elif used_pct >= 90:
+            new_warning = "warning"    # 90%超 → 予告バナー
+        else:
+            new_warning = "none"
+
+        cur_warning = db_exec("SELECT value FROM admin_settings WHERE key='budget_warning_mode'", fetch="one")
+        old_warning = cur_warning["value"] if cur_warning else "none"
+        if old_warning != new_warning:
+            db_exec("UPDATE admin_settings SET value=%s, updated_at=NOW() WHERE key='budget_warning_mode'",
+                    (new_warning,))
+            print(f"[Fallback] 予算警告レベル変更: {old_warning} → {new_warning} (消化率={used_pct:.1f}%)")
+
+        # ── フォールバックモードの自動ON/OFF ─────────────────────
         if balance <= 0 and not current_mode:
-            # 残高ゼロ → 自動ON（手動フラグは立てない）
             db_exec("UPDATE admin_settings SET value='true',  updated_at=NOW() WHERE key='maintenance_mode'")
             db_exec("UPDATE admin_settings SET value='false', updated_at=NOW() WHERE key='maintenance_mode_manual'")
             print(f"[Fallback] 残高ゼロ（${balance:.4f}）→ メンテナンスモード 自動ON")
         elif balance > 0 and current_mode and not is_manual:
-            # 残高あり かつ 手動ONでない → 自動OFF（復旧）
             db_exec("UPDATE admin_settings SET value='false', updated_at=NOW() WHERE key='maintenance_mode'")
             print(f"[Fallback] 残高回復（${balance:.4f}）→ メンテナンスモード 自動OFF")
         elif balance > 0 and current_mode and is_manual:
-            # 残高あり かつ 手動ON中 → 自動OFFしない
             print(f"[Fallback] 残高あり（${balance:.4f}）だが手動ONのため維持")
     except Exception as e:
         print(f"[Fallback] モードチェックエラー: {e}")
@@ -2310,12 +2327,21 @@ def health_check():
 # ══════════════════════════════════════════════════════════════
 #  フロントエンド用公開設定（APIキー等）
 # ══════════════════════════════════════════════════════════════
+def _get_budget_warning() -> str:
+    """現在の予算警告レベルを返す（none/warning/critical）"""
+    try:
+        row = db_exec("SELECT value FROM admin_settings WHERE key='budget_warning_mode'", fetch="one")
+        return row["value"] if row else "none"
+    except Exception:
+        return "none"
+
 @app.route("/api/config", methods=["GET"])
 def get_frontend_config():
     """フロントエンドが楽天APIを直接叩くために必要な公開設定を返す"""
     return jsonify({
-        "rakuten_app_id": os.getenv("RAKUTEN_APP_ID", ""),
-        "fallback_mode":  is_fallback_mode(),  # フォールバックモードフラグ
+        "rakuten_app_id":  os.getenv("RAKUTEN_APP_ID", ""),
+        "fallback_mode":   is_fallback_mode(),
+        "budget_warning":  _get_budget_warning(),  # none/warning/critical
     })
 
 @app.route("/api/system/status", methods=["GET"])
@@ -2323,7 +2349,8 @@ def system_status():
     """フロントが定期ポーリングするシステム状態エンドポイント（認証不要）"""
     _check_and_update_fallback_mode()
     return jsonify({
-        "fallback_mode": is_fallback_mode(),
+        "fallback_mode":  is_fallback_mode(),
+        "budget_warning": _get_budget_warning(),  # none/warning/critical
         "ok": True,
     })
 

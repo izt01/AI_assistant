@@ -243,11 +243,12 @@ document.getElementById('tip-text').textContent = tips[Math.floor(Math.random()*
 
 function startChat(ai) { location.href = 'chat.html?ai=' + ai }
 
-// フォールバックモードのバナーをページロード時に確認
+// フォールバック・予算警告バナーをページロード時に確認
 document.addEventListener('DOMContentLoaded', async ()=>{
   try {
-    const d = await fetch('/api/config').then(r=>r.json())
-    if(d.fallback_mode && typeof showFallbackBanner === 'function') showFallbackBanner()
+    const d = await fetch('/api/system/status').then(r=>r.json())
+    const level = d.fallback_mode ? 'critical' : (d.budget_warning || 'none')
+    if(level !== 'none' && typeof _applyBanner === 'function') _applyBanner(level)
   } catch(e){}
 })
 </script>
