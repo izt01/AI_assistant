@@ -193,12 +193,21 @@
       <div class="chat-input-area">
         <div id="limit-warn" style="display:none;margin-bottom:8px"></div>
         <div class="chat-input-row">
-          <textarea id="chat-input" placeholder="メッセージを入力…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <textarea id="chat-input" placeholder="メッセージを入力…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)" maxlength="2100"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMsg()">↑</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:7px">
           <span style="font-size:10.5px;color:var(--subtle)">Enterで送信 · Shift+Enterで改行</span>
           <span class="usage-badge" id="usage-badge"></span>
+        </div>
+        <!-- 文字数カウンター -->
+        <div id="char-count-wrap" style="margin-top:6px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span id="char-count-label" style="font-size:10.5px;color:var(--subtle)">0 / 2000文字</span>
+          </div>
+          <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden">
+            <div id="char-count-bar" style="height:100%;width:0%;background:var(--gold);border-radius:99px;transition:width .15s,background .15s"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -551,9 +560,45 @@ function handleKey(e) {
   if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() }
 }
  
+const CHAR_LIMIT = 2000
+const CHAR_WARN_YELLOW = 1000
+const CHAR_WARN_RED = 1800
+
 function autoResize(el) {
   el.style.height='auto'
   el.style.height=Math.min(el.scrollHeight, 120)+'px'
+  updateCharCount(el.value.length)
+}
+
+function updateCharCount(len) {
+  const wrap  = document.getElementById('char-count-wrap')
+  const label = document.getElementById('char-count-label')
+  const bar   = document.getElementById('char-count-bar')
+  const input = document.getElementById('chat-input')
+  if(!wrap || !label || !bar) return
+
+  // 1文字以上入力中のみバーを表示
+  if(len === 0) {
+    wrap.style.display = 'none'
+    return
+  }
+  wrap.style.display = 'block'
+
+  const pct = Math.min(len / CHAR_LIMIT * 100, 100)
+  bar.style.width = pct + '%'
+  label.textContent = `${len.toLocaleString()} / ${CHAR_LIMIT.toLocaleString()}文字`
+
+  // 色変化
+  if(len > CHAR_WARN_RED) {
+    bar.style.background = '#ef4444'   // 赤
+    label.style.color    = '#ef4444'
+  } else if(len > CHAR_WARN_YELLOW) {
+    bar.style.background = '#f59e0b'   // 黄
+    label.style.color    = '#92400e'
+  } else {
+    bar.style.background = 'var(--gold)'
+    label.style.color    = 'var(--subtle)'
+  }
 }
  
 // ─── メッセージ送信 ───────────────────────────────────────────
@@ -561,6 +606,16 @@ async function sendMsg() {
   const input = document.getElementById('chat-input')
   const text = input.value.trim()
   if(!text || isTyping) return
+
+  // 文字数上限チェック（2000文字超はモーダルで警告・送信不可）
+  if(text.length > CHAR_LIMIT) {
+    showModal({
+      title: '⚠️ 文字数制限',
+      body: `2000文字以上でテキストを打ち込むことはできません。<br><br>現在 <strong style="color:#ef4444">${text.length.toLocaleString()}文字</strong> 入力されています。<br>2000文字以内に編集してから送信してください。`,
+      actions: [{label: '閉じて編集する', cls: 'btn-g', fn: 'closeModal()'}]
+    })
+    return
+  }
  
   const limit = PLANS[user?.plan]?.limit || 10
   if((user?.usage_count||0) >= limit) {
