@@ -392,6 +392,9 @@ async function init() {
     chipRow.innerHTML = chips.map(c => `<div class="chip" onclick="sendChip('${c}')">${c}</div>`).join('')
     document.getElementById('chat-msgs').appendChild(chipRow)
   }
+
+  // グルメ/買い物/料理AI: ページロード直後から位置情報取得を開始する
+  prefetchLocationIfNeeded()
 }
  
 function getChips(ai) {
@@ -576,6 +579,17 @@ async function sendMsg() {
       ? messages.slice(-MESSAGES_LIMIT)
       : messages
 
+    // グルメ/買い物/料理AI: 位置情報がまだ取得中なら最大3秒待つ
+    if((aiParam === 'gourmet' || aiParam === 'shopping' || aiParam === 'cooking')
+       && !window._userLat && _locationPromise) {
+      try {
+        await Promise.race([
+          _locationPromise,
+          new Promise(r => setTimeout(r, 3000))  // 最大3秒待つ
+        ])
+      } catch(e) { /* タイムアウトは無視 */ }
+    }
+
     const resp = await apiRequest('/chat', {
       method: 'POST',
       body: {
@@ -584,7 +598,7 @@ async function sendMsg() {
         session_id:     currentSessionId,
         lat:            window._userLat || null,
         lng:            window._userLng || null,
-        fallback_state: _fallbackState || undefined,  // フォールバックシナリオ状態
+        fallback_state: _fallbackState || undefined,
       }
     })
  
@@ -812,10 +826,7 @@ function addActionChips(ai, text) {
   if(ai === 'travel' && /ホテル/.test(text)) setTimeout(()=>{ location.href = 'hotel.html' }, 300)
   if(ai === 'shopping' && /買い物リスト|リスト/.test(text)) setTimeout(()=>{ location.href = 'shopping-list.html' }, 300)
  
-  // ★ 位置情報取得: グルメ・買い物・料理AIで使用
-  if(ai === 'gourmet')  requestUserLocation('gourmet')
-  if(ai === 'shopping') requestUserLocation('shopping')
-  if(ai === 'cooking')  requestUserLocation('cooking')
+  // 位置情報取得はinit()内のprefetchLocationIfNeededで実施済み
  
   scrollBottom()
 }
@@ -968,24 +979,45 @@ function clearChat() {
 }
  
 // ─── 位置情報取得（グルメ・買い物・料理AI 共通）─────────────
-// ★ aiType 引数で呼び出し元AIを区別（デバッグ用）
+let _locationPromise = null  // 取得中のPromiseを保持（重複呼び出し防止）
+
 function requestUserLocation(aiType) {
-  if(window._locationRequested) return
-  window._locationRequested = true
-  if(!navigator.geolocation) return
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      window._userLat = pos.coords.latitude
-      window._userLng = pos.coords.longitude
-      console.log(`[${aiType}] 位置情報取得:`, window._userLat, window._userLng)
-      const notice = document.createElement('div')
-      notice.style.cssText = 'text-align:center;font-size:11px;color:var(--subtle);margin:6px 0'
-      notice.textContent = '📍 現在地を取得しました'
-      document.getElementById('chat-msgs').appendChild(notice)
-    },
-    err => { console.warn(`[${aiType}] 位置情報取得失敗:`, err.message) },
-    { enableHighAccuracy: false, timeout: 8000 }
-  )
+  // 既に取得済みなら即返す
+  if(window._userLat && window._userLng) return Promise.resolve({lat: window._userLat, lng: window._userLng})
+  // 取得中なら同じPromiseを返す
+  if(_locationPromise) return _locationPromise
+
+  if(!navigator.geolocation) return Promise.resolve(null)
+
+  _locationPromise = new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        window._userLat = pos.coords.latitude
+        window._userLng = pos.coords.longitude
+        console.log(`[${aiType}] 位置情報取得:`, window._userLat, window._userLng)
+        // 取得成功の通知をチャットに表示
+        const notice = document.createElement('div')
+        notice.style.cssText = 'text-align:center;font-size:11px;color:var(--subtle);margin:6px 0'
+        notice.textContent = '📍 現在地を取得しました'
+        const msgs = document.getElementById('chat-msgs')
+        if(msgs) msgs.appendChild(notice)
+        resolve({lat: window._userLat, lng: window._userLng})
+      },
+      err => {
+        console.warn(`[${aiType}] 位置情報取得失敗:`, err.message)
+        resolve(null)
+      },
+      { enableHighAccuracy: false, timeout: 8000 }
+    )
+  })
+  return _locationPromise
+}
+
+// ページロード直後から位置情報取得を開始する（グルメAIのみ）
+function prefetchLocationIfNeeded() {
+  if(aiParam === 'gourmet' || aiParam === 'shopping' || aiParam === 'cooking') {
+    requestUserLocation(aiParam)  // バックグラウンドで取得開始
+  }
 }
  
 // ─── グルメAI: 飲食店カード描画 ─────────────────────────────
