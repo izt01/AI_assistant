@@ -1092,9 +1092,9 @@ function requestUserLocation(aiType) {
   return _locationPromise
 }
 
-// ページロード直後から位置情報取得を開始する（グルメAIのみ）
+// ページロード直後から位置情報取得を開始する
 function prefetchLocationIfNeeded() {
-  if(aiParam === 'gourmet' || aiParam === 'shopping' || aiParam === 'cooking') {
+  if(aiParam === 'gourmet' || aiParam === 'shopping' || aiParam === 'cooking' || aiParam === 'travel') {
     requestUserLocation(aiParam)  // バックグラウンドで取得開始
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v15";  // v15: 海外旅行プラン・スケジュール対応
+const CACHE_NAME = "lumina-pwa-v16";  // v16: 旅行AI出発地確認・GPS位置情報対応
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];

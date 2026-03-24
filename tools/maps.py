@@ -74,3 +74,39 @@ def search_nearby(lat: float, lng: float, keyword: str, radius: int = 800) -> di
 
     return {"available": True, "type": "places", "places": [], "radius_used": 3000,
             "message": "3000m以内でお店が見つかりませんでした"}
+
+
+def reverse_geocode(lat: float, lng: float) -> dict:
+    """
+    緯度経度から都市名・住所を取得する（旅行AIの出発地特定に使用）
+    Returns: {"ok": bool, "city": str, "formatted": str}
+    """
+    key = _api_key()
+    if not key:
+        return {"ok": False, "reason": "GOOGLE_MAPS_API_KEY が未設定"}
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"latlng": f"{lat},{lng}", "language": "ja", "key": key},
+            timeout=6,
+        )
+        data = resp.json()
+        if data.get("status") != "OK" or not data.get("results"):
+            return {"ok": False, "reason": data.get("status", "NO_RESULTS")}
+
+        # 最初の結果から都市名（locality）と都道府県（administrative_area_level_1）を抽出
+        city = ""
+        pref = ""
+        formatted = data["results"][0].get("formatted_address", "")
+        for comp in data["results"][0].get("address_components", []):
+            types = comp.get("types", [])
+            if "locality" in types:
+                city = comp.get("long_name", "")
+            elif "administrative_area_level_1" in types:
+                pref = comp.get("long_name", "")
+
+        # 都市名がない場合は都道府県名を使用
+        display = city or pref or formatted.split("、")[0] if formatted else ""
+        return {"ok": True, "city": display, "pref": pref, "formatted": formatted}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}

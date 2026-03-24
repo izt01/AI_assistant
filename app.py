@@ -1244,6 +1244,35 @@ def chat():
                     else:
                         print(f"[Geocode] 変換失敗: {candidate} → {geo.get('reason')}")
 
+    # 旅行AI: 位置情報を「出発地候補」としてコンテキストに注入
+    if agent_name == "travel":
+        if user_lat and user_lng:
+            # 座標から都市名に逆ジオコーディングを試みる
+            try:
+                from tools.maps import reverse_geocode
+                geo = reverse_geocode(user_lat, user_lng)
+                city_name = geo.get("city") or geo.get("formatted", "")
+                if city_name:
+                    context_injection += (
+                        f"\n\n【ユーザーの現在地（GPS取得済み）】\n"
+                        f"現在地: {city_name}\n"
+                        f"緯度: {user_lat} / 経度: {user_lng}\n"
+                        "※ 出発地が明示されていない場合、この現在地を出発地として使用してください。\n"
+                        "※ 出発地を確認する際は「現在地（{city_name}）からでよいですか？」と提案してください。"
+                    )
+                else:
+                    context_injection += (
+                        f"\n\n【ユーザーの現在地（GPS取得済み）】\n"
+                        f"緯度: {user_lat} / 経度: {user_lng}\n"
+                        "※ 出発地が明示されていない場合、この位置情報を出発地の参考にしてください。"
+                    )
+            except Exception:
+                context_injection += (
+                    f"\n\n【ユーザーの現在地（GPS取得済み）】\n"
+                    f"緯度: {user_lat} / 経度: {user_lng}\n"
+                    "※ 出発地が明示されていない場合、この位置情報を出発地の参考にしてください。"
+                )
+
     agent = AGENT_MAP.get(agent_name)
 
     try:
