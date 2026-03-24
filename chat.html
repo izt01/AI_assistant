@@ -1595,23 +1595,43 @@ function travelBookingUrl(transport, fromCity, toCity, date) {
     return `https://www.eki-net.com/travel/shinkansen/reserve/ReserveStart.aspx`
   }
  
-  // 飛行機 → スカイスキャナー
+  // 飛行機 → スカイスキャナー（国内・海外両対応）
   if (/飛行機|フライト|航空|ANA|JAL|LCC|空港/.test(t)) {
-    const dateStr = date || ''
-    const fromCode = from.includes('東京') || from.includes('羽田') ? 'TYO' :
-                     from.includes('大阪') || from.includes('伊丹') ? 'OSA' :
-                     from.includes('名古屋') || from.includes('中部') ? 'NGO' :
-                     from.includes('札幌') || from.includes('新千歳') ? 'CTS' :
-                     from.includes('福岡') ? 'FUK' :
-                     from.includes('沖縄') || from.includes('那覇') ? 'OKA' : ''
-    const toCode   = to.includes('東京') || to.includes('羽田') ? 'TYO' :
-                     to.includes('大阪') || to.includes('伊丹') ? 'OSA' :
-                     to.includes('金沢') || to.includes('小松') ? 'KMQ' :
-                     to.includes('札幌') || to.includes('新千歳') ? 'CTS' :
-                     to.includes('福岡') ? 'FUK' :
-                     to.includes('沖縄') || to.includes('那覇') ? 'OKA' : ''
+    // 都市名 → IATAコード（国内+主要海外）
+    const IATA = {
+      '東京':'TYO','羽田':'HND','成田':'NRT','大阪':'OSA','伊丹':'ITM','関西':'KIX',
+      '名古屋':'NGO','中部':'NGO','札幌':'CTS','新千歳':'CTS','福岡':'FUK',
+      '沖縄':'OKA','那覇':'OKA','金沢':'KMQ','小松':'KMQ','広島':'HIJ',
+      '仙台':'SDJ','鹿児島':'KOJ','長崎':'NGS','熊本':'KMJ','石垣':'ISG',
+      // 海外主要都市
+      'ローマ':'FCO','フィレンツェ':'FLR','ミラノ':'MXP','ベネチア':'VCE',
+      'パリ':'CDG','ロンドン':'LHR','バルセロナ':'BCN','マドリード':'MAD',
+      'アムステルダム':'AMS','フランクフルト':'FRA','ベルリン':'TXL',
+      'ミュンヘン':'MUC','プラハ':'PRG','ウィーン':'VIE','ブリュッセル':'BRU',
+      'リスボン':'LIS','アテネ':'ATH','イスタンブール':'IST','ドバイ':'DXB',
+      'バンコク':'BKK','シンガポール':'SIN','クアラルンプール':'KUL',
+      'バリ':'DPS','ジャカルタ':'CGK','マニラ':'MNL','セブ':'CEB',
+      'ソウル':'ICN','台北':'TPE','香港':'HKG','上海':'PVG','北京':'PEK',
+      'ハノイ':'HAN','ホーチミン':'SGN','プーケット':'HKT','チェンマイ':'CNX',
+      'ニューヨーク':'JFK','ロサンゼルス':'LAX','ホノルル':'HNL','ハワイ':'HNL',
+      'ラスベガス':'LAS','シカゴ':'ORD','マイアミ':'MIA','サンフランシスコ':'SFO',
+      'バンクーバー':'YVR','トロント':'YYZ','シドニー':'SYD','メルボルン':'MEL',
+      'オークランド':'AKL','グアム':'GUM','サイパン':'SPN',
+    }
+    const cityToIata = (city) => {
+      for(const [name, code] of Object.entries(IATA)) {
+        if(city.includes(name)) return code
+      }
+      return ''
+    }
+    const fromCode = cityToIata(from)
+    const toCode   = cityToIata(to)
     if (fromCode && toCode) {
-      return `https://www.skyscanner.jp/routes/${fromCode}/${toCode}/${dateStr}/`
+      return `https://www.skyscanner.jp/routes/${fromCode}/${toCode}/`
+    }
+    // コードが取れなくても都市名でスカイスキャナーに飛ばす
+    if (from && to) {
+      return `https://www.skyscanner.jp/transport/flights/${encodeURIComponent(from)}/${encodeURIComponent(to)}/`
     }
     return `https://www.skyscanner.jp/`
   }
@@ -1753,6 +1773,16 @@ function renderTravelPlans(plans) {
                     if(d.hotel.url) return `<a href="${d.hotel.url}" target="_blank" class="tp-hotel-btn">楽天で予約 →</a>`
                     // ホテル名で楽天トラベル検索
                     const q = encodeURIComponent(d.hotel.name || d.hotel.area || '')
+                    const isOverseas = /Booking|booking|海外|abroad/i.test(d.hotel.booking_note||'')
+                    if(isOverseas) {
+                      const bookingUrl = q ? `https://www.booking.com/searchresults.ja.html?ss=${q}&lang=ja` : ''
+                      const agodaUrl   = q ? `https://www.agoda.com/ja-jp/search?city=${encodeURIComponent(d.hotel.area||d.hotel.name||'')}` : ''
+                      if(bookingUrl) return `
+                        <div style="display:flex;gap:5px;flex-wrap:wrap">
+                          <a href="${bookingUrl}" target="_blank" class="tp-hotel-btn">Booking.com →</a>
+                          ${agodaUrl ? `<a href="${agodaUrl}" target="_blank" class="tp-hotel-btn" style="background:rgba(234,179,8,.12);color:#92400e">Agoda →</a>` : ''}
+                        </div>`
+                    }
                     const rakutenSearchUrl = q ? `https://travel.rakuten.co.jp/keyword/?f_query=${q}` : ''
                     if(rakutenSearchUrl) return `<a href="${rakutenSearchUrl}" target="_blank" class="tp-hotel-btn">楽天で検索 →</a>`
                     return d.hotel.booking_note ? `<div class="tp-hotel-note">${d.hotel.booking_note}</div>` : ''
