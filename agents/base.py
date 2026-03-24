@@ -129,38 +129,44 @@ class BaseAgent:
         """専門AIを実行してパース済みdictを返す"""
         session_id = str(uuid.uuid4())
 
-        # ── 旅行AI: 出発地確認フェーズ（clarifierより優先）──────────
+        # -- Travel AI: depart city check (runs before clarifier) --
         if self.AI_TYPE == "travel" and len(messages) >= 1:
-            # 会話全体のテキストを結合して出発地・終点の情報を確認
+            import re as _re_travel
             all_text = " ".join(
                 m.get("content", "") for m in messages if isinstance(m, dict)
             )
-            # 出発地が既に言及されているかチェック
-            import re as _re
-            has_depart = bool(_re.search(
-                r'(東京|大阪|名古屋|札幌|福岡|仙台|広島|沖縄|京都|神戸|横浜|から|出発|発|羽田|成田|関西空港|伊丹|中部|新千歳'
-                r'|東北|北陸|九州|四国|北海道|自宅|家|現在地|今いる|住んでいる|住んでる|地元|実家)',
-                all_text
-            ))
-            # 旅行先（目的地）が言及されているかチェック
-            has_dest = bool(_re.search(
-                r'(行きたい|旅行|観光|訪れ|訪問|行こう|行けたら|訪ねたい|見たい|めぐり|ツアー|旅に|旅へ|旅する)',
-                all_text
-            ))
-            # 出発地の質問が既にされているかチェック（同じ質問を繰り返さない）
-            already_asked_depart = bool(_re.search(
-                r'(どちらから|ご出発|出発地|お住まい|どこから|出発する都市)',
-                all_text
-            ))
-            # 旅行先の言及はあるが出発地が不明かつまだ聞いていない場合 → 出発地を先に聞く
-            if has_dest and not has_depart and not already_asked_depart and len(messages) <= 3:
+            depart_keywords = (
+                r'(\u6771\u4eac|\u5927\u962a|\u540d\u53e4\u5c4b|\u672d\u5e4c|\u798f\u5ca1|\u4ed5\u5409|\u5e83\u5cf6|\u6c96\u7e04|\u4eac\u90fd|\u795e\u6238|\u6a2a\u6d5c'
+                r'|\u304b\u3089|\u51fa\u767a|\u767a|\u7fbd\u7530|\u6210\u7530|\u95a2\u897f\u7a7a\u6e2f|\u4f0a\u4e39|\u4e2d\u90e8|\u65b0\u5343\u6b73'
+                r'|\u81ea\u5b85|\u5bb6|\u73fe\u5728\u5730|\u4eca\u3044\u308b|\u4f4f\u3093\u3067\u3044\u308b|\u4f4f\u3093\u3067\u308b|\u5730\u5143|\u5b9f\u5bb6)'
+            )
+            dest_keywords = (
+                r'(\u884c\u304d\u305f\u3044|\u65c5\u884c|\u89b3\u5149|\u8a2a\u308c|\u8a2a\u554f|\u884c\u3053\u3046|\u884c\u3051\u305f\u3089|\u8a2a\u306d\u305f\u3044'
+                r'|\u898b\u305f\u3044|\u3081\u3050\u308a|\u30c4\u30a2\u30fc|\u65c5\u306b|\u65c5\u3078|\u65c5\u3059\u308b)'
+            )
+            asked_keywords = (
+                r'(\u3069\u3061\u3089\u304b\u3089|\u3054\u51fa\u767a|\u51fa\u767a\u5730|\u304a\u4f4f\u307e\u3044|\u3069\u3053\u304b\u3089|\u51fa\u767a\u3059\u308b\u90fd\u5e02)'
+            )
+            has_depart       = bool(_re_travel.search(depart_keywords,  all_text))
+            has_dest         = bool(_re_travel.search(dest_keywords,    all_text))
+            already_asked    = bool(_re_travel.search(asked_keywords,   all_text))
+            if has_dest and not has_depart and not already_asked and len(messages) <= 3:
                 return {
                     "ai": self.AI_TYPE,
-                    "reply": "どちらからご出発のご予定ですか？✈️
-出発地を教えていただくと、交通手段・時刻・料金まで含めた旅行プランをご提案できます！",
+                    "reply": (
+                        "\u3069\u3061\u3089\u304b\u3089\u3054\u51fa\u767a\u306e\u3054\u4e88\u5b9a\u3067\u3059\u304b\uff1f "
+                        "\u51fa\u767a\u5730\u3092\u6559\u3048\u3066\u3044\u305f\u3060\u304f\u3068\u3001"
+                        "\u4ea4\u901a\u624b\u6bb5\u30fb\u6642\u523b\u30fb\u6599\u91d1\u307e\u3067\u542b\u3081\u305f"
+                        "\u65c5\u884c\u30d7\u30e9\u30f3\u3092\u3054\u63d0\u6848\u3067\u304d\u307e\u3059\uff01"
+                    ),
                     "needs_more_info": True,
                     "clarification_type": "depart_city",
-                    "suggestions": ["東京から", "大阪から", "自分の現在地から", "出発地なしでプランだけ見たい"],
+                    "suggestions": [
+                        "\u6771\u4eac\u304b\u3089",
+                        "\u5927\u962a\u304b\u3089",
+                        "\u81ea\u5206\u306e\u73fe\u5728\u5730\u304b\u3089",
+                        "\u51fa\u767a\u5730\u306a\u3057\u3067\u30d7\u30e9\u30f3\u3060\u3051\u898b\u305f\u3044",
+                    ],
                 }
 
         # ── 深掘り質問フェーズ ──────────────────────────────
