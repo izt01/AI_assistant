@@ -178,7 +178,16 @@ def search_flights(
             print(f"[GoogleFlights] fallback status={r.status_code}")
 
         if r.status_code != 200:
-            return {"available": False, "reason": f"HTTP {r.status_code}"}
+            # API失敗でもスカイスキャナー検索URLをフォールバックとして返す
+            sky_url = f"https://www.skyscanner.jp/routes/{origin_iata}/{dest_iata}/"
+            return {
+                "available": False,
+                "reason": f"HTTP {r.status_code}",
+                "type": "flights",
+                "fallback_url": sky_url,
+                "origin_iata": origin_iata,
+                "dest_iata": dest_iata,
+            }
 
         data = r.json()
 
