@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ユーザーガイド — Lumina AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#b8963e;--gold2:#c9a84c;--gold3:#e8c97a;
+  --ink:#1a1610;--ink3:#42392c;
+  --muted:#7a6e5c;--subtle:#a89e8c;
+  --cream:#f5f3ee;--cream2:#ece8df;--surface:#fff;
+  --border:#e0d8c8;
+  --r:10px;--rl:16px;
+}
+html{scroll-behavior:smooth;font-size:14px}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--cream);color:var(--ink);line-height:1.7}
+a{text-decoration:none;color:inherit}
+
+/* ── ヘッダー ── */
+.g-header{
+  background:var(--ink);
+  color:#f5f3ee;
+  padding:0 28px;
+  height:60px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.g-logo{font-family:'Fraunces',serif;font-size:20px;font-weight:900;letter-spacing:-.03em;color:var(--gold3)}
+.g-logo span{font-size:12px;font-weight:400;color:rgba(255,255,255,.5);margin-left:8px;font-family:'Noto Sans JP',sans-serif}
+.g-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.g-nav a{
+  color:rgba(255,255,255,.75);
+  font-size:12px;
+  padding:5px 12px;
+  border-radius:99px;
+  border:1px solid rgba(255,255,255,.15);
+  transition:all .15s;
+  white-space:nowrap;
+}
+.g-nav a:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.3)}
+.g-nav .btn-go{
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:var(--ink);border:none;font-weight:700;
+}
+.g-nav .btn-go:hover{box-shadow:0 3px 12px rgba(201,168,76,.4);color:var(--ink)}
+
+/* ── ヒーロー ── */
+.hero{
+  background:linear-gradient(135deg,var(--ink) 0%,#2d2418 100%);
+  color:#f5f3ee;
+  padding:64px 28px 56px;
+  text-align:center;
+}
+.hero-badge{
+  display:inline-block;
+  background:rgba(201,168,76,.15);
+  border:1px solid rgba(201,168,76,.3);
+  color:var(--gold3);
+  font-size:11px;font-weight:600;
+  padding:4px 14px;border-radius:99px;
+  margin-bottom:20px;letter-spacing:.05em;
+}
+.hero h1{font-family:'Fraunces',serif;font-size:clamp(26px,5vw,42px);font-weight:900;line-height:1.2;margin-bottom:14px}
+.hero h1 em{color:var(--gold3);font-style:normal}
+.hero p{font-size:14px;color:rgba(255,255,255,.65);max-width:520px;margin:0 auto}
+
+/* ── TOC（目次） ── */
+.toc-wrap{max-width:860px;margin:40px auto;padding:0 20px}
+.toc{background:var(--surface);border-radius:var(--rl);border:1px solid var(--border);padding:28px 32px}
+.toc h2{font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:16px;color:var(--ink)}
+.toc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.toc-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;border-radius:8px;
+  border:1px solid var(--border);
+  font-size:12.5px;color:var(--muted);
+  transition:all .15s;cursor:pointer;
+}
+.toc-item:hover{background:var(--cream2);color:var(--ink);border-color:var(--gold2)}
+.toc-num{
+  width:22px;height:22px;border-radius:6px;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:var(--ink);font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+
+/* ── セクション共通 ── */
+.section{max-width:860px;margin:0 auto 52px;padding:0 20px}
+.section-title{
+  font-family:'Fraunces',serif;font-size:22px;font-weight:900;
+  margin-bottom:20px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-title .num{
+  width:32px;height:32px;border-radius:9px;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:var(--ink);font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.card{
+  background:var(--surface);border-radius:var(--rl);
+  border:1px solid var(--border);
+  padding:24px 28px;
+  margin-bottom:14px;
+}
+.card h3{font-size:14px;font-weight:700;margin-bottom:10px;color:var(--ink)}
+.card p,.card li{font-size:13px;color:var(--muted);line-height:1.8}
+.card ul{padding-left:16px}
+.card li{margin-bottom:4px}
+
+/* ── AI カード ── */
+.ai-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.ai-card{
+  background:var(--surface);border-radius:var(--rl);border:1px solid var(--border);
+  padding:20px;transition:all .18s;
+}
+.ai-card:hover{border-color:var(--gold2);box-shadow:0 4px 18px rgba(201,168,76,.1);transform:translateY(-2px)}
+.ai-icon{font-size:26px;margin-bottom:10px}
+.ai-name{font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:4px}
+.ai-desc{font-size:11.5px;color:var(--muted);line-height:1.6;margin-bottom:10px}
+.ai-features{list-style:none;padding:0}
+.ai-features li{font-size:11.5px;color:var(--subtle);padding:2px 0}
+.ai-features li::before{content:'→ ';color:var(--gold2)}
+
+/* ── プランテーブル ── */
+.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:600px){.plan-grid{grid-template-columns:1fr}}
+.plan-card{
+  background:var(--surface);border-radius:var(--rl);border:2px solid var(--border);
+  padding:24px 20px;text-align:center;position:relative;
+}
+.plan-card.rec{border-color:var(--gold2);background:linear-gradient(135deg,rgba(201,168,76,.04),rgba(201,168,76,.08))}
+.plan-badge{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:var(--ink);font-size:10px;font-weight:700;
+  padding:3px 14px;border-radius:99px;white-space:nowrap;
+}
+.plan-name{font-family:'Fraunces',serif;font-size:20px;font-weight:900;margin-bottom:4px}
+.plan-price{font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--gold2);margin-bottom:2px}
+.plan-price span{font-size:13px;font-weight:400;color:var(--muted)}
+.plan-limit{font-size:12px;color:var(--muted);margin-bottom:16px}
+.plan-features{list-style:none;padding:0;text-align:left}
+.plan-features li{font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:8px}
+.plan-features li:last-child{border-bottom:none}
+.plan-features li::before{content:'✓';color:var(--gold2);font-weight:700;flex-shrink:0}
+
+/* ── ステップガイド ── */
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:16px;padding:20px 0;border-bottom:1px solid var(--border)}
+.step:last-child{border-bottom:none}
+.step-num{
+  width:36px;height:36px;border-radius:99px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:var(--ink);font-weight:900;font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+}
+.step-body h4{font-size:13.5px;font-weight:700;margin-bottom:4px}
+.step-body p{font-size:12.5px;color:var(--muted)}
+.step-body .tip{
+  margin-top:8px;padding:8px 12px;
+  background:var(--cream2);border-radius:8px;
+  font-size:12px;color:var(--muted);
+}
+
+/* ── 注意事項・FAQ ── */
+.faq-item{border-bottom:1px solid var(--border);padding:16px 0}
+.faq-item:last-child{border-bottom:none}
+.faq-q{font-size:13.5px;font-weight:700;margin-bottom:8px;display:flex;gap:10px}
+.faq-q::before{content:'Q.';color:var(--gold2);font-family:'Fraunces',serif;flex-shrink:0}
+.faq-a{font-size:13px;color:var(--muted);line-height:1.8;padding-left:24px}
+
+/* ── 注意バナー ── */
+.notice{
+  background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);
+  border-radius:var(--r);padding:16px 20px;margin-bottom:14px;
+  font-size:12.5px;color:var(--ink3);line-height:1.8;
+}
+.notice strong{color:var(--gold2)}
+.notice.warn{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.2);color:#7f1d1d}
+
+/* ── フッター ── */
+.g-footer{
+  background:var(--ink);color:rgba(255,255,255,.5);
+  text-align:center;padding:32px 20px;font-size:12px;margin-top:60px;
+}
+.g-footer a{color:var(--gold3)}
+.divider{height:1px;background:var(--border);max-width:860px;margin:40px auto;padding:0 20px}
+
+/* ── モバイル対応 ── */
+@media(max-width:640px){
+  .g-nav a:not(.btn-go){display:none}
+  .ai-grid{grid-template-columns:1fr 1fr}
+  .toc-grid{grid-template-columns:1fr 1fr}
+  .hero{padding:44px 18px 38px}
+}
+@media(max-width:400px){
+  .ai-grid{grid-template-columns:1fr}
+  .toc-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ── ヘッダー ── -->
+<header class="g-header">
+  <div class="g-logo">✦ Lumina <span>ユーザーガイド</span></div>
+  <nav class="g-nav">
+    <a href="dashboard.html">ダッシュボード</a>
+    <a href="chat.html?ai=all">チャットを開く</a>
+    <a href="plan.html">プラン</a>
+    <a href="chat.html?ai=all" class="btn-go">✦ 今すぐ使う</a>
+  </nav>
+</header>
+
+<!-- ── ヒーロー ── -->
+<section class="hero">
+  <div class="hero-badge">📖 OFFICIAL USER GUIDE</div>
+  <h1>Lumina AI の<br><em>すべて</em>がわかるガイド</h1>
+  <p>8つの専門AIを使いこなして、毎日の生活をもっと豊かに。<br>初めての方もこのガイドを読めばすぐに始められます。</p>
+</section>
+
+<!-- ── 目次 ── -->
+<div class="toc-wrap">
+  <div class="toc">
+    <h2>📋 目次</h2>
+    <div class="toc-grid">
+      <a class="toc-item" href="#sec1"><div class="toc-num">1</div>Lumina AIとは</a>
+      <a class="toc-item" href="#sec2"><div class="toc-num">2</div>はじめ方</a>
+      <a class="toc-item" href="#sec3"><div class="toc-num">3</div>8つのAI紹介</a>
+      <a class="toc-item" href="#sec4"><div class="toc-num">4</div>チャットの使い方</a>
+      <a class="toc-item" href="#sec5"><div class="toc-num">5</div>便利な機能</a>
+      <a class="toc-item" href="#sec6"><div class="toc-num">6</div>プランについて</a>
+      <a class="toc-item" href="#sec7"><div class="toc-num">7</div>よくある質問</a>
+      <a class="toc-item" href="#sec8"><div class="toc-num">8</div>ご注意事項</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── 1. Lumina AIとは ── -->
+<section class="section" id="sec1">
+  <div class="section-title"><div class="num">1</div>Lumina AI とは</div>
+  <div class="card">
+    <h3>✦ あなたの日常をサポートする AI アシスタント</h3>
+    <p>Lumina AI は、旅行・グルメ・料理・買い物・DIY・家電・健康の 7 つの専門分野をカバーする AI アシスタントです。会話を重ねるごとにあなたの好みを学習し、パーソナライズされた提案を行います。</p>
+  </div>
+  <div class="card">
+    <h3>🌟 Lumina AI の特長</h3>
+    <ul>
+      <li><strong>8 つの専門 AI</strong> — 各分野の専門 AI が深い知識でサポート</li>
+      <li><strong>学習・記憶機能</strong> — 会話から好みを学習し、使うほど精度が向上</li>
+      <li><strong>リアルタイム検索</strong> — 楽天トラベル・楽天市場・Google Maps と連携</li>
+      <li><strong>お気に入り保存</strong> — 気に入った提案をワンタップで保存</li>
+      <li><strong>会話履歴</strong> — 過去の会話をダッシュボードから再開できる</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ── 2. はじめ方 ── -->
+<section class="section" id="sec2">
+  <div class="section-title"><div class="num">2</div>はじめ方</div>
+  <div class="card">
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h4>アカウントを作成する</h4>
+          <p><a href="register.html" style="color:var(--gold2)">新規登録ページ</a>からメールアドレスとパスワードを設定してください。登録は無料です。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h4>ログインする</h4>
+          <p>登録したメールアドレスとパスワードで<a href="login.html" style="color:var(--gold2)">ログイン</a>します。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h4>使いたい AI を選ぶ</h4>
+          <p>ダッシュボードのショートカットまたはサイドメニューから AI を選びます。何でも相談したい場合は「<strong>総合チャット AI</strong>」をご利用ください。</p>
+          <div class="tip">💡 はじめは「総合チャット AI」がおすすめです。AIが自動で最適な専門AIへご案内します。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h4>メッセージを送る</h4>
+          <p>テキスト欄に相談内容を入力して送信ボタン（↑）を押すか、Enterキーを押してください。</p>
+          <div class="tip">💡 入力は最大 2,000 文字まで。1,000 文字を超えると文字数バーが黄色に変わります。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. 8つのAI紹介 ── -->
+<section class="section" id="sec3">
+  <div class="section-title"><div class="num">3</div>8 つの AI 紹介</div>
+  <div class="ai-grid">
+    <div class="ai-card">
+      <div class="ai-icon">✦</div>
+      <div class="ai-name">総合チャット AI</div>
+      <div class="ai-desc">何でもご相談ください。内容に応じて最適な専門AIをご案内します。</div>
+      <ul class="ai-features">
+        <li>どんな相談でもOK</li>
+        <li>専門AIへの橋渡し</li>
+        <li>日常の雑談・質問</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">🍽️</div>
+      <div class="ai-name">グルメ AI</div>
+      <div class="ai-desc">食べたいものや気分から、近くのお店をリアルタイムで検索・提案します。</div>
+      <ul class="ai-features">
+        <li>現在地周辺の飲食店検索</li>
+        <li>料理ジャンル・雰囲気で絞り込み</li>
+        <li>Google Maps 連携</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">✈️</div>
+      <div class="ai-name">旅行 AI</div>
+      <div class="ai-desc">旅程作成からホテル提案まで。楽天トラベルと連携してリアルタイムで検索します。</div>
+      <ul class="ai-features">
+        <li>旅程・モデルコース作成</li>
+        <li>ホテル・旅館の検索・提案</li>
+        <li>移動手段・料金案内</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">🍳</div>
+      <div class="ai-name">料理 AI</div>
+      <div class="ai-desc">冷蔵庫の食材からレシピを提案。献立作成や買い物リストも作れます。</div>
+      <ul class="ai-features">
+        <li>食材→レシピ提案</li>
+        <li>週間献立作成</li>
+        <li>買い物リスト生成</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">🛍️</div>
+      <div class="ai-name">買い物 AI</div>
+      <div class="ai-desc">楽天市場と連携して商品を検索・比較。あなたの好みに合った商品を提案します。</div>
+      <ul class="ai-features">
+        <li>楽天市場リアルタイム検索</li>
+        <li>商品比較表の作成</li>
+        <li>予算・用途に合わせた絞り込み</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">🔨</div>
+      <div class="ai-name">DIY AI</div>
+      <div class="ai-desc">修繕・工作の手順から必要な材料・工具まで、丁寧にご案内します。</div>
+      <ul class="ai-features">
+        <li>作業手順のステップ解説</li>
+        <li>必要材料・工具リスト</li>
+        <li>スキルレベルに合わせた提案</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">📺</div>
+      <div class="ai-name">家電・インテリア AI</div>
+      <div class="ai-desc">家電選びから部屋のコーディネートまで。楽天市場で商品を検索・提案します。</div>
+      <ul class="ai-features">
+        <li>家電の選び方アドバイス</li>
+        <li>部屋コーディネート提案</li>
+        <li>楽天市場商品検索</li>
+      </ul>
+    </div>
+    <div class="ai-card">
+      <div class="ai-icon">💚</div>
+      <div class="ai-name">健康 AI</div>
+      <div class="ai-desc">生活習慣の改善や健康的な習慣づくりをサポート。※医療診断は行いません。</div>
+      <ul class="ai-features">
+        <li>運動・食事アドバイス</li>
+        <li>生活習慣改善の提案</li>
+        <li>ウェルネスグッズ紹介</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. チャットの使い方 ── -->
+<section class="section" id="sec4">
+  <div class="section-title"><div class="num">4</div>チャットの使い方</div>
+  <div class="card">
+    <h3>💬 メッセージの送り方</h3>
+    <ul>
+      <li>テキスト欄にメッセージを入力し、<strong>↑ ボタン</strong>または <strong>Enter キー</strong>で送信</li>
+      <li>改行したい場合は <strong>Shift + Enter</strong> を使用してください</li>
+      <li>1 回のメッセージは <strong>最大 2,000 文字</strong>まで入力できます</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>📊 文字数バー</h3>
+    <ul>
+      <li>入力するとテキスト欄の下に文字数バーが表示されます</li>
+      <li><span style="color:var(--gold2);font-weight:700">1,000 文字超</span> → バーが<strong>黄色</strong>に変化</li>
+      <li><span style="color:#ef4444;font-weight:700">1,800 文字超</span> → バーが<strong>赤</strong>に変化</li>
+      <li>2,000 文字を超えた状態では送信できません</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>❤️ フィードバック機能</h3>
+    <p>AIの返答の下にあるボタンで感想を伝えられます。フィードバックはAIの学習に活用され、次回以降の提案精度が向上します。</p>
+    <ul style="margin-top:10px">
+      <li>🩷 <strong>最高</strong> — とても役に立った</li>
+      <li>👍 <strong>役立った</strong> — 参考になった</li>
+      <li>👎 <strong>改善点</strong> — もう少し改善してほしい</li>
+      <li>♡ <strong>お気に入り</strong> — 提案を保存する</li>
+      <li>✓ <strong>やってみた</strong> — 実際に行動した（AIが記録・学習します）</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>🔄 会話のリセット</h3>
+    <p>チャット画面右上の「<strong>会話をリセット</strong>」ボタンで会話履歴をクリアして最初からやり直せます。過去の会話はダッシュボードの「最近の会話」から再開できます。</p>
+  </div>
+</section>
+
+<!-- ── 5. 便利な機能 ── -->
+<section class="section" id="sec5">
+  <div class="section-title"><div class="num">5</div>便利な機能</div>
+  <div class="card">
+    <h3>📍 位置情報連携（グルメ AI）</h3>
+    <p>グルメ AI を開くと位置情報の取得を求められます。許可すると現在地周辺のお店を自動で検索できます。位置情報は検索のみに使用し、サーバーには保存されません。</p>
+  </div>
+  <div class="card">
+    <h3>♡ お気に入り保存</h3>
+    <p>ホテル・商品・レストランなどの提案を♡ボタンでお気に入りに追加できます。保存したアイテムは<a href="favorites.html" style="color:var(--gold2)">お気に入りページ</a>でいつでも確認できます。</p>
+  </div>
+  <div class="card">
+    <h3>📂 会話履歴の再開</h3>
+    <p>ダッシュボードの「最近の会話」に表示された過去のチャットをタップすると、会話の続きから再開できます。過去のメッセージがすべて復元されます。</p>
+  </div>
+  <div class="card">
+    <h3>📈 AIマッチ度</h3>
+    <p>ダッシュボードに表示される「AIマッチ度」は、AIがあなたの好みをどれだけ把握しているかを示す指標です。会話を重ねるほど数値が上がり、提案の精度が向上します。</p>
+  </div>
+  <div class="card">
+    <h3>👤 プロフィール設定</h3>
+    <p><a href="profile.html" style="color:var(--gold2)">プロフィールページ</a>でニックネーム・居住エリア・家族構成などを設定すると、AIがよりパーソナライズされた提案を行えるようになります。</p>
+  </div>
+</section>
+
+<!-- ── 6. プランについて ── -->
+<section class="section" id="sec6">
+  <div class="section-title"><div class="num">6</div>プランについて</div>
+  <div class="plan-grid">
+    <div class="plan-card">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">¥0<span>/月</span></div>
+      <div class="plan-limit">月 10 回まで</div>
+      <ul class="plan-features">
+        <li>全 AI アシスタント利用可</li>
+        <li>お気に入り保存</li>
+        <li>会話履歴</li>
+      </ul>
+    </div>
+    <div class="plan-card rec">
+      <div class="plan-badge">✦ おすすめ</div>
+      <div class="plan-name" style="color:var(--gold2)">Pro</div>
+      <div class="plan-price">¥980<span>/月</span></div>
+      <div class="plan-limit">月 50 回まで</div>
+      <ul class="plan-features">
+        <li>全 AI アシスタント利用可</li>
+        <li>お気に入り保存</li>
+        <li>会話履歴</li>
+        <li>優先サポート</li>
+      </ul>
+    </div>
+    <div class="plan-card">
+      <div class="plan-name">Master</div>
+      <div class="plan-price">¥2,980<span>/月</span></div>
+      <div class="plan-limit">月 200 回まで</div>
+      <ul class="plan-features">
+        <li>全 AI アシスタント利用可</li>
+        <li>お気に入り保存</li>
+        <li>会話履歴</li>
+        <li>優先サポート</li>
+        <li>最高精度のパーソナライズ</li>
+      </ul>
+    </div>
+  </div>
+  <div class="notice" style="margin-top:16px">
+    <strong>💡 プランの変更について</strong><br>
+    <a href="plan.html" style="color:var(--gold2)">プランページ</a>からいつでもアップグレード・ダウングレードできます。月の途中でも即時反映されます。
+  </div>
+</section>
+
+<!-- ── 7. よくある質問 ── -->
+<section class="section" id="sec7">
+  <div class="section-title"><div class="num">7</div>よくある質問</div>
+  <div class="card">
+    <div class="faq-item">
+      <div class="faq-q">AI が「お待ちください」と言ったまま止まってしまいます</div>
+      <div class="faq-a">AIが情報を収集・検索中のメッセージです。しばらく待つと結果が表示されます。表示されない場合は「スケジュールを出して」「検索して」などと入力すると再度実行されます。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">位置情報を許可しないとグルメ AI は使えませんか？</div>
+      <div class="faq-a">許可しなくても利用できます。その場合は「渋谷で」「大阪・梅田周辺で」のようにエリアを文章に含めてください。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">月の残り回数を確認するには？</div>
+      <div class="faq-a">チャット画面右下の「残り〇〇回」バッジ、またはダッシュボードの利用状況で確認できます。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">AIが以前話した内容を覚えていないのはなぜですか？</div>
+      <div class="faq-a">会話の記憶は学習に時間がかかります。同じ AI で会話を続けるほど精度が上がります。プロフィールページで好みを直接設定するとより早く反映されます。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">「システムメンテナンス中」と表示されています</div>
+      <div class="faq-a">一時的なメンテナンス中です。チャット機能が簡易モードになりますが、ホテル・商品・飲食店などの検索・表示は引き続きご利用いただけます。復旧後は自動で通常モードに戻ります。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">過去の会話はどこから見られますか？</div>
+      <div class="faq-a">ダッシュボードの「最近の会話」に最新 5 件が表示されます。タップするとその会話を再開できます。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">健康 AI は医療アドバイスを提供しますか？</div>
+      <div class="faq-a">健康 AI は医療診断・医療アドバイスは行いません。生活習慣の改善や一般的なウェルネス情報の提供に限定されます。症状がある場合は必ず医療機関にご相談ください。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 8. ご注意事項 ── -->
+<section class="section" id="sec8">
+  <div class="section-title"><div class="num">8</div>ご注意事項</div>
+  <div class="notice warn">
+    <strong>⚠️ 健康・医療に関して</strong><br>
+    健康 AI は一般的な生活習慣の情報提供を目的としています。医療診断・治療・薬の処方は行いません。健康上の問題は必ず医師や専門家にご相談ください。
+  </div>
+  <div class="notice">
+    <strong>🏨 ホテル・商品情報について</strong><br>
+    楽天トラベル・楽天市場の情報はリアルタイムで取得しますが、在庫状況・価格・空室状況は変動する場合があります。最終確認は各サービスのページでお願いします。
+  </div>
+  <div class="notice">
+    <strong>📍 位置情報について</strong><br>
+    位置情報はグルメ AI でのお店検索にのみ使用します。サーバーへの保存は行いません。
+  </div>
+  <div class="notice">
+    <strong>💬 AI の回答精度について</strong><br>
+    AI の回答は参考情報です。重要な判断（購入・予約・健康など）は必ずご自身でご確認ください。AI が提供する情報の正確性を保証するものではありません。
+  </div>
+  <div class="notice">
+    <strong>🔒 プライバシーについて</strong><br>
+    会話内容はサービス改善・AI 学習に利用されます。詳細は<a href="privacy.html" style="color:var(--gold2)">プライバシーポリシー</a>をご確認ください。
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section style="max-width:860px;margin:0 auto 60px;padding:0 20px">
+  <div style="background:linear-gradient(135deg,var(--ink) 0%,#2d2418 100%);border-radius:20px;padding:40px;text-align:center;color:#f5f3ee">
+    <div style="font-family:'Fraunces',serif;font-size:24px;font-weight:900;margin-bottom:10px">さっそく使ってみましょう</div>
+    <p style="font-size:13px;color:rgba(255,255,255,.6);margin-bottom:24px">無料プランからすぐに始められます。会話を重ねるほど、あなた専用のAIになります。</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="chat.html?ai=all" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-weight:700;font-size:13px;padding:11px 24px;border-radius:99px">✦ 今すぐチャットを始める</a>
+      <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);font-size:13px;padding:11px 24px;border-radius:99px;border:1px solid rgba(255,255,255,.15)">ダッシュボードへ</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── フッター ── -->
+<footer class="g-footer">
+  <div style="margin-bottom:12px;font-family:'Fraunces',serif;font-size:16px;color:var(--gold3)">✦ Lumina AI</div>
+  <div style="margin-bottom:8px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+    <a href="terms.html" style="color:rgba(255,255,255,.5)">利用規約</a>
+    <a href="privacy.html" style="color:rgba(255,255,255,.5)">プライバシーポリシー</a>
+    <a href="plan.html" style="color:rgba(255,255,255,.5)">プラン</a>
+    <a href="guide.html" style="color:var(--gold3)">ユーザーガイド</a>
+  </div>
+  <div>© 2025 Lumina AI. All rights reserved.</div>
+</footer>
+
+</body>
+</html>
