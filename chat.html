@@ -763,11 +763,6 @@ async function sendMsg() {
     if(aiParam === 'travel' && resp.extra && resp.extra._flights && resp.extra._flights.flights && resp.extra._flights.flights.length > 0) {
       renderFlightCards(resp.extra._flights)
     }
-
-    // 旅行AI: フライトAPI失敗時のスカイスキャナーfallbackカード
-    if(aiParam === 'travel' && resp.extra && resp.extra._flight_fallback) {
-      renderFlightFallbackCard(resp.extra._flight_fallback)
-    }
  
     // 旅行AI: 国内ホテルカード（楽天）
     if(resp.extra && resp.extra._hotels && resp.extra._hotels.hotels && resp.extra._hotels.hotels.length > 0) {
@@ -1940,36 +1935,6 @@ function renderHotelCards(hotels, source) {
   scrollBottom()
 }
  
-// ─── フライト検索フォールバックカード（旅行AI）────────────────
-function renderFlightFallbackCard(data) {
-  if(!data || !data.fallback_url) return
-  const origin = data.origin_iata || ''
-  const dest   = data.dest_iata   || ''
-  const wrap = document.createElement('div')
-  wrap.className = 'hotel-cards'
-  wrap.innerHTML = `
-    <div style="font-size:12px;color:var(--subtle);margin-bottom:6px;font-weight:600">✈️ 航空券を検索する</div>
-    <div class="hotel-card" onclick="window.open('${data.fallback_url}','_blank')" style="display:flex;align-items:center;gap:12px">
-      <span style="font-size:24px">✈️</span>
-      <div style="flex:1">
-        <div class="hotel-name">スカイスキャナーで航空券を検索</div>
-        <div class="hotel-meta">
-          ${origin && dest ? `<span>${origin} → ${dest}</span>` : ''}
-          <span>複数航空会社を比較・最安値を検索</span>
-        </div>
-      </div>
-      <span style="font-size:11px;color:var(--gold);font-weight:600">検索する →</span>
-    </div>
-    <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
-      <a href="https://www.ana.co.jp/ja/jp/book-plan/flight/" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none">ANA公式</a>
-      <a href="https://www.jal.co.jp/jp/ja/dom/booking/" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none">JAL公式</a>
-      <a href="https://www.expedia.co.jp/Flights" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none">Expedia</a>
-    </div>
-  `
-  document.getElementById('chat-msgs').appendChild(wrap)
-  scrollBottom()
-}
-
 // ─── 海外ホテルカード描画（旅行AI: Booking.com）──────────────
 function renderOverseasHotelCards(data) {
   const hotels = data.hotels || []
