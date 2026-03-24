@@ -126,15 +126,33 @@
 
 <script src="shared.js"></script>
 <script>
-buildMobileHeader("プラン"); buildMobileNav("plan");</script>
+buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-const user = requireAuth()
 const planRank = {free:0, pro:1, master:2}
-if(user) init()
+let user = null;
+
+(async () => {
+  user = await requireAuth()
+  if(user) init()
+})()
 
 function init() {
   document.getElementById('sidebar-root').innerHTML = buildSidebar('plan')
   document.getElementById('header-root').innerHTML = buildHeader('プラン・課金', 'プランの確認・変更')
+  // topbarにナビゲーションボタンを追加
+  const topbar = document.querySelector('.topbar')
+  if (topbar) {
+    const navBtns = document.createElement('div')
+    navBtns.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:auto'
+    navBtns.innerHTML = `
+      <a href="dashboard.html" class="btn btn-g btn-sm" style="text-decoration:none;display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px">⊞</span> ダッシュボード
+      </a>
+      <a href="chat.html?ai=all" class="btn btn-p btn-sm" style="text-decoration:none;display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px">✦</span> チャットへ
+      </a>`
+    topbar.appendChild(navBtns)
+  }
 
   const plan = getPlanInfo(user.plan)
   const upgradeParam = new URLSearchParams(location.search).get('upgrade')
