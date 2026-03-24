@@ -109,8 +109,11 @@ def db_init_lumina_tables():
         weekday_style      TEXT,
         weekend_style      TEXT,
         favorite_services  TEXT[]    DEFAULT '{}',
+        interests          TEXT[]    DEFAULT '{}',
         updated_at         TIMESTAMP NOT NULL DEFAULT NOW()
     );
+    -- interests カラムが既存DBに存在しない場合に備えてマイグレーション
+    ALTER TABLE lu_profiles ADD COLUMN IF NOT EXISTS interests TEXT[] DEFAULT '{}';
     CREATE TABLE IF NOT EXISTS lu_pref_food (
         user_id              UUID PRIMARY KEY REFERENCES lu_users(id) ON DELETE CASCADE,
         liked_cuisines       TEXT[]  DEFAULT '{}',
@@ -647,6 +650,16 @@ def build_context_injection(user_id, ai_type):
     if p.get("household_size"):  lines.append(f"家族構成: {p['household_size']}人")
     if p.get("monthly_budget"):  lines.append(f"月次予算目安: ¥{p['monthly_budget']:,}")
     if p.get("transport_modes"): lines.append(f"移動手段: {', '.join(p['transport_modes'])}")
+    # ── ユーザーが登録した興味・趣味（全AIに共通で注入）──
+    interests = p.get("interests") or []
+    if isinstance(interests, str):
+        try:
+            import json as _json
+            interests = _json.loads(interests)
+        except Exception:
+            interests = [interests]
+    if interests:
+        lines.append(f"興味・趣味: {', '.join(interests)}（会話・提案のコンテキストとして積極的に活用すること）")
 
     if ai_type in ("recipe", "gourmet", "health", "general"):
         fd = ctx.get("food", {})
@@ -1048,7 +1061,8 @@ def update_profile():
     uid = str(g.current_user["id"])
     d   = request.json or {}
     allowed = ["area","transport_modes","household_size","has_children","has_pets",
-               "monthly_budget","outing_budget","weekday_style","weekend_style","favorite_services"]
+               "monthly_budget","outing_budget","weekday_style","weekend_style","favorite_services",
+               "interests"]
     sets, vals = [], []
     for k in allowed:
         if k in d:
