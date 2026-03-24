@@ -68,56 +68,56 @@
         <div class="card" style="margin-bottom:14px">
           <div class="st">興味のある分野</div>
           <div class="pref-grid" id="pref-interest">
-            <div class="pref-chip" onclick="togglePref(this)">🍳 料理</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">✈️ 旅行</div>
-            <div class="pref-chip" onclick="togglePref(this)">🔨 DIY</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">📺 家電</div>
-            <div class="pref-chip" onclick="togglePref(this)">💚 健康</div>
-            <div class="pref-chip" onclick="togglePref(this)">📚 読書</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">🏃 運動</div>
-            <div class="pref-chip" onclick="togglePref(this)">🎮 ゲーム</div>
-            <div class="pref-chip" onclick="togglePref(this)">🎵 音楽</div>
-            <div class="pref-chip" onclick="togglePref(this)">🎨 アート</div>
+            <div class="pref-chip" data-cat="interest" data-val="料理" onclick="togglePref(this)">🍳 料理</div>
+            <div class="pref-chip" data-cat="interest" data-val="旅行" onclick="togglePref(this)">✈️ 旅行</div>
+            <div class="pref-chip" data-cat="interest" data-val="DIY" onclick="togglePref(this)">🔨 DIY</div>
+            <div class="pref-chip" data-cat="interest" data-val="家電" onclick="togglePref(this)">📺 家電</div>
+            <div class="pref-chip" data-cat="interest" data-val="健康" onclick="togglePref(this)">💚 健康</div>
+            <div class="pref-chip" data-cat="interest" data-val="読書" onclick="togglePref(this)">📚 読書</div>
+            <div class="pref-chip" data-cat="interest" data-val="運動" onclick="togglePref(this)">🏃 運動</div>
+            <div class="pref-chip" data-cat="interest" data-val="ゲーム" onclick="togglePref(this)">🎮 ゲーム</div>
+            <div class="pref-chip" data-cat="interest" data-val="音楽" onclick="togglePref(this)">🎵 音楽</div>
+            <div class="pref-chip" data-cat="interest" data-val="アート" onclick="togglePref(this)">🎨 アート</div>
           </div>
         </div>
 
         <div class="card" style="margin-bottom:14px">
           <div class="st">食の好み</div>
-          <div class="field"><label class="lbl">アレルギー・食べられないもの</label><input class="inp" placeholder="例：甲殻類、乳製品"></div>
+          <div class="field"><label class="lbl">アレルギー・食べられないもの</label><input class="inp" id="pref-allergies" placeholder="例：甲殻類、乳製品"></div>
           <div class="pref-grid">
-            <div class="pref-chip sel" onclick="togglePref(this)">和食</div>
-            <div class="pref-chip" onclick="togglePref(this)">洋食</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">中華</div>
-            <div class="pref-chip" onclick="togglePref(this)">イタリアン</div>
-            <div class="pref-chip" onclick="togglePref(this)">エスニック</div>
-            <div class="pref-chip" onclick="togglePref(this)">ベジタリアン</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="和食" onclick="togglePref(this)">和食</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="洋食" onclick="togglePref(this)">洋食</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="中華" onclick="togglePref(this)">中華</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="イタリアン" onclick="togglePref(this)">イタリアン</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="エスニック" onclick="togglePref(this)">エスニック</div>
+            <div class="pref-chip" data-cat="cuisine" data-val="ベジタリアン" onclick="togglePref(this)">ベジタリアン</div>
           </div>
         </div>
 
         <div class="card" style="margin-bottom:14px">
           <div class="st">旅行スタイル</div>
           <div class="pref-grid">
-            <div class="pref-chip sel" onclick="togglePref(this)">観光地巡り</div>
-            <div class="pref-chip" onclick="togglePref(this)">グルメ旅</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">温泉・旅館</div>
-            <div class="pref-chip" onclick="togglePref(this)">アドベンチャー</div>
-            <div class="pref-chip" onclick="togglePref(this)">ゆっくり休養</div>
-            <div class="pref-chip" onclick="togglePref(this)">バックパック</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="観光地巡り" onclick="togglePref(this)">観光地巡り</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="グルメ旅" onclick="togglePref(this)">グルメ旅</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="温泉・旅館" onclick="togglePref(this)">温泉・旅館</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="アドベンチャー" onclick="togglePref(this)">アドベンチャー</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="ゆっくり休養" onclick="togglePref(this)">ゆっくり休養</div>
+            <div class="pref-chip" data-cat="travel_style" data-val="バックパック" onclick="togglePref(this)">バックパック</div>
           </div>
           <div class="field" style="margin-top:10px"><label class="lbl">予算感（1泊）</label>
-            <select class="sel"><option>〜¥10,000</option><option selected>〜¥20,000</option><option>〜¥30,000</option><option>制限なし</option></select>
+            <select class="sel" id="pref-travel-budget"><option value="〜¥10,000">〜¥10,000</option><option value="〜¥20,000" selected>〜¥20,000</option><option value="〜¥30,000">〜¥30,000</option><option value="制限なし">制限なし</option></select>
           </div>
         </div>
 
         <div class="card" style="margin-bottom:14px">
           <div class="st">健康・ライフスタイル</div>
           <div class="pref-grid">
-            <div class="pref-chip" onclick="togglePref(this)">ダイエット中</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">筋トレ</div>
-            <div class="pref-chip" onclick="togglePref(this)">ヨガ</div>
-            <div class="pref-chip" onclick="togglePref(this)">ランニング</div>
-            <div class="pref-chip sel" onclick="togglePref(this)">ウォーキング</div>
-            <div class="pref-chip" onclick="togglePref(this)">瞑想</div>
+            <div class="pref-chip" data-cat="health_style" data-val="ダイエット中" onclick="togglePref(this)">ダイエット中</div>
+            <div class="pref-chip" data-cat="health_style" data-val="筋トレ" onclick="togglePref(this)">筋トレ</div>
+            <div class="pref-chip" data-cat="health_style" data-val="ヨガ" onclick="togglePref(this)">ヨガ</div>
+            <div class="pref-chip" data-cat="health_style" data-val="ランニング" onclick="togglePref(this)">ランニング</div>
+            <div class="pref-chip" data-cat="health_style" data-val="ウォーキング" onclick="togglePref(this)">ウォーキング</div>
+            <div class="pref-chip" data-cat="health_style" data-val="瞑想" onclick="togglePref(this)">瞑想</div>
           </div>
         </div>
 
@@ -226,11 +226,38 @@ requireAuth().then(async u => {
     if(document.getElementById('pf-budget')) document.getElementById('pf-budget').value = profileData.monthly_budget || ''
     if(document.getElementById('pf-household')) document.getElementById('pf-household').value = profileData.household_size || ''
 
-    // 好みのチップを選択状態に
+    // 興味・趣味チップを復元（lu_profiles.interests）
+    const interests = profileData.interests || []
+    document.querySelectorAll('.pref-chip[data-cat="interest"]').forEach(el => {
+      if(interests.includes(el.dataset.val)) el.classList.add('sel')
+    })
+
+    // 食事の好みチップを復元
     const foodLiked = prefsData.food?.liked_cuisines || []
     document.querySelectorAll('.pref-chip[data-cat="cuisine"]').forEach(el => {
       if(foodLiked.includes(el.dataset.val)) el.classList.add('sel')
     })
+    // アレルギーをテキスト入力に復元
+    const allergies = prefsData.food?.allergies || []
+    if(allergies.length > 0 && document.getElementById('pref-allergies'))
+      document.getElementById('pref-allergies').value = allergies.join('、')
+
+    // 旅行スタイルチップを復元
+    const travelStyles = prefsData.travel?.travel_styles || []
+    document.querySelectorAll('.pref-chip[data-cat="travel_style"]').forEach(el => {
+      if(travelStyles.includes(el.dataset.val)) el.classList.add('sel')
+    })
+    // 旅行予算を復元
+    if(prefsData.travel?.budget_range && document.getElementById('pref-travel-budget'))
+      document.getElementById('pref-travel-budget').value = prefsData.travel.budget_range
+
+    // 健康・ライフスタイルチップを復元
+    const likedExercises = prefsData.health?.liked_exercises || []
+    document.querySelectorAll('.pref-chip[data-cat="health_style"]').forEach(el => {
+      if(likedExercises.includes(el.dataset.val)) el.classList.add('sel')
+    })
+
+    // 制約チェックボックスを復元
     const constraints = prefsData.constraints || {}
     if(constraints.require_non_smoking && document.getElementById('chk-nonsmoking'))
       document.getElementById('chk-nonsmoking').checked = true
@@ -283,11 +310,38 @@ async function saveProfile() {
 
 async function savePrefs() {
   try {
-    // 食事の好みチップを収集
+    // 興味・趣味チップを収集 → lu_profiles.interests に保存
+    const interests = []
+    document.querySelectorAll('.pref-chip[data-cat="interest"].sel').forEach(el => {
+      interests.push(el.dataset.val)
+    })
+
+    // 食事の好みチップを収集 → lu_pref_food.liked_cuisines に保存
     const likedCuisines = []
     document.querySelectorAll('.pref-chip[data-cat="cuisine"].sel').forEach(el => {
       likedCuisines.push(el.dataset.val)
     })
+
+    // 旅行スタイルチップを収集 → lu_pref_travel.travel_styles に保存
+    const travelStyles = []
+    document.querySelectorAll('.pref-chip[data-cat="travel_style"].sel').forEach(el => {
+      travelStyles.push(el.dataset.val)
+    })
+
+    // 健康・ライフスタイルチップを収集 → lu_pref_health.liked_exercises に保存
+    const healthStyles = []
+    document.querySelectorAll('.pref-chip[data-cat="health_style"].sel').forEach(el => {
+      healthStyles.push(el.dataset.val)
+    })
+
+    // アレルギー（テキスト入力）
+    const allergyInput = document.getElementById('pref-allergies')
+    const allergyText  = allergyInput ? allergyInput.value.trim() : ''
+    const allergies    = allergyText ? allergyText.split(/[、,，\s]+/).filter(Boolean) : []
+
+    // 旅行予算
+    const travelBudgetEl = document.getElementById('pref-travel-budget')
+    const travelBudget   = travelBudgetEl ? travelBudgetEl.value : ''
 
     // 制約情報を収集
     const constraints = {}
@@ -297,12 +351,32 @@ async function savePrefs() {
     if(document.getElementById('pf-meal-budget'))  constraints.max_meal_budget = parseInt(document.getElementById('pf-meal-budget').value)||null
 
     await Promise.all([
-      likedCuisines.length > 0 ? apiRequest('/preferences/food',{method:'PUT',body:{liked_cuisines:likedCuisines}}) : Promise.resolve(),
-      Object.keys(constraints).length > 0 ? apiRequest('/preferences/constraints',{method:'PUT',body:constraints}) : Promise.resolve(),
+      // 興味・趣味を lu_profiles に保存（interests カラム）
+      apiRequest('/profile', {method:'PUT', body:{ interests }}),
+      // 食事の好みを保存
+      apiRequest('/preferences/food', {method:'PUT', body:{
+        liked_cuisines: likedCuisines,
+        ...(allergies.length > 0 ? { allergies } : {})
+      }}),
+      // 旅行スタイルを保存
+      travelStyles.length > 0 || travelBudget
+        ? apiRequest('/preferences/travel', {method:'PUT', body:{
+            ...(travelStyles.length > 0 ? { travel_styles: travelStyles } : {}),
+            ...(travelBudget ? { budget_range: travelBudget } : {})
+          }})
+        : Promise.resolve(),
+      // 健康・ライフスタイルを保存
+      healthStyles.length > 0
+        ? apiRequest('/preferences/health', {method:'PUT', body:{ liked_exercises: healthStyles }})
+        : Promise.resolve(),
+      // 制約情報を保存
+      Object.keys(constraints).length > 0
+        ? apiRequest('/preferences/constraints', {method:'PUT', body: constraints})
+        : Promise.resolve(),
     ])
-    toast('趣味・嗜好を保存しました！AIがより精度の高い提案をします','s')
+    toast('趣味・嗜好を保存しました！AIがより精度の高い提案をします', 's')
   } catch(e) {
-    toast(e.error||'保存に失敗しました','d')
+    toast(e.error||'保存に失敗しました', 'd')
   }
 }
 
