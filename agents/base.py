@@ -129,6 +129,40 @@ class BaseAgent:
         """専門AIを実行してパース済みdictを返す"""
         session_id = str(uuid.uuid4())
 
+        # ── 旅行AI: 出発地確認フェーズ（clarifierより優先）──────────
+        if self.AI_TYPE == "travel" and len(messages) >= 1:
+            # 会話全体のテキストを結合して出発地・終点の情報を確認
+            all_text = " ".join(
+                m.get("content", "") for m in messages if isinstance(m, dict)
+            )
+            # 出発地が既に言及されているかチェック
+            import re as _re
+            has_depart = bool(_re.search(
+                r'(東京|大阪|名古屋|札幌|福岡|仙台|広島|沖縄|京都|神戸|横浜|から|出発|発|羽田|成田|関西空港|伊丹|中部|新千歳'
+                r'|東北|北陸|九州|四国|北海道|自宅|家|現在地|今いる|住んでいる|住んでる|地元|実家)',
+                all_text
+            ))
+            # 旅行先（目的地）が言及されているかチェック
+            has_dest = bool(_re.search(
+                r'(行きたい|旅行|観光|訪れ|訪問|行こう|行けたら|訪ねたい|見たい|めぐり|ツアー|旅に|旅へ|旅する)',
+                all_text
+            ))
+            # 出発地の質問が既にされているかチェック（同じ質問を繰り返さない）
+            already_asked_depart = bool(_re.search(
+                r'(どちらから|ご出発|出発地|お住まい|どこから|出発する都市)',
+                all_text
+            ))
+            # 旅行先の言及はあるが出発地が不明かつまだ聞いていない場合 → 出発地を先に聞く
+            if has_dest and not has_depart and not already_asked_depart and len(messages) <= 3:
+                return {
+                    "ai": self.AI_TYPE,
+                    "reply": "どちらからご出発のご予定ですか？✈️
+出発地を教えていただくと、交通手段・時刻・料金まで含めた旅行プランをご提案できます！",
+                    "needs_more_info": True,
+                    "clarification_type": "depart_city",
+                    "suggestions": ["東京から", "大阪から", "自分の現在地から", "出発地なしでプランだけ見たい"],
+                }
+
         # ── 深掘り質問フェーズ ──────────────────────────────
         if self.AI_TYPE in CLARIFY_ENABLED_TYPES and len(messages) >= 1:
             q_count = count_clarification_questions(messages)

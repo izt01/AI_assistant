@@ -24,7 +24,7 @@ class TravelAgent(BaseAgent):
         }},
         {"type": "function", "function": {
             "name": "search_flights",
-            "description": "Amadeusで航空券を検索して最安値と料金目安を取得する。飛行機移動が含まれるプランで呼ぶ。",
+            "description": "Google Flights Data APIで航空券を検索して便名・出発時刻・到着時刻・料金を取得する。国内・海外を問わず飛行機移動が含まれるプランで必ず呼ぶ。",
             "parameters": {"type": "object", "properties": {
                 "origin":         {"type": "string",  "description": "出発地の都市名（例: 東京, 大阪）"},
                 "destination":    {"type": "string",  "description": "目的地の都市名（例: 福岡, 沖縄）"},
