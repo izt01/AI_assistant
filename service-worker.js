@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v17";  // v17: JSON強制・出発地優先確認・海外フライト対応
+const CACHE_NAME = "lumina-pwa-v18";  // v18: フライトfallback・JSON強制強化・extract_json改善
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];

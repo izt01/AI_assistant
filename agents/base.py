@@ -301,23 +301,55 @@ class BaseAgent:
                 print(f"[Cost] トークン記録エラー: {_e}")
 
         text = last_assistant_msg.content or "{}"
-        # JSONをロバストに抽出（コードブロックや前後テキストが混入しても対応）
+        # JSONをロバストに抽出（Markdownや前後テキストが混入しても対応）
         def extract_json(s):
-            # コードブロック除去
+            import re as _re_ej
+            # コードブロック・Markdown除去
             s = s.replace("```json", "").replace("```", "").strip()
             # 純粋JSONなら直接パース
             try:
                 return json.loads(s)
             except Exception:
                 pass
-            # 最初の { から最後の } を抽出
+            # 最初の { から最後の } を抽出（ネスト対応）
             start = s.find("{")
-            end   = s.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                try:
-                    return json.loads(s[start:end+1])
-                except Exception:
-                    pass
+            if start != -1:
+                depth = 0
+                end = -1
+                in_str = False
+                escape = False
+                for i in range(start, len(s)):
+                    ch = s[i]
+                    if escape:
+                        escape = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape = True
+                        continue
+                    if ch == '"':
+                        in_str = not in_str
+                        continue
+                    if in_str:
+                        continue
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+                if end != -1:
+                    try:
+                        return json.loads(s[start:end+1])
+                    except Exception:
+                        pass
+                # ネスト解析失敗時は rfind でシンプルに試す
+                end = s.rfind("}")
+                if end > start:
+                    try:
+                        return json.loads(s[start:end+1])
+                    except Exception:
+                        pass
             return None
 
         parsed = extract_json(text)
@@ -354,7 +386,11 @@ class BaseAgent:
 
                     # 航空券結果（旅行AI）
                     if t == "flights":
-                        parsed["_flights"] = data
+                        if data.get("available") and data.get("flights"):
+                            parsed["_flights"] = data
+                        elif data.get("fallback_url"):
+                            # API失敗でもスカイスキャナーURLをフロントに渡す
+                            parsed["_flight_fallback"] = data
 
                     # 商品結果（買い物AI・家電AI・DIY AI）
                     if t == "products":
