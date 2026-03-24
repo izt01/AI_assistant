@@ -771,6 +771,11 @@ async function sendMsg() {
         resp.extra._hotels.source || 'rakuten'
       )
     }
+
+    // 旅行AI: 海外ホテルカード（Booking.com）
+    if(resp.extra && resp.extra._overseas_hotels) {
+      renderOverseasHotelCards(resp.extra._overseas_hotels)
+    }
  
     // 料理AI: Google Maps 近隣スーパー ★新規追加
     if(aiParam === 'cooking' && resp.extra && resp.extra._nearby_stores) {
@@ -1895,6 +1900,87 @@ function renderHotelCards(hotels, source) {
           onclick="event.stopPropagation();saveHotelAsFavorite(this,'${(h.name||'').replace(/'/g,'&apos;')}','${h.url}',${h.price||0},'${(h.area||'').replace(/'/g,'&apos;')}')">♡</button>
       </div>
     `).join('')}
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+ 
+// ─── 海外ホテルカード描画（旅行AI: Booking.com）──────────────
+function renderOverseasHotelCards(data) {
+  const hotels = data.hotels || []
+  const fallback = data.fallback_urls || {}
+  const cityName = data.city || data.city_en || '目的地'
+
+  // ホテルが0件またはAPIエラーの場合 → フォールバックURLカード
+  if(!hotels.length) {
+    const wrap = document.createElement('div')
+    wrap.className = 'hotel-cards'
+    wrap.innerHTML = `
+      <div style="font-size:12px;color:var(--subtle);margin-bottom:6px;font-weight:600">🌏 海外ホテルを検索する</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${cityName}のホテルを各サイトで検索できます</div>
+      ${fallback.booking_search_url ? `
+      <div class="hotel-card" onclick="window.open('${fallback.booking_search_url}','_blank')" style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🔵</span>
+        <div>
+          <div class="hotel-name">Booking.com で検索</div>
+          <div class="hotel-meta"><span>世界最大級のホテル予約サイト</span></div>
+        </div>
+      </div>` : ''}
+      ${fallback.agoda_search_url ? `
+      <div class="hotel-card" onclick="window.open('${fallback.agoda_search_url}','_blank')" style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🟠</span>
+        <div>
+          <div class="hotel-name">Agoda で検索</div>
+          <div class="hotel-meta"><span>アジアに強いホテル予約サイト</span></div>
+        </div>
+      </div>` : ''}
+      ${fallback.expedia_search_url ? `
+      <div class="hotel-card" onclick="window.open('${fallback.expedia_search_url}','_blank')" style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🟡</span>
+        <div>
+          <div class="hotel-name">Expedia で検索</div>
+          <div class="hotel-meta"><span>フライト+ホテルのセット予約も可</span></div>
+        </div>
+      </div>` : ''}
+    `
+    document.getElementById('chat-msgs').appendChild(wrap)
+    scrollBottom()
+    return
+  }
+
+  // ホテルが取得できた場合 → ホテルカード表示
+  const wrap = document.createElement('div')
+  wrap.className = 'hotel-cards'
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--subtle);margin-bottom:6px;font-weight:600">🌏 Booking.com の海外ホテル（${cityName}）</div>
+    ${hotels.map(h => {
+      const stars = h.stars ? '★'.repeat(Math.min(h.stars,5)) : ''
+      const price = h.price ? `<div class="hotel-price">¥${Number(h.price).toLocaleString()}〜 / 泊</div>` : ''
+      const review = h.review ? `<span>⭐ ${h.review}${h.review_label ? ' '+h.review_label : ''}（${h.review_count}件）</span>` : ''
+      const district = h.district || h.address || ''
+      const imgHtml = h.image
+        ? `<img src="${h.image}" alt="${h.name}" style="width:72px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+        : `<div style="width:72px;height:56px;border-radius:6px;background:var(--cream2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">🏨</div>`
+      return `
+        <div class="hotel-card" onclick="window.open('${h.url || '#'}','_blank')" style="display:flex;gap:10px;align-items:flex-start">
+          ${imgHtml}
+          <div style="flex:1;min-width:0">
+            <div class="hotel-name">${h.name || ''}${stars ? ' <span style="color:var(--gold);font-size:11px">'+stars+'</span>' : ''}</div>
+            <div class="hotel-meta">
+              ${review}
+              ${district ? `<span>📍 ${district}</span>` : ''}
+            </div>
+            ${price}
+          </div>
+          <button class="hotel-fav" title="お気に入りに追加"
+            onclick="event.stopPropagation();saveHotelAsFavorite(this,'${(h.name||'').replace(/'/g,'&apos;')}','${h.url||''}',${h.price||0},'${cityName}')">♡</button>
+        </div>
+      `
+    }).join('')}
+    <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+      ${fallback.booking_search_url ? `<a href="${fallback.booking_search_url}" target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none">🔵 Booking.comで他を見る</a>` : ''}
+      ${fallback.agoda_search_url   ? `<a href="${fallback.agoda_search_url}"   target="_blank" style="font-size:11px;color:var(--gold);text-decoration:none">🟠 Agodaで探す</a>` : ''}
+    </div>
   `
   document.getElementById('chat-msgs').appendChild(wrap)
   scrollBottom()

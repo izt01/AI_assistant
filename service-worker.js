@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v13";  // v13: 文字数制限2000文字
+const CACHE_NAME = "lumina-pwa-v14";  // v14: 海外ホテル検索（Booking.com）
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];
