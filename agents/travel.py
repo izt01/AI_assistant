@@ -5,7 +5,7 @@
 - search_nearby:  Google Maps で観光スポットを検索
 """
 from .base import BaseAgent
-from tools import search_hotels, search_nearby, search_flights
+from tools import search_hotels, search_nearby, search_flights, search_overseas_hotels
 
 
 class TravelAgent(BaseAgent):
@@ -33,6 +33,16 @@ class TravelAgent(BaseAgent):
             }, "required": ["origin", "destination", "departure_date"]},
         }},
         {"type": "function", "function": {
+            "name": "search_overseas_hotels",
+            "description": "Booking.com経由で海外（国外）のホテルを検索する。海外旅行でホテルが必要な場合に呼ぶ。",
+            "parameters": {"type": "object", "properties": {
+                "city":      {"type": "string",  "description": "目的地の都市名（日本語可。例: バンコク, パリ, ハワイ, ソウル）"},
+                "checkin":   {"type": "string",  "description": "チェックイン日 YYYY-MM-DD"},
+                "checkout":  {"type": "string",  "description": "チェックアウト日 YYYY-MM-DD"},
+                "adult_num": {"type": "integer", "description": "大人の人数（デフォルト2）"},
+            }, "required": ["city"]},
+        }},
+        {"type": "function", "function": {
             "name": "search_nearby",
             "description": "周辺の観光スポット・飲食店を検索する",
             "parameters": {"type": "object", "properties": {
@@ -46,5 +56,6 @@ class TravelAgent(BaseAgent):
     TOOL_MAP = {
         "search_hotels":  lambda a: search_hotels(**a),
         "search_flights": lambda a: search_flights(**a),
+        "search_overseas_hotels": lambda a: search_overseas_hotels(**a),
         "search_nearby":  lambda a: search_nearby(**a),
     }
