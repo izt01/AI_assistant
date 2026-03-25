@@ -231,6 +231,21 @@
             <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="saveSettings()">設定を保存</button>
           </div>
         </div>
+
+        <!-- アラートメール テスト送信 -->
+        <div class="admin-section" style="max-width:480px;margin-top:24px">
+          <div class="admin-section-title" style="margin-bottom:16px">📧 アラートメール テスト送信</div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+            環境変数 <code>ADMIN_EMAIL</code> 宛てにテストメールを送信します。<br>
+            <code>MAIL_DRIVER=none</code> の場合はサーバーログにのみ出力されます。
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="sendTestAlert(80)">⚠️ 80%テスト</button>
+            <button class="btn btn-ghost btn-sm" onclick="sendTestAlert(90)">🔴 90%テスト</button>
+            <button class="btn btn-ghost btn-sm" onclick="sendTestAlert(100)">🚨 100%テスト</button>
+          </div>
+          <div id="test-alert-result" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+        </div>
       </div>
 
     </div>
@@ -575,6 +590,25 @@ async function deleteCard(id,last4){
       else adminToast('削除に失敗しました','e')
     }
   })
+}
+
+// ── アラートメール テスト送信 ────────────────────────────────
+async function sendTestAlert(level) {
+  const resultEl = document.getElementById('test-alert-result')
+  resultEl.textContent = `送信中... (${level}%)`
+  try {
+    const res = await adminFetch('/api/admin/test-alert-email', {
+      method: 'POST', body: JSON.stringify({ level })
+    })
+    const d = await res.json()
+    if(d.ok) {
+      resultEl.innerHTML = `✅ 送信完了 → <strong>${d.sent_to}</strong> (${level}%アラート)`
+    } else {
+      resultEl.textContent = `❌ 送信失敗: ${d.error || '不明なエラー'}`
+    }
+  } catch(e) {
+    resultEl.textContent = `❌ エラー: ${e.message}`
+  }
 }
 
 // ── 予算設定 ──────────────────────────────────────────────────

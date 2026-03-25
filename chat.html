@@ -763,6 +763,10 @@ async function sendMsg() {
     if(aiParam === 'travel' && resp.extra && resp.extra._flights && resp.extra._flights.flights && resp.extra._flights.flights.length > 0) {
       renderFlightCards(resp.extra._flights)
     }
+    // 旅行AI: ツアー・体験カード
+    if(aiParam === 'travel' && resp.extra && resp.extra._tours && resp.extra._tours.tours && resp.extra._tours.tours.length > 0) {
+      renderTourCards(resp.extra._tours)
+    }
 
     // 旅行AI: フライトAPI失敗時のスカイスキャナーfallbackカード
     if(aiParam === 'travel' && resp.extra && resp.extra._flight_fallback) {
@@ -1940,6 +1944,93 @@ function renderHotelCards(hotels, source) {
   scrollBottom()
 }
  
+// ─── ツアー・体験カード（旅行AI / Google検索結果）──────────────
+function renderTourCards(data) {
+  const tours = data.tours || []
+  if (!tours.length) return
+
+  const dest    = data.destination || ''
+  const keyword = data.keyword || ''
+  const query   = data.search_query || ''
+  const wrap    = document.createElement('div')
+  wrap.style.cssText = 'margin-top:14px'
+
+  const header = dest
+    ? `🎫 ${dest}${keyword ? ' / ' + keyword : ''}のツアー・体験`
+    : '🎫 ツアー・体験 検索結果'
+
+  wrap.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--subtle);margin-bottom:8px">
+      ${header}
+    </div>
+
+    ${tours.map(t => {
+      const hasLink = !!t.url
+      const siteBadge = t.site
+        ? `<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);
+                        padding:1px 6px;border-radius:4px;color:var(--muted);flex-shrink:0">
+             ${t.site}
+           </span>`
+        : ''
+      const priceBadge = t.price_hint
+        ? `<span style="font-family:'Fraunces',serif;font-size:14px;
+                        font-weight:900;color:#4a7de8;flex-shrink:0">
+             ${t.price_hint}
+           </span>`
+        : ''
+      return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
+                    padding:12px 14px;margin-bottom:8px;
+                    cursor:${hasLink ? 'pointer' : 'default'};transition:all .15s"
+             ${hasLink ? `onclick="window.open('${t.url.replace(/'/g,"\'")}','_blank')"` : ''}
+             onmouseover="this.style.borderColor='rgba(100,149,237,.4)';this.style.background='var(--hover,var(--surface))'"
+             onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface)'">
+
+          <!-- タイトル行 -->
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);line-height:1.45;flex:1;
+                        display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+              ${t.title}
+            </div>
+          </div>
+
+          <!-- スニペット -->
+          ${t.description ? `
+            <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:7px;
+                        display:-webkit-box;-webkit-line-clamp:2;
+                        -webkit-box-orient:vertical;overflow:hidden">
+              ${t.description}
+            </div>` : ''}
+
+          <!-- フッター：サイト名 + 価格 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap">
+            ${siteBadge}
+            ${priceBadge}
+          </div>
+        </div>`
+    }).join('')}
+
+    <!-- Google検索で詳しく見るリンク -->
+    ${query ? `
+      <a href="https://www.google.com/search?q=${encodeURIComponent(query)}&gl=jp&hl=ja"
+         target="_blank"
+         style="display:flex;align-items:center;justify-content:center;gap:5px;
+                padding:9px;border:1.5px solid var(--border);border-radius:10px;
+                color:var(--muted);font-size:12px;text-decoration:none;margin-top:4px;
+                background:var(--surface);transition:all .15s"
+         onmouseover="this.style.borderColor='rgba(100,149,237,.4)'"
+         onmouseout="this.style.borderColor='var(--border)'">
+        🔍 Googleでもっと検索する
+      </a>` : ''}
+
+    <div style="font-size:10px;color:var(--subtle);text-align:center;margin-top:6px">
+      ※ Google検索の結果です。詳細・料金は各サイトにてご確認ください
+    </div>
+  `
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+
 // ─── フライト検索フォールバックカード（旅行AI）────────────────
 function renderFlightFallbackCard(data) {
   if(!data || !data.fallback_url) return

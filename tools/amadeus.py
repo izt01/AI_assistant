@@ -256,3 +256,190 @@ def search_flights(
     except Exception as e:
         print(f"[GoogleFlights] エラー: {e}")
         return {"available": False, "reason": str(e)}
+
+# ══════════════════════════════════════════════════════════════
+#  ツアー・体験検索 - RapidAPI Google Search
+#  既存の RAPIDAPI_KEY をそのまま使用
+#  RapidAPIで "Google Search" API（neoscrap-net/google-search72）を
+#  追加購読するだけで動作（無料プランあり）
+#  ホスト: google-search72.p.rapidapi.com
+# ══════════════════════════════════════════════════════════════
+
+import re as _re
+
+# ── 国内目的地リスト（これ以外は海外とみなす）──────────────────
+DOMESTIC_DESTINATIONS = {
+    "東京", "大阪", "京都", "沖縄", "北海道", "札幌", "福岡", "広島",
+    "名古屋", "奈良", "神戸", "横浜", "仙台", "金沢", "長崎", "鹿児島",
+    "熊本", "高松", "松山", "旭川", "函館", "秋田", "青森", "石垣",
+    "宮古", "那覇", "箱根", "日光", "鎌倉", "軽井沢", "富士山", "富士",
+    "草津", "別府", "湯布院", "由布院", "白川郷", "高山", "飛騨",
+    "伊勢", "高野山", "吉野", "宮島", "尾道", "倉敷", "萩", "津和野",
+    "屋久島", "種子島", "五島列島", "壱岐", "対馬",
+}
+
+def _is_overseas(destination: str) -> bool:
+    """目的地が海外かどうか判定する"""
+    return not any(d in destination for d in DOMESTIC_DESTINATIONS)
+
+def search_tours(
+    destination: str,
+    keyword: str = "",
+    max_results: int = 5,
+    # 旅行AIからstart_date/end_dateが渡されても無視（互換性のため受け取る）
+    start_date: str = None,
+    end_date: str = None,
+) -> dict:
+    """
+    RapidAPI Google Search でツアー・体験を検索して上位件数を返す。
+
+    既存の RAPIDAPI_KEY を使用。
+    RapidAPIダッシュボードで "google-search72" を追加購読すること（無料枠あり）。
+
+    Args:
+        destination: 目的地（例: 京都, 沖縄, バリ）
+        keyword:     絞り込みキーワード（例: 茶道体験, ダイビング, 日帰り）
+        max_results: 返却件数（デフォルト5）
+
+    Returns:
+        {
+          "available": True,
+          "type":      "tours",
+          "destination": "京都",
+          "keyword":   "茶道体験",
+          "tours": [
+            {
+              "title":       "京都 茶道体験ツアー｜じゃらん",
+              "description": "京都の老舗茶室で本格的な茶道体験...",
+              "url":         "https://www.jalan.net/...",
+              "site":        "jalan.net",
+              "price_hint":  "3,000円〜",  # スニペットから抽出（任意）
+            }, ...
+          ]
+        }
+    """
+    api_key = os.getenv("RAPIDAPI_KEY", "").strip()
+    if not api_key:
+        return {"available": False, "reason": "RAPIDAPI_KEY が未設定です"}
+
+    # 国内 or 海外を自動判定してクエリを最適化
+    overseas = _is_overseas(destination)
+    if overseas:
+        # 海外：日本発のツアーを検索。「海外ツアー」「現地ツアー」を加える
+        extra = keyword or "現地ツアー 体験 予約"
+        kw_parts = [destination, extra, "海外ツアー 日本語"]
+    else:
+        # 国内：通常検索
+        extra = keyword or "ツアー 体験 予約"
+        kw_parts = [destination, extra]
+    query = " ".join(p for p in kw_parts if p)
+    print(f"[TourSearch] {'海外' if overseas else '国内'}ツアー検索")
+
+    print(f"[TourSearch] Google検索: '{query}'")
+
+    try:
+        r = requests.get(
+            "https://google-search72.p.rapidapi.com/search",
+            headers={
+                "X-RapidAPI-Key":  api_key,
+                "X-RapidAPI-Host": "google-search72.p.rapidapi.com",
+            },
+            params={
+                "q":   query,
+                "gl":  "jp",   # 日本の検索結果
+                "hl":  "ja",   # 日本語
+                "num": max_results * 2,  # 多めに取って絞り込む
+            },
+            timeout=12,
+        )
+        print(f"[TourSearch] status={r.status_code}")
+
+        if r.status_code == 403:
+            return {
+                "available": False,
+                "reason": (
+                    "google-search72 API の購読が必要です。"
+                    "RapidAPIダッシュボードで 'google-search72' を検索して追加購読してください（無料枠あり）。"
+                ),
+            }
+        if r.status_code != 200:
+            return {"available": False, "reason": f"Google Search API エラー: HTTP {r.status_code}"}
+
+        data  = r.json()
+        items = data.get("items", [])   # google-search72 のレスポンス形式
+
+        # items がない場合は他のキーを試す（APIにより異なる）
+        if not items:
+            items = data.get("organic", data.get("results", []))
+
+        if not items:
+            return {"available": False, "reason": f"{destination} のツアーが見つかりませんでした"}
+
+        tours = []
+        for item in items:
+            title   = item.get("title", "")
+            url     = item.get("link",  item.get("url", ""))
+            snippet = item.get("snippet", item.get("description", ""))
+
+            if not title or not url:
+                continue
+
+            # 価格っぽい文字列をスニペットから抽出
+            price_hint = _extract_price(snippet)
+
+            # ドメイン名を取得してサイト名として表示
+            site = _extract_domain(url)
+
+            tours.append({
+                "title":       title,
+                "description": snippet,
+                "url":         url,
+                "site":        site,
+                "price_hint":  price_hint,
+                "image_url":   item.get("thumbnail", item.get("image", "")),
+            })
+
+            if len(tours) >= max_results:
+                break
+
+        if not tours:
+            return {"available": False, "reason": f"{destination} のツアーが見つかりませんでした"}
+
+        print(f"[TourSearch] {len(tours)}件取得")
+        return {
+            "available":   True,
+            "type":        "tours",
+            "destination": destination,
+            "keyword":     keyword,
+            "tours":       tours,
+            "search_query": query,
+        }
+
+    except Exception as e:
+        print(f"[TourSearch] エラー: {e}")
+        return {"available": False, "reason": str(e)}
+
+
+def _extract_price(text: str) -> str:
+    """スニペットから価格っぽい文字列を抽出する"""
+    if not text:
+        return ""
+    # ¥1,000 / 1,000円 / 1000円 などにマッチ
+    m = _re.search(r'[¥￥]?\s*[\d,]+\s*円|[\d,]+\s*円\s*[〜～~]', text)
+    if m:
+        return m.group(0).strip()
+    m = _re.search(r'[¥￥]\s*[\d,]+', text)
+    if m:
+        return m.group(0).strip()
+    return ""
+
+
+def _extract_domain(url: str) -> str:
+    """URLからドメイン名を取得"""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace("www.", "")
+        return domain
+    except Exception:
+        return ""
