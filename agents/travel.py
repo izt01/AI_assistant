@@ -5,7 +5,7 @@
 - search_nearby:  Google Maps で観光スポットを検索
 """
 from .base import BaseAgent
-from tools import search_hotels, search_nearby, search_flights, search_overseas_hotels
+from tools import search_hotels, search_nearby, search_flights, search_overseas_hotels, search_tours
 
 
 class TravelAgent(BaseAgent):
@@ -43,6 +43,20 @@ class TravelAgent(BaseAgent):
             }, "required": ["city"]},
         }},
         {"type": "function", "function": {
+            "name": "search_tours",
+            "description": (
+                "Google検索で目的地のツアー・体験・アクティビティを検索して上位件数を返す。"
+                "「ツアーある？」「体験したい」「何かアクティビティを」「日帰りで楽しめるものは？」など"
+                "ツアーやアクティビティの提案が求められるときに呼ぶ。"
+                "keywordには茶道・ダイビング・日帰りなど具体的な体験内容を入れると精度が上がる。"
+            ),
+            "parameters": {"type": "object", "properties": {
+                "destination": {"type": "string",  "description": "目的地（例: 京都, 沖縄, バリ島）"},
+                "keyword":     {"type": "string",  "description": "体験・活動の種類（例: 茶道体験, ダイビング, 日帰りバスツアー）省略可"},
+                "max_results": {"type": "integer", "description": "返却件数（デフォルト5）"},
+            }, "required": ["destination"]},
+        }},
+        {"type": "function", "function": {
             "name": "search_nearby",
             "description": "周辺の観光スポット・飲食店を検索する",
             "parameters": {"type": "object", "properties": {
@@ -57,5 +71,6 @@ class TravelAgent(BaseAgent):
         "search_hotels":  lambda a: search_hotels(**a),
         "search_flights": lambda a: search_flights(**a),
         "search_overseas_hotels": lambda a: search_overseas_hotels(**a),
+        "search_tours":   lambda a: search_tours(**a),
         "search_nearby":  lambda a: search_nearby(**a),
     }

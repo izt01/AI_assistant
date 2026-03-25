@@ -3,6 +3,7 @@
 - 記憶の注入（プロンプトへの組み込み）
 - Function Callingループの共通処理
 - 会話終了時の記憶保存
+- 深掘り質問（clarifier）による意図理解の強化
 を共通化する。各AIはこれを継承してSYSTEM_PROMPTとTOOLSだけ定義すればよい。
 """
 import json
@@ -10,8 +11,12 @@ import uuid
 from openai import OpenAI
 from memory import load_memory, build_memory_prompt, extract_and_save_memory
 from prompts import get_prompt
+from .clarifier import analyze_intent, count_clarification_questions, build_clarification_response
 
 client = OpenAI()
+
+# 深掘り質問を行うAIタイプ（ツール検索系は意図理解が特に重要）
+CLARIFY_ENABLED_TYPES = {"travel", "shopping", "appliance", "health", "gourmet", "recipe", "diy"}
 
 
 class BaseAgent:
@@ -83,116 +88,298 @@ class BaseAgent:
             )
         return self.get_system_prompt()
 
+    def _save_preferences_from_clarifier(self, user_id: str, preferences_found: list):
+        """clarifierが検出した好き嫌いをDBに即時保存する"""
+        if not preferences_found:
+            return
+        try:
+            from memory.db import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    for pref in preferences_found:
+                        key   = pref.get("key")
+                        value = pref.get("value")
+                        sentiment = pref.get("sentiment", "like")
+                        if not key or not value:
+                            continue
+                        # 嫌いなものは負のconfidenceで保存、好きなものは正
+                        confidence = -3 if sentiment == "dislike" else 2
+                        cur.execute("""
+                            INSERT INTO user_preferences (user_id, ai_type, key, value, confidence, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, NOW())
+                            ON CONFLICT (user_id, ai_type, key) DO UPDATE SET
+                                value      = EXCLUDED.value,
+                                confidence = LEAST(GREATEST(user_preferences.confidence + %s, -10), 10),
+                                updated_at = NOW()
+                        """, (user_id, self.AI_TYPE, key, value, confidence, confidence))
+                conn.commit()
+            print(f"[BaseAgent] 好み保存: {preferences_found}")
+
+        except Exception as e:
+            print(f"[BaseAgent] 好み保存エラー: {e}")
+
+        # ── lu_pref_* / lu_constraints への即時同期（try/except を分離）──
+        try:
+            from memory.user_memory import _sync_pref_to_lu_tables
+            _sync_pref_to_lu_tables(user_id, self.AI_TYPE, preferences_found)
+        except Exception as e2:
+            print(f"[BaseAgent] lu_sync エラー: {e2}")
+
     def run(self, messages: list, user_id: str = "default") -> dict:
         """専門AIを実行してパース済みdictを返す"""
         session_id = str(uuid.uuid4())
+
+        # -- Travel AI: depart city check (runs before clarifier) --
+        if self.AI_TYPE == "travel" and len(messages) >= 1:
+            import re as _re_travel
+            all_text = " ".join(
+                m.get("content", "") for m in messages if isinstance(m, dict)
+            )
+            depart_keywords = (
+                r'(\u6771\u4eac|\u5927\u962a|\u540d\u53e4\u5c4b|\u672d\u5e4c|\u798f\u5ca1|\u4ed5\u5409|\u5e83\u5cf6|\u6c96\u7e04|\u4eac\u90fd|\u795e\u6238|\u6a2a\u6d5c'
+                r'|\u304b\u3089|\u51fa\u767a|\u767a|\u7fbd\u7530|\u6210\u7530|\u95a2\u897f\u7a7a\u6e2f|\u4f0a\u4e39|\u4e2d\u90e8|\u65b0\u5343\u6b73'
+                r'|\u81ea\u5b85|\u5bb6|\u73fe\u5728\u5730|\u4eca\u3044\u308b|\u4f4f\u3093\u3067\u3044\u308b|\u4f4f\u3093\u3067\u308b|\u5730\u5143|\u5b9f\u5bb6)'
+            )
+            dest_keywords = (
+                r'(\u884c\u304d\u305f\u3044|\u65c5\u884c|\u89b3\u5149|\u8a2a\u308c|\u8a2a\u554f|\u884c\u3053\u3046|\u884c\u3051\u305f\u3089|\u8a2a\u306d\u305f\u3044'
+                r'|\u898b\u305f\u3044|\u3081\u3050\u308a|\u30c4\u30a2\u30fc|\u65c5\u306b|\u65c5\u3078|\u65c5\u3059\u308b)'
+            )
+            asked_keywords = (
+                r'(\u3069\u3061\u3089\u304b\u3089|\u3054\u51fa\u767a|\u51fa\u767a\u5730|\u304a\u4f4f\u307e\u3044|\u3069\u3053\u304b\u3089|\u51fa\u767a\u3059\u308b\u90fd\u5e02)'
+            )
+            has_depart       = bool(_re_travel.search(depart_keywords,  all_text))
+            has_dest         = bool(_re_travel.search(dest_keywords,    all_text))
+            already_asked    = bool(_re_travel.search(asked_keywords,   all_text))
+            if has_dest and not has_depart and not already_asked and len(messages) <= 3:
+                return {
+                    "ai": self.AI_TYPE,
+                    "reply": (
+                        "\u3069\u3061\u3089\u304b\u3089\u3054\u51fa\u767a\u306e\u3054\u4e88\u5b9a\u3067\u3059\u304b\uff1f "
+                        "\u51fa\u767a\u5730\u3092\u6559\u3048\u3066\u3044\u305f\u3060\u304f\u3068\u3001"
+                        "\u4ea4\u901a\u624b\u6bb5\u30fb\u6642\u523b\u30fb\u6599\u91d1\u307e\u3067\u542b\u3081\u305f"
+                        "\u65c5\u884c\u30d7\u30e9\u30f3\u3092\u3054\u63d0\u6848\u3067\u304d\u307e\u3059\uff01"
+                    ),
+                    "needs_more_info": True,
+                    "clarification_type": "depart_city",
+                    "suggestions": [
+                        "\u6771\u4eac\u304b\u3089",
+                        "\u5927\u962a\u304b\u3089",
+                        "\u81ea\u5206\u306e\u73fe\u5728\u5730\u304b\u3089",
+                        "\u51fa\u767a\u5730\u306a\u3057\u3067\u30d7\u30e9\u30f3\u3060\u3051\u898b\u305f\u3044",
+                    ],
+                }
+
+        # ── 深掘り質問フェーズ ──────────────────────────────
+        if self.AI_TYPE in CLARIFY_ENABLED_TYPES and len(messages) >= 1:
+            q_count = count_clarification_questions(messages)
+            intent  = analyze_intent(messages, self.AI_TYPE, q_count)
+
+            # clarifierが検出した好き嫌いを即時保存
+            if intent.get("preferences_found"):
+                self._save_preferences_from_clarifier(user_id, intent["preferences_found"])
+
+            # まだ意図が不明で質問回数が少ない → 深掘り質問を返す
+            if not intent["ready_to_propose"] and intent.get("next_question"):
+                return build_clarification_response(
+                    question=intent["next_question"],
+                    ai_type=self.AI_TYPE,
+                )
+
         system     = self.build_system(user_id)
+
+        # 旅行AIは必ずJSON返却を先頭命令として強制
+        if self.AI_TYPE == "travel":
+            _jlines = [
+                "CRITICAL INSTRUCTION - HIGHEST PRIORITY:",
+                "You MUST respond ONLY with a raw JSON object.",
+                "First character MUST be {. Last character MUST be }.",
+                "NEVER use Markdown (####, ###, **, -, *). NEVER use code blocks.",
+                "Even if tools fail, ALWAYS return JSON with plans/days/schedule arrays.",
+                "NO apologies. NO alternative text. NO explanations outside JSON.",
+                "---",
+            ]
+            system = "\n".join(_jlines) + "\n" + system
+
         msgs       = [{"role": "system", "content": system}] + messages
 
         last_assistant_msg = None  # 最後のassistantメッセージを確実に追跡
+        # トークン使用量の累積（APIコールのたびに加算）
+        _total_input_tokens  = 0
+        _total_output_tokens = 0
+        _model_used          = "gpt-4o"
 
-        for i in range(3):
+        # GPT-4oが「了解しました。少々お待ちください」などの中間テキストを
+        # ツール呼び出し前に返すパターンを検知するパターン群
+        INTERIM_PATTERNS = [
+            "お待ちください", "調べます", "探します", "提案します",
+            "確認します", "検索します", "プランを", "ご提案",
+            "少々", "しばらく", "おすすめ", "調べて",
+        ]
+
+        for i in range(5):  # 最大5回（通常: ①中間テキスト ②ツール呼び出し ③最終返答）
             kwargs = {
                 "model":      "gpt-4o",
-                "max_tokens": 1500,
+                "max_tokens": 4000,
                 "messages":   msgs,
             }
             if self.TOOLS:
                 kwargs["tools"] = self.TOOLS
-                # 1回目はtool呼び出しを強制、2回目以降はauto
                 kwargs["tool_choice"] = "auto"
 
             res = client.chat.completions.create(**kwargs)
             msg = res.choices[0].message
 
-            if not getattr(msg, "tool_calls", None):
-                last_assistant_msg = msg
-                break
+            # トークン使用量を累積
+            if hasattr(res, "usage") and res.usage:
+                _total_input_tokens  += res.usage.prompt_tokens or 0
+                _total_output_tokens += res.usage.completion_tokens or 0
+                _model_used = res.model or "gpt-4o"
 
-            msgs.append(msg)
-            for tc in msg.tool_calls:
-                args   = json.loads(tc.function.arguments)
-                fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
-                result = fn(args)
-                print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
+            # ── ツール呼び出しがある場合 → ツールを実行してループ続行 ──
+            if getattr(msg, "tool_calls", None):
+                msgs.append(msg)
+                for tc in msg.tool_calls:
+                    args   = json.loads(tc.function.arguments)
+                    fn     = self.TOOL_MAP.get(tc.function.name, lambda a: {})
+                    result = fn(args)
+                    print(f"[Tool] {tc.function.name}({args}) → {str(result)[:200]}")
+                    msgs.append({
+                        "role":         "tool",
+                        "tool_call_id": tc.id,
+                        "content":      json.dumps(result, ensure_ascii=False),
+                    })
+                continue  # ツール結果を渡して次のループへ
+
+            # ── テキスト返答の場合 ──
+            content_text = (msg.content or "").strip()
+
+            # 中間返答パターン（了解テキスト）かつまだリトライ余地がある場合
+            # → コンテキストに追加してプランを出すよう促す
+            is_interim = (
+                self.TOOLS  # ツールを持つAIのみ対象
+                and i < 3   # 最初の3回まで中間返答を許容
+                and any(p in content_text for p in INTERIM_PATTERNS)
+                and len(content_text) < 200  # 短いテキスト（本格的な返答ではない）
+                and not content_text.lstrip().startswith("{")  # JSONでない
+            )
+
+            if is_interim:
+                print(f"[Base] 中間返答を検知（{i+1}回目）: {content_text[:60]}... → リトライ")
+                msgs.append(msg)
+                # 「続けてプランや検索結果を出力してください」と促す
                 msgs.append({
-                    "role":         "tool",
-                    "tool_call_id": tc.id,
-                    "content":      json.dumps(result, ensure_ascii=False),
+                    "role":    "user",
+                    "content": (
+                        "Return ONLY a raw JSON object starting with '{' and ending with '}'."
+                        " Include plans with days and schedule arrays."
+                        " Do NOT use Markdown. Do NOT use #### or - bullet points."
+                        " Output JSON directly now."
+                    ),
                 })
+                continue
+
+            # 最終的な返答として確定
+            last_assistant_msg = msg
+            break
+
         else:
             last_assistant_msg = msg
 
         if last_assistant_msg is None:
             last_assistant_msg = msg
 
+        # ── トークン使用量をDBに記録（コスト自前計算） ──────────────
+        if _total_input_tokens > 0 or _total_output_tokens > 0:
+            try:
+                # モデル別コスト計算（$/1M tokens）
+                MODEL_COSTS = {
+                    "gpt-4o":           {"input": 2.50,  "output": 10.00},
+                    "gpt-4o-mini":      {"input": 0.15,  "output": 0.60},
+                    "gpt-4-turbo":      {"input": 10.00, "output": 30.00},
+                    "o1":               {"input": 15.00, "output": 60.00},
+                    "o1-mini":          {"input": 3.00,  "output": 12.00},
+                    "o3-mini":          {"input": 1.10,  "output": 4.40},
+                }
+                model_key = next((k for k in MODEL_COSTS if k in _model_used), "gpt-4o")
+                rates = MODEL_COSTS[model_key]
+                cost_usd = (_total_input_tokens * rates["input"] + _total_output_tokens * rates["output"]) / 1_000_000
+
+                from memory.db import get_conn as _mem_conn
+                with _mem_conn() as _conn:
+                    with _conn.cursor() as _cur:
+                        _cur.execute(
+                            """INSERT INTO admin_cost_logs
+                               (id, month, model, input_tokens, output_tokens, cost_usd, recorded_at)
+                               VALUES (gen_random_uuid(),
+                                       to_char(NOW(),'YYYY-MM'),
+                                       %s, %s, %s, %s, NOW())""",
+                            (_model_used, _total_input_tokens, _total_output_tokens, round(cost_usd, 6))
+                        )
+                    _conn.commit()
+            except Exception as _e:
+                print(f"[Cost] トークン記録エラー: {_e}")
+
         text = last_assistant_msg.content or "{}"
-        # JSONをロバストに抽出（コードブロック・前後テキスト・途中切れに対応）
+        # JSONをロバストに抽出（Markdownや前後テキストが混入しても対応）
         def extract_json(s):
-            import re as _re
-            # コードブロック除去
-            s = _re.sub(r'```json\s*', '', s)
-            s = _re.sub(r'```\s*',     '', s)
-            s = s.strip()
+            import re as _re_ej
+            # コードブロック・Markdown除去
+            s = s.replace("```json", "").replace("```", "").strip()
             # 純粋JSONなら直接パース
             try:
                 return json.loads(s)
             except Exception:
                 pass
-            # 最初の { から最後の } を抽出
+            # 最初の { から最後の } を抽出（ネスト対応）
             start = s.find("{")
-            end   = s.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                try:
-                    return json.loads(s[start:end+1])
-                except Exception:
-                    pass
-            # 途中切れ対策: JSONDecodeErrorの位置まで切り詰めて再試行
             if start != -1:
-                try:
-                    json.loads(s[start:])
-                except json.JSONDecodeError as e:
+                depth = 0
+                end = -1
+                in_str = False
+                escape = False
+                for i in range(start, len(s)):
+                    ch = s[i]
+                    if escape:
+                        escape = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape = True
+                        continue
+                    if ch == '"':
+                        in_str = not in_str
+                        continue
+                    if in_str:
+                        continue
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+                if end != -1:
                     try:
-                        return json.loads(s[start:start+e.pos])
+                        return json.loads(s[start:end+1])
+                    except Exception:
+                        pass
+                # ネスト解析失敗時は rfind でシンプルに試す
+                end = s.rfind("}")
+                if end > start:
+                    try:
+                        return json.loads(s[start:end+1])
                     except Exception:
                         pass
             return None
 
         parsed = extract_json(text)
-        print(f"[base] extract_json: success={parsed is not None} len={len(text)}")
-
         if parsed is None:
-            # JSON取り出し完全失敗 → messageとplansだけ正規表現で救済
-            import re as _re2
-            m = _re2.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
-            fallback_msg = m.group(1) if m else ""
-            plans_rescued = []
-            try:
-                pm = _re2.search(r'"plans"\s*:\s*(\[)', text)
-                if pm:
-                    chunk = text[pm.start(1):]
-                    depth, last_i = 0, 0
-                    for i, c in enumerate(chunk):
-                        if c == '[': depth += 1
-                        elif c == ']':
-                            depth -= 1
-                            if depth == 0:
-                                last_i = i
-                                break
-                    plans_rescued = json.loads(chunk[:last_i+1])
-            except Exception:
-                pass
-            parsed = {"ai": self.AI_TYPE, "message": fallback_msg or "", "suggestions": []}
-            if plans_rescued:
-                parsed["plans"] = plans_rescued
-            print(f"[base] fallback: msg={bool(fallback_msg)} plans={len(plans_rescued)}")
+            parsed = {"ai": self.AI_TYPE, "message": text, "suggestions": []}
 
         parsed["ai"] = self.AI_TYPE
 
         # messageフィールドの正規化（message / reply どちらでも受け取れるように）
         if "message" in parsed and "reply" not in parsed:
             parsed["reply"] = parsed.pop("message")
-        print(f"[base] reply={repr(str(parsed.get('reply',''))[:80])} plans={len(parsed.get('plans',[]))}")
 
         # search_keyword が含まれていればフロントに渡す（楽天ブラウザ検索用）
         if parsed.get("search_keyword"):
@@ -211,13 +398,30 @@ class BaseAgent:
                         data["source"] = data.get("source", "rakuten")  # ★ 将来: 'agoda' | 'booking'
                         parsed["_hotels"] = data
 
+                    # 海外ホテル結果（旅行AI: Booking.com）
+                    if t == "overseas_hotels":
+                        data["source"] = "booking"
+                        parsed["_overseas_hotels"] = data
+
                     # 航空券結果（旅行AI）
                     if t == "flights":
-                        parsed["_flights"] = data
+                        if data.get("available") and data.get("flights"):
+                            parsed["_flights"] = data
+                            print(f"[Travel] フライト取得成功: {len(data['flights'])}件")
+                        elif data.get("fallback_url"):
+                            # API失敗でもスカイスキャナーURLをフロントに渡す
+                            parsed["_flight_fallback"] = data
+                            print(f"[Travel] フライトfallback設定: {data['fallback_url']}")
+                        else:
+                            print(f"[Travel] フライト結果なし: available={data.get('available')} fallback={data.get('fallback_url')}")
 
                     # 商品結果（買い物AI・家電AI・DIY AI）
                     if t == "products":
                         parsed["_products"] = data
+
+                    # ツアー・体験結果（旅行AI）
+                    if t == "tours":
+                        parsed["_tours"] = data
 
                     # 位置情報結果: 呼び出し元AIによって格納先キーを変える
                     # - gourmet → _places（飲食店カード）

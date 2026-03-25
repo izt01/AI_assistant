@@ -419,6 +419,10 @@ class BaseAgent:
                     if t == "products":
                         parsed["_products"] = data
 
+                    # ツアー・体験結果（旅行AI）
+                    if t == "tours":
+                        parsed["_tours"] = data
+
                     # 位置情報結果: 呼び出し元AIによって格納先キーを変える
                     # - gourmet → _places（飲食店カード）
                     # - shopping → _nearby_stores（近隣実店舗カード）★追加

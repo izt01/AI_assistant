@@ -6,6 +6,9 @@ OpenAI GPT-4o × 記憶成長型AIエージェント
 Railway: Procfile の `web: python app.py` で自動起動
 """
 import json, os, sys, uuid
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import bcrypt, jwt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -274,7 +277,8 @@ def db_init_lumina_tables():
         ('alert_threshold_pct','80'),
         ('maintenance_mode','false'),
         ('maintenance_mode_manual','false'),  -- 手動ONの場合は自動復旧をスキップ
-        ('budget_warning_mode','none')        -- none/warning(90%超)/critical(100%)
+        ('budget_warning_mode','none'),       -- none/warning(90%超)/critical(100%)
+        ('alert_sent_pct','0')               -- 今月送信済みアラートの最高閾値（80/90/100）
     ON CONFLICT(key) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_lu_messages_session ON lu_messages(session_id, created_at);
 
@@ -548,6 +552,38 @@ def _check_and_update_fallback_mode():
             print(f"[Fallback] 残高回復（${balance:.4f}）→ メンテナンスモード 自動OFF")
         elif balance > 0 and current_mode and is_manual:
             print(f"[Fallback] 残高あり（${balance:.4f}）だが手動ONのため維持")
+
+        # ── 予算アラートメール（80% / 90% / 100% 到達時に1回だけ送信）────
+        try:
+            budget_row  = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
+            budget_usd_alert = float(budget_row["value"]) if budget_row else 100.0
+            cost_row = db_exec(
+                "SELECT COALESCE(SUM(cost_usd),0) as total FROM admin_cost_logs "                "WHERE month=TO_CHAR(CURRENT_DATE,'YYYY-MM')", fetch="one")
+            month_used = float(cost_row["total"] or 0) if cost_row else 0.0
+            month_pct  = (month_used / budget_usd_alert * 100) if budget_usd_alert > 0 else 0.0
+            sent_row  = db_exec("SELECT value FROM admin_settings WHERE key='alert_sent_pct'", fetch="one")
+            sent_pct  = int(sent_row["value"] or 0) if sent_row else 0
+            month_key = datetime.now().strftime("%Y-%m")
+            sent_month_row = db_exec("SELECT value FROM admin_settings WHERE key='alert_sent_month'", fetch="one")
+            sent_month = sent_month_row["value"] if sent_month_row else ""
+            if sent_month != month_key:
+                db_exec("INSERT INTO admin_settings(key,value,updated_at) VALUES('alert_sent_pct','0',NOW()) "                        "ON CONFLICT(key) DO UPDATE SET value='0',updated_at=NOW()")
+                db_exec("INSERT INTO admin_settings(key,value,updated_at) VALUES('alert_sent_month',%s,NOW()) "                        "ON CONFLICT(key) DO UPDATE SET value=%s,updated_at=NOW()",
+                        (month_key, month_key))
+                sent_pct = 0
+            hit_level = 0
+            for threshold in [100, 90, 80]:
+                if month_pct >= threshold and sent_pct < threshold:
+                    hit_level = threshold
+                    break
+            if hit_level > 0:
+                send_admin_budget_alert(month_used, budget_usd_alert, month_pct, hit_level)
+                db_exec("UPDATE admin_settings SET value=%s,updated_at=NOW() WHERE key='alert_sent_pct'",
+                        (str(hit_level),))
+                print(f"[BudgetAlert] {hit_level}%アラート送信完了")
+        except Exception as alert_err:
+            print(f"[BudgetAlert] アラート処理エラー: {alert_err}")
+
     except Exception as e:
         print(f"[Fallback] モードチェックエラー: {e}")
 
@@ -559,6 +595,87 @@ def is_fallback_mode() -> bool:
         return (row["value"] if row else "false") == "true"
     except Exception:
         return False
+
+# ══════════════════════════════════════════════════════════════
+#  メール送信ユーティリティ
+#  環境変数: MAIL_DRIVER=smtp|none  SMTP_HOST/PORT/USER/PASS/FROM
+#            ADMIN_EMAIL  APP_URL
+# ══════════════════════════════════════════════════════════════
+
+def _send_email(to: str, subject: str, body_text: str, body_html: str = None) -> bool:
+    driver = os.getenv("MAIL_DRIVER", "none").lower()
+    if driver == "none":
+        print(f"[Mail] (MAIL_DRIVER=none) To={to} Subject={subject}")
+        return True
+    try:
+        smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_user = os.getenv("SMTP_USER", "")
+        smtp_pass = os.getenv("SMTP_PASS", "")
+        from_addr = os.getenv("SMTP_FROM", smtp_user)
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = from_addr
+        msg["To"]      = to
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        if body_html:
+            msg.attach(MIMEText(body_html, "html", "utf-8"))
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
+            s.ehlo(); s.starttls(); s.login(smtp_user, smtp_pass)
+            s.sendmail(from_addr, [to], msg.as_string())
+        print(f"[Mail] 送信成功: To={to} Subject={subject}")
+        return True
+    except Exception as e:
+        print(f"[Mail] 送信失敗: {e}")
+        return False
+
+
+def send_admin_budget_alert(used_usd: float, budget_usd: float, pct: float, level: int):
+    admin_email = os.getenv("ADMIN_EMAIL", "")
+    if not admin_email:
+        print(f"[Mail] ADMIN_EMAIL 未設定 → アラートスキップ (level={level}%)")
+        return
+    app_url   = os.getenv("APP_URL", "https://aiassistant-production-264e.up.railway.app")
+    remaining = max(0.0, budget_usd - used_usd)
+    if level == 100:
+        emoji = "🚨"; heading = "予算100%到達・フォールバックモード移行"
+        caution = "予算を超過しました。フォールバックモードに切り替わっています。"
+        actions = "1. 予算の追加（OpenAI プリペイドへの入金）\n2. フォールバックモードの動作確認\n3. ユーザーへの告知検討"
+    elif level == 90:
+        emoji = "🔴"; heading = f"OpenAI予算{level}%到達アラート"
+        caution = "このペースだと、月末には予算を超過する可能性があります。"
+        actions = f"1. 予算の追加（推奨額: +${budget_usd:.0f}）\n2. 使用量の監視強化\n3. フォールバックモードの準備確認"
+    else:
+        emoji = "⚠️"; heading = f"OpenAI予算{level}%到達アラート"
+        caution = "このペースだと、月末には予算を超過する可能性があります。"
+        actions = f"1. 予算の追加（推奨額: +${budget_usd:.0f}）\n2. 使用量の監視強化\n3. フォールバックモードの準備確認"
+    subject   = f"{emoji} {heading}"
+    body_text = (
+        f"今月のOpenAI使用額が{level}%に達しました。\n\n"
+        f"現在の使用額: ${used_usd:.2f}\n予算上限: ${budget_usd:.2f}\n"
+        f"使用率: {pct:.0f}%\n残り: ${remaining:.2f}\n\n"
+        f"{caution}\n\n以下の対応を検討してください：\n{actions}\n\n"
+        f"管理画面: {app_url}/admin-login.html"
+    )
+    body_html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+<h2 style="color:{'#c00' if level>=100 else '#e55' if level>=90 else '#e90'}">{emoji} {heading}</h2>
+<p>今月のOpenAI使用額が<strong>{level}%</strong>に達しました。</p>
+<table style="border-collapse:collapse;width:100%;margin:16px 0">
+  <tr style="background:#f5f5f5"><td style="padding:8px 12px;font-weight:bold">現在の使用額</td><td style="padding:8px 12px">${used_usd:.2f}</td></tr>
+  <tr><td style="padding:8px 12px;font-weight:bold">予算上限</td><td style="padding:8px 12px">${budget_usd:.2f}</td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:8px 12px;font-weight:bold">使用率</td><td style="padding:8px 12px"><strong>{pct:.0f}%</strong></td></tr>
+  <tr><td style="padding:8px 12px;font-weight:bold">残り</td><td style="padding:8px 12px">${remaining:.2f}</td></tr>
+</table>
+<p>{caution}</p>
+<pre style="background:#f9f9f9;padding:12px;border-radius:4px">{actions}</pre>
+<p><a href="{app_url}/admin-login.html" style="display:inline-block;padding:10px 20px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px">管理画面を開く</a></p>
+</body></html>"""
+    _send_email(admin_email, subject, body_text, body_html)
+
+
+def send_user_notification(to_email: str, nickname: str, subject: str, body_text: str, body_html: str = None):
+    _send_email(to_email, subject, body_text, body_html)
+
 
 def hash_pw(pw):   return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 def check_pw(pw, h): return bcrypt.checkpw(pw.encode(), h.encode())
@@ -2447,6 +2564,52 @@ def admin_set_fallback_mode():
     )
     print(f"[Fallback] 管理者が手動でフォールバックモードを {'ON' if enabled else 'OFF'} にしました")
     return jsonify({"ok": True, "fallback_mode": enabled})
+
+
+@app.route("/api/admin/test-alert-email", methods=["POST"])
+@admin_required
+def admin_test_alert_email():
+    """管理者向け予算アラートメールのテスト送信"""
+    d     = request.json or {}
+    level = int(d.get("level", 80))
+    if level not in (80, 90, 100):
+        return jsonify({"error": "level は 80/90/100 のいずれかを指定してください"}), 400
+    budget_row = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
+    budget_usd = float(budget_row["value"]) if budget_row else 100.0
+    used_usd   = budget_usd * level / 100
+    try:
+        send_admin_budget_alert(used_usd, budget_usd, float(level), level)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    admin_email = os.getenv("ADMIN_EMAIL", "")
+    return jsonify({"ok": True, "sent_to": admin_email or "(ADMIN_EMAIL未設定)",
+                    "level": level, "used_usd": used_usd, "budget_usd": budget_usd})
+
+
+@app.route("/api/admin/notify-users", methods=["POST"])
+@admin_required
+def admin_notify_users():
+    """管理者がユーザー全員（または特定プラン）にお知らせメールを一括送信"""
+    d           = request.json or {}
+    subject     = (d.get("subject") or "").strip()
+    body        = (d.get("body")    or "").strip()
+    plan_filter = d.get("plan")
+    if not subject or not body:
+        return jsonify({"error": "subject と body は必須です"}), 400
+    if plan_filter:
+        users = db_exec("SELECT nickname, email FROM lu_users WHERE is_active=TRUE AND plan=%s",
+                        (plan_filter,), fetch="all") or []
+    else:
+        users = db_exec("SELECT nickname, email FROM lu_users WHERE is_active=TRUE",
+                        fetch="all") or []
+    sent, failed = 0, 0
+    for u in users:
+        ok = send_user_notification(
+            to_email=u["email"], nickname=u["nickname"],
+            subject=subject, body_text=f"{u['nickname']} さん\n\n{body}")
+        if ok: sent += 1
+        else:  failed += 1
+    return jsonify({"ok": True, "sent": sent, "failed": failed, "total": len(users)})
 
 
 # ══════════════════════════════════════════════════════════════
