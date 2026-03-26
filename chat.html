@@ -842,6 +842,17 @@ async function sendMsg() {
     }
  
  
+    // ── AI誘導カードの表示 ────────────────────────────────
+    // 【専門AIの場合】: AIが redirect_to_ai を返したらリダイレクトカード表示
+    if(resp.redirect_to_ai && aiParam !== 'all') {
+      addRedirectCard(resp.redirect_to_ai, 'redirect')
+    }
+
+    // 【総合AIの場合】: routerが専門AIに振り分けた場合、切り替えカードを表示
+    if(aiParam === 'all' && resp.agent && resp.agent !== 'general') {
+      addRedirectCard(resp.agent, 'switched')
+    }
+
     addActionChips(aiParam, text)
     updateUsageBadge()
  
@@ -875,21 +886,42 @@ function extractShoppingKeyword(userText, aiReply) {
  
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
  
-function addRedirectCard(aiId) {
+function addRedirectCard(aiId, mode) {
+  // mode: 'redirect'（専門外誘導）| 'switched'（総合AIが自動切替を通知）
   const target = AI_CONFIG[aiId]
+  if(!target) return
   const el = document.createElement('div')
   el.className = 'msg-row ai'
-  el.innerHTML = `
-    <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
-    <div>
-      <div class="redirect-card" onclick="location.href='chat.html?ai=${aiId}'" style="background:var(--surface)">
-        <div style="width:38px;height:38px;border-radius:10px;background:${target.bg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${target.icon}</div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--ink)">${target.name}で続ける →</div>
-          <div style="font-size:11px;color:var(--muted)">${target.desc}</div>
+
+  if(mode === 'switched') {
+    // 総合AI → 専門AIに切り替わったことを通知するカード
+    el.innerHTML = `
+      <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
+      <div style="max-width:420px">
+        <div class="redirect-card" onclick="location.href='chat.html?ai=${aiId}'" style="background:var(--surface)">
+          <div style="width:38px;height:38px;border-radius:10px;background:${target.bg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${target.icon}</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">このトピックは専門AIが得意です</div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">${target.name}で続ける →</div>
+            <div style="font-size:11px;color:var(--muted)">${target.desc}</div>
+          </div>
         </div>
-      </div>
-    </div>`
+      </div>`
+  } else {
+    // 専門AI → 別のAIに誘導するカード
+    el.innerHTML = `
+      <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
+      <div style="max-width:420px">
+        <div class="redirect-card" onclick="location.href='chat.html?ai=${aiId}'" style="background:var(--surface)">
+          <div style="width:38px;height:38px;border-radius:10px;background:${target.bg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${target.icon}</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">こちらでご相談ください</div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">${target.name}で相談する →</div>
+            <div style="font-size:11px;color:var(--muted)">${target.desc}</div>
+          </div>
+        </div>
+      </div>`
+  }
   document.getElementById('chat-msgs').appendChild(el)
   scrollBottom()
 }

@@ -1424,7 +1424,7 @@ def chat():
                 model="gpt-4o", max_tokens=1200,
                 messages=[{"role":"system","content":
                     f"あなたは親切な日本語AIアシスタントです。\n\n{context_injection}\n\n"
-                    '必ず次のJSONのみで返答: {"ai":"general","message":"応答","suggestions":["選択肢1","選択肢2"]}'}
+                    "## 専門AIの紹介\n""ユーザーの話題に合わせて以下の専門AIを紹介してください:\n""- 飲食店・外食 → gourmet（グルメAI）\n""- 料理レシピ → recipe（料理AI）\n""- 旅行・ホテル → travel（旅行AI）\n""- 商品購入 → shopping（買い物AI）\n""- 家電・インテリア → home（家電AI）\n""- 健康・運動 → health（健康AI）\n""- DIY・修理 → diy（DIY AI）\n\n"'必ず次のJSONのみで返答: {"ai":"general","message":"応答","suggestions":["選択肢1","選択肢2"],"redirect_to_ai":"専門AIキー名またはnull"}'}
                 ] + messages_in)
             raw = res.choices[0].message.content.strip()
             try:    result = json.loads(raw.replace("```json","").replace("```","").strip())
@@ -1437,7 +1437,8 @@ def chat():
     reply_text    = result.get("reply") or result.get("message", "")
     suggestions   = result.get("suggestions", [])
     needs_clarification = result.get("needs_clarification", False)
-    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions","needs_clarification")}
+    redirect_to_ai = result.get("redirect_to_ai")  # 専門外AIへの誘導
+    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions","needs_clarification","redirect_to_ai")}
     msg_id_ai     = str(uuid.uuid4())
 
     with conn.cursor() as cur:
@@ -1508,6 +1509,7 @@ def chat():
 
     return jsonify({"reply": reply_text, "suggestions": suggestions, "extra": extra,
                     "needs_clarification": needs_clarification,
+                    "redirect_to_ai": redirect_to_ai,
                     "session_id": session_id, "message_id": msg_id_ai,
                     "proposal_id": proposal_id,
                     "usage_count": user["usage_count"] + 1, "agent": agent_name or "general"})
