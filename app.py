@@ -598,10 +598,13 @@ def is_fallback_mode() -> bool:
 
 # ══════════════════════════════════════════════════════════════
 #  メール送信ユーティリティ
-#  MAIL_DRIVER=sendgrid → SendGrid HTTP API（Railway推奨・SMTP制限を回避）
-#  MAIL_DRIVER=smtp     → 直接SMTP（ローカル開発用）
-#  MAIL_DRIVER=none     → ログのみ（デフォルト）
+#  MAIL_DRIVER=resend    → Resend HTTP API（Railway推奨・最もシンプル）
+#  MAIL_DRIVER=sendgrid  → SendGrid HTTP API
+#  MAIL_DRIVER=smtp      → 直接SMTP（ローカル開発用）
+#  MAIL_DRIVER=none      → ログのみ（デフォルト）
 #  環境変数:
+#    RESEND_API_KEY     Resend APIキー（re_xxxxx）
+#    RESEND_FROM        送信元アドレス（例: Lumina AI <onboarding@resend.dev>）
 #    SENDGRID_API_KEY   SendGrid APIキー（SG.xxxxx）
 #    SENDGRID_FROM      送信元アドレス（SendGridで認証済みのもの）
 #    SMTP_HOST/PORT/USER/PASS/FROM  SMTPドライバー用
@@ -616,7 +619,7 @@ def _send_email(to: str, subject: str, body_text: str, body_html: str = None) ->
         print(f"[Mail] (MAIL_DRIVER=none) To={to} Subject={subject}")
         return True
 
-    # ── sendgrid: HTTP API（Railway推奨）─────────────────────
+    # ── sendgrid: HTTP API ───────────────────────────────────
     if driver == "sendgrid":
         try:
             import requests as _req
@@ -625,7 +628,6 @@ def _send_email(to: str, subject: str, body_text: str, body_html: str = None) ->
             if not api_key:
                 print("[Mail] SENDGRID_API_KEY 未設定")
                 return False
-            # from_addr から名前とメールを分離（"Lumina AI <x@y.com>" 形式に対応）
             import re as _re
             m = _re.match(r"^(.*?)<(.+?)>$", from_addr.strip())
             if m:
@@ -656,6 +658,46 @@ def _send_email(to: str, subject: str, body_text: str, body_html: str = None) ->
                 return False
         except Exception as e:
             print(f"[Mail] SendGrid エラー: {e}")
+            return False
+
+    # ── resend: HTTP API（Railway推奨・最もシンプル）─────────
+    if driver == "resend":
+        try:
+            import requests as _req
+            import re as _re
+            api_key   = os.getenv("RESEND_API_KEY", "")
+            from_addr = os.getenv("RESEND_FROM", os.getenv("SMTP_FROM", ""))
+            if not api_key:
+                print("[Mail] RESEND_API_KEY 未設定")
+                return False
+            if not from_addr:
+                print("[Mail] RESEND_FROM 未設定")
+                return False
+            payload = {
+                "from":    from_addr,
+                "to":      [to],
+                "subject": subject,
+                "text":    body_text,
+            }
+            if body_html:
+                payload["html"] = body_html
+            resp = _req.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type":  "application/json",
+                },
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                print(f"[Mail] Resend 送信成功: To={to} Subject={subject}")
+                return True
+            else:
+                print(f"[Mail] Resend 送信失敗: {resp.status_code} {resp.text[:300]}")
+                return False
+        except Exception as e:
+            print(f"[Mail] Resend エラー: {e}")
             return False
 
     # ── smtp: 直接SMTP（ローカル開発用）─────────────────────
