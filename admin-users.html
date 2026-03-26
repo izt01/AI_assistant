@@ -24,6 +24,7 @@
 .user-detail-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);
   backdrop-filter:blur(4px);display:none;align-items:flex-start;justify-content:flex-end;padding:0}
 .user-detail-overlay.open{display:flex}
+.notify-preview{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:10px;padding:14px;font-size:12px;color:var(--muted);line-height:1.7;margin-top:10px;white-space:pre-wrap;min-height:60px}
 .user-detail-panel{width:420px;height:100vh;background:var(--ink3);border-left:1px solid var(--border2);
   overflow-y:auto;animation:slideIn .2s ease}
 @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
@@ -121,6 +122,74 @@
         </div>
         <div class="pagination" id="pagination"></div>
       </div>
+    </div>
+
+      <!-- 一斉メール送信 -->
+      <div class="admin-section" style="margin-top:24px">
+        <div class="admin-section-hdr" style="margin-bottom:18px">
+          <div class="admin-section-title">📧 一斉メール送信</div>
+          <div style="font-size:12px;color:var(--muted)">登録ユーザーに一括でお知らせを送信</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <!-- 送信フォーム -->
+          <div>
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">送信対象</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="notify-plan" value="" checked onchange="updateNotifyPreview()"> 全ユーザー
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="notify-plan" value="free" onchange="updateNotifyPreview()"> Freeのみ
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="notify-plan" value="pro" onchange="updateNotifyPreview()"> Proのみ
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="notify-plan" value="master" onchange="updateNotifyPreview()"> Masterのみ
+                </label>
+              </div>
+            </div>
+
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">件名 <span style="color:#e55">*</span></div>
+              <input class="inp" id="notify-subject" style="width:100%"
+                placeholder="例：新機能のお知らせ" oninput="updateNotifyPreview()">
+            </div>
+
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">本文 <span style="color:#e55">*</span></div>
+              <textarea class="inp" id="notify-body" rows="6" style="width:100%;resize:vertical;font-family:inherit;line-height:1.6"
+                placeholder="例：いつもLumina AIをご利用いただきありがとうございます。&#10;&#10;新機能〇〇を追加しました。ぜひお試しください！"
+                oninput="updateNotifyPreview()"></textarea>
+            </div>
+
+            <div id="notify-target-count" style="font-size:12px;color:var(--muted);margin-bottom:14px"></div>
+
+            <button class="btn btn-gold" style="width:100%;justify-content:center"
+              onclick="sendNotifyAll()">📧 一斉送信を実行</button>
+            <div id="notify-result" style="margin-top:10px;font-size:12px"></div>
+          </div>
+
+          <!-- プレビュー -->
+          <div>
+            <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">メールプレビュー</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">件名</div>
+              <div id="preview-subject" style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:14px;min-height:20px">—</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">本文</div>
+              <div id="preview-body" class="notify-preview">〇〇 さん
+
+（本文がここに表示されます）</div>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
+                ※ 実際のメールでは「〇〇 さん」の部分がユーザー名に置き換わります
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -405,6 +474,78 @@ async function deleteUser(){
 }
 
 init()
+</script>
+<script>
+// ── 一斉メール送信 ────────────────────────────────────────────
+function updateNotifyPreview() {
+  const subject = document.getElementById('notify-subject').value.trim()
+  const body    = document.getElementById('notify-body').value.trim()
+  const plan    = document.querySelector('input[name="notify-plan"]:checked')?.value
+  const planLabel = plan ? {free:'Free',pro:'Pro',master:'Master'}[plan] : '全ユーザー'
+
+  document.getElementById('preview-subject').textContent = subject || '—'
+  document.getElementById('preview-body').textContent =
+    `〇〇 さん
+
+${body || '（本文がここに表示されます）'}`
+
+  // 対象ユーザー数を表示
+  const kEl = document.getElementById('k-total')
+  const kFree = document.getElementById('k-free')
+  const kPro  = document.getElementById('k-pro')
+  const kMaster = document.getElementById('k-master')
+  let count = '—'
+  if(!plan) count = kEl?.textContent || '—'
+  else if(plan==='free')   count = kFree?.textContent   || '—'
+  else if(plan==='pro')    count = kPro?.textContent    || '—'
+  else if(plan==='master') count = kMaster?.textContent || '—'
+
+  document.getElementById('notify-target-count').textContent =
+    `送信対象: ${planLabel} （約 ${count} 名）`
+}
+
+async function sendNotifyAll() {
+  const subject = document.getElementById('notify-subject').value.trim()
+  const body    = document.getElementById('notify-body').value.trim()
+  const plan    = document.querySelector('input[name="notify-plan"]:checked')?.value
+  const resultEl = document.getElementById('notify-result')
+
+  if(!subject) { adminToast('件名を入力してください', 'e'); return }
+  if(!body)    { adminToast('本文を入力してください', 'e'); return }
+
+  const planLabel = plan ? {free:'Free',pro:'Pro',master:'Master'}[plan] + 'ユーザー' : '全ユーザー'
+
+  adminModal({
+    title: `${planLabel}に一斉送信しますか？`,
+    body: `件名: <strong>${subject}</strong><br>送信後は取り消せません。`,
+    okLabel: '📧 送信する',
+    okColor: 'linear-gradient(135deg,#c9a84c,#e8c97a)',
+    onOk: async () => {
+      resultEl.innerHTML = '<span style="color:var(--muted)">送信中...</span>'
+      try {
+        const d = await adminApi('/notify-users', {
+          method: 'POST',
+          body: { subject, body, ...(plan ? { plan } : {}) }
+        })
+        if(d.ok) {
+          resultEl.innerHTML =
+            `<span style="color:#4caf50">✅ 送信完了：${d.sent}件成功` +
+            (d.failed > 0 ? ` / ${d.failed}件失敗` : '') + `</span>`
+          adminToast(`${d.sent}件のメールを送信しました`, 's')
+        } else {
+          resultEl.innerHTML = `<span style="color:#e55">❌ ${d.error || '送信失敗'}</span>`
+        }
+      } catch(e) {
+        resultEl.innerHTML = `<span style="color:#e55">❌ エラー: ${e.message}</span>`
+      }
+    }
+  })
+}
+
+// ページ読み込み時にプレビューを初期化
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(updateNotifyPreview, 500)
+})
 </script>
 </body>
 </html>
