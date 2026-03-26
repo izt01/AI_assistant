@@ -780,10 +780,14 @@ def build_context_injection(user_id, ai_type):
 
     if ai_type in ("recipe", "gourmet", "health", "general"):
         fd = ctx.get("food", {})
-        if fd.get("liked_cuisines"):    lines.append(f"好きな料理: {', '.join(fd['liked_cuisines'])}")
+        if fd.get("liked_cuisines"):    lines.append(f"好きな料理ジャンル: {', '.join(fd['liked_cuisines'])}（レシピ提案時は優先的にこのジャンルから提案すること）")
         if fd.get("disliked_cuisines"): lines.append(f"苦手な料理: {', '.join(fd['disliked_cuisines'])}")
         if fd.get("allergies"):         lines.append(f"⚠️ アレルギー: {', '.join(fd['allergies'])} ←絶対に提案しないこと")
-        if fd.get("spice_level"):       lines.append(f"辛さの好み: {fd['spice_level']}/5")
+        if fd.get("spice_level"):
+            spice_map = {1:"薄味・辛さなし", 2:"普通", 3:"辛め", 4:"かなり辛い", 5:"激辛"}
+            spice_val = fd["spice_level"]
+            spice_label = spice_map.get(int(spice_val), f"{spice_val}/5") if str(spice_val).isdigit() else str(spice_val)
+            lines.append(f"辛さの好み: {spice_label}（レシピの辛さに必ず反映すること）")
 
     if ai_type in ("travel", "general"):
         t = ctx.get("travel", {})
@@ -1438,7 +1442,7 @@ def chat():
     suggestions   = result.get("suggestions", [])
     needs_clarification = result.get("needs_clarification", False)
     redirect_to_ai = result.get("redirect_to_ai")  # 専門外AIへの誘導
-    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions","needs_clarification","redirect_to_ai")}
+    extra         = {k:v for k,v in result.items() if k not in ("ai","message","reply","suggestions","needs_clarification","redirect_to_ai","recipe")}
     msg_id_ai     = str(uuid.uuid4())
 
     with conn.cursor() as cur:

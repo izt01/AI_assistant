@@ -545,6 +545,12 @@ class BaseAgent:
 
         parsed["ai"] = self.AI_TYPE
 
+        # レシピ構造（料理AI）: "recipe" キーを _recipe として extra に昇格
+        if self.AI_TYPE == "recipe" and isinstance(parsed.get("recipe"), dict):
+            recipe_data = parsed.pop("recipe")
+            if "steps" in recipe_data:  # 有効なレシピ構造の場合のみ
+                parsed["_recipe"] = recipe_data
+
         # messageフィールドの正規化（message / reply どちらでも受け取れるように）
         if "message" in parsed and "reply" not in parsed:
             parsed["reply"] = parsed.pop("message")
@@ -590,6 +596,10 @@ class BaseAgent:
                     # ツアー・体験結果（旅行AI）
                     if t == "tours":
                         parsed["_tours"] = data
+
+                    # レシピ構造（料理AI）
+                    if t == "recipe" and isinstance(data, dict) and "steps" in data:
+                        parsed["_recipe"] = data
 
                     # 位置情報結果: 呼び出し元AIによって格納先キーを変える
                     # - gourmet → _places（飲食店カード）

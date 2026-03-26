@@ -23,7 +23,7 @@
 .msg-row{display:flex;align-items:flex-start;gap:9px}
 .msg-row.user{flex-direction:row-reverse}
 .msg-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px}
-.msg-bubble{max-width:82%;padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.65}.msg-row.user .msg-bubble{max-width:97%}
+.msg-bubble{max-width:82%;padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.65}.msg-row.user .msg-bubble{max-width:92%}
 .msg-row.ai .msg-bubble{background:var(--surface);border:1px solid var(--border);color:var(--ink3);border-radius:4px 16px 16px 16px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
 .msg-row.user .msg-bubble{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border-radius:16px 4px 16px 16px;font-weight:500}
 .msg-time{font-size:10px;color:var(--subtle);margin-top:4px;text-align:right}
@@ -37,6 +37,25 @@
 .chip:hover{background:rgba(201,168,76,.15)}
 .redirect-card{background:var(--cream2);border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-top:10px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .18s}
 .redirect-card:hover{border-color:var(--gold2);background:rgba(201,168,76,.04)}
+.recipe-wrap{margin-top:10px;display:flex;flex-direction:column;gap:10px;max-width:640px}
+.recipe-header{background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:14px;padding:16px 18px;color:var(--ink)}
+.recipe-header-title{font-size:17px;font-weight:700;margin-bottom:6px}
+.recipe-header-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;opacity:.85}
+.recipe-header-meta span{display:flex;align-items:center;gap:3px}
+.recipe-ingredients{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.recipe-ingredients-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.recipe-ingredient-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px}
+.recipe-ingredient-row:last-child{border-bottom:none}
+.recipe-ingredient-name{color:var(--ink3);font-weight:500}
+.recipe-ingredient-amount{color:var(--gold);font-weight:700;white-space:nowrap;margin-left:8px}
+.recipe-ingredient-note{color:var(--muted);font-size:11px;margin-left:6px}
+.recipe-step{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;gap:12px}
+.recipe-step-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.recipe-step-body{flex:1}
+.recipe-step-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.recipe-step-desc{font-size:13px;color:var(--ink3);line-height:1.6}
+.recipe-step-time{display:inline-flex;align-items:center;gap:3px;margin-top:6px;font-size:11px;color:var(--gold);font-weight:600;background:rgba(201,168,76,.1);border-radius:20px;padding:2px 8px}
+.recipe-tips{background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:12px 14px;font-size:12px;color:var(--ink3);line-height:1.6}
 .usage-badge{background:var(--cream2);border:1px solid var(--border);border-radius:99px;padding:4px 11px;font-size:11px;color:var(--muted);white-space:nowrap}
 .usage-badge.warn{background:var(--warningbg);border-color:rgba(217,119,6,.25);color:#92400e}
 .usage-badge.dngr{background:var(--dangerbg);border-color:rgba(220,38,38,.25);color:#991b1b}
@@ -842,6 +861,11 @@ async function sendMsg() {
     }
  
  
+    // 料理AI: レシピカード表示
+    if(aiParam === 'cooking' && resp.extra && resp.extra._recipe) {
+      renderRecipeCards(resp.extra._recipe)
+    }
+
     // ── AI誘導カードの表示 ────────────────────────────────
     // 【専門AIの場合】: AIが redirect_to_ai を返したらリダイレクトカード表示
     if(resp.redirect_to_ai && aiParam !== 'all') {
@@ -886,6 +910,68 @@ function extractShoppingKeyword(userText, aiReply) {
  
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)) }
  
+function renderRecipeCards(recipe) {
+  const wrap = document.createElement('div')
+  wrap.className = 'msg-row ai'
+
+  // ヘッダーカード
+  const meta = [
+    recipe.total_time ? `⏱ ${recipe.total_time}` : null,
+    recipe.servings   ? `👤 ${recipe.servings}`  : null,
+    recipe.difficulty ? `📊 ${recipe.difficulty}` : null,
+    recipe.calories   ? `🔥 ${recipe.calories}`  : null,
+  ].filter(Boolean).map(t => `<span>${t}</span>`).join('')
+
+  let html = `
+    <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
+    <div class="recipe-wrap">
+      <div class="recipe-header">
+        <div class="recipe-header-title">🍳 ${recipe.title || 'レシピ'}</div>
+        ${meta ? `<div class="recipe-header-meta">${meta}</div>` : ''}
+      </div>`
+
+  // 材料カード
+  if(recipe.ingredients && recipe.ingredients.length) {
+    const rows = recipe.ingredients.map(ing => `
+      <div class="recipe-ingredient-row">
+        <span class="recipe-ingredient-name">${ing.name}${ing.note ? `<span class="recipe-ingredient-note">（${ing.note}）</span>` : ''}</span>
+        <span class="recipe-ingredient-amount">${ing.amount}</span>
+      </div>`).join('')
+    html += `
+      <div class="recipe-ingredients">
+        <div class="recipe-ingredients-title">🛒 材料</div>
+        ${rows}
+      </div>`
+  }
+
+  // 手順カード（1ステップ1カード）
+  if(recipe.steps && recipe.steps.length) {
+    recipe.steps.forEach(s => {
+      const timeTag = s.time_min ? `<div class="recipe-step-time">⏱ ${s.time_min}分</div>` : ''
+      html += `
+        <div class="recipe-step">
+          <div class="recipe-step-num">${s.step}</div>
+          <div class="recipe-step-body">
+            <div class="recipe-step-title">${s.title}</div>
+            <div class="recipe-step-desc">${s.desc}</div>
+            ${timeTag}
+          </div>
+        </div>`
+    })
+  }
+
+  // コツ・代替
+  const tips = [recipe.tips, recipe.substitutes].filter(Boolean).join(' / ')
+  if(tips) {
+    html += `<div class="recipe-tips">💡 ${tips}</div>`
+  }
+
+  html += '</div>'
+  wrap.innerHTML = html
+  document.getElementById('chat-msgs').appendChild(wrap)
+  scrollBottom()
+}
+
 function addRedirectCard(aiId, mode) {
   // mode: 'redirect'（専門外誘導）| 'switched'（総合AIが自動切替を通知）
   const target = AI_CONFIG[aiId]
