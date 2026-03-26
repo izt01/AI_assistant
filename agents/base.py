@@ -322,9 +322,11 @@ class BaseAgent:
         # ── 専門外チェック（最初のユーザーメッセージのみ）──────────
         # clarifierより先に実行し、専門外なら即リダイレクト応答を返す
         first_user_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "user"]
+        print(f"[OOS] {self.AI_TYPE}: user_msgs={len(first_user_messages)}")
         if len(first_user_messages) == 1:  # 会話の1ターン目のみ
             first_msg = first_user_messages[0].get("content", "")
             oos = _check_out_of_scope(self.AI_TYPE, first_msg)
+            print(f"[OOS] check result: {oos}")
             if oos:
                 return {
                     "ai":            self.AI_TYPE,
