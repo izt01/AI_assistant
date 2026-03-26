@@ -19,6 +19,138 @@ client = OpenAI()
 CLARIFY_ENABLED_TYPES = {"travel", "shopping", "appliance", "health", "gourmet", "recipe", "diy"}
 
 
+
+# ── AI別専門外キーワード辞書 ──────────────────────────────────
+# 各AIが担当しない話題のキーワードと、推奨リダイレクト先
+OUT_OF_SCOPE_MAP = {
+    "gourmet": {
+        "redirect_to": [
+            ("home",     ["冷蔵庫", "洗濯機", "エアコン", "テレビ", "家電", "掃除機", "電子レンジ",
+                          "炊飯器", "ルンバ", "ドラム式", "インテリア", "照明", "ソファ", "カーテン"]),
+            ("travel",   ["旅行", "ホテル", "観光", "新幹線", "飛行機", "宿", "温泉"]),
+            ("shopping", ["買い物", "ショッピング", "プレゼント", "ギフト", "通販", "Amazon", "楽天市場"]),
+            ("health",   ["ダイエット", "筋トレ", "運動", "フィットネス", "睡眠改善", "体重"]),
+            ("diy",      ["DIY", "修理", "リフォーム", "棚を作", "壁を直", "ペンキ"]),
+            ("recipe",   ["レシピ", "作り方", "料理を作", "献立", "手料理", "クックパッド"]),
+        ],
+        "self_keywords": ["食べ", "飲み", "ランチ", "ディナー", "お店", "レストラン", "カフェ",
+                          "居酒屋", "ラーメン", "寿司", "焼肉", "イタリアン", "外食", "何食べ",
+                          "お腹すい", "腹減", "今夜", "今日の昼", "うまい", "おいしい", "グルメ"],
+    },
+    "travel": {
+        "redirect_to": [
+            ("home",     ["冷蔵庫", "洗濯機", "エアコン", "テレビ", "家電", "掃除機", "インテリア"]),
+            ("shopping", ["買い物", "プレゼント", "ギフト", "商品", "通販"]),
+            ("health",   ["ダイエット", "筋トレ", "運動", "フィットネス"]),
+            ("diy",      ["DIY", "修理", "リフォーム", "棚を作", "壁を直"]),
+            ("recipe",   ["レシピ", "料理を作", "献立", "手料理"]),
+            ("gourmet",  ["近くのレストラン", "近くのお店", "外食したい", "今夜どこで食べ"]),
+        ],
+        "self_keywords": ["旅行", "旅", "観光", "ホテル", "宿", "温泉", "飛行機", "新幹線",
+                          "出かけ", "どこかに行き", "旅程", "プラン", "1泊", "2泊", "海外", "国内"],
+    },
+    "shopping": {
+        "redirect_to": [
+            ("home",     ["冷蔵庫", "洗濯機", "エアコン", "テレビ", "家電", "掃除機", "電子レンジ",
+                          "炊飯器", "空気清浄機", "ルンバ", "ドラム式"]),
+            ("travel",   ["旅行", "ホテル", "観光"]),
+            ("health",   ["ダイエット", "筋トレ", "運動"]),
+            ("diy",      ["DIY", "修理", "リフォーム"]),
+            ("recipe",   ["レシピ", "料理を作", "献立"]),
+            ("gourmet",  ["外食", "レストラン", "お店を探"]),
+        ],
+        "self_keywords": ["買いたい", "欲しい", "おすすめ", "比較", "商品", "価格", "安い",
+                          "ショッピング", "プレゼント", "ギフト", "通販", "レビュー"],
+    },
+    "home": {
+        "redirect_to": [
+            ("travel",   ["旅行", "ホテル", "観光"]),
+            ("shopping", ["服", "食品", "本", "おもちゃ", "スポーツ用品"]),
+            ("health",   ["ダイエット", "筋トレ", "運動"]),
+            ("diy",      ["自分で作", "手作り", "ハンドメイド", "修理したい", "直したい"]),
+            ("recipe",   ["レシピ", "料理を作", "献立"]),
+            ("gourmet",  ["外食", "レストラン", "お店を探"]),
+        ],
+        "self_keywords": ["家電", "冷蔵庫", "洗濯機", "エアコン", "テレビ", "掃除機",
+                          "インテリア", "照明", "ソファ", "収納", "部屋", "家具"],
+    },
+    "health": {
+        "redirect_to": [
+            ("home",     ["冷蔵庫", "洗濯機", "家電"]),
+            ("travel",   ["旅行", "ホテル", "観光"]),
+            ("shopping", ["買い物", "プレゼント", "商品"]),
+            ("diy",      ["DIY", "修理", "リフォーム"]),
+            ("recipe",   ["レシピ", "料理を作", "献立"]),
+            ("gourmet",  ["外食", "レストラン", "お店を探"]),
+        ],
+        "self_keywords": ["健康", "運動", "ダイエット", "筋トレ", "体重", "睡眠", "疲れ",
+                          "体調", "ストレス", "フィットネス", "カロリー", "栄養"],
+    },
+    "recipe": {
+        "redirect_to": [
+            ("home",     ["冷蔵庫", "洗濯機", "家電"]),
+            ("travel",   ["旅行", "ホテル", "観光"]),
+            ("shopping", ["買い物", "プレゼント", "商品"]),
+            ("diy",      ["DIY", "修理", "リフォーム"]),
+            ("health",   ["ダイエット", "筋トレ", "運動プラン", "フィットネス"]),
+            ("gourmet",  ["お店を探", "レストランを探", "外食したい", "どこかで食べ"]),
+        ],
+        "self_keywords": ["レシピ", "料理", "作り方", "献立", "食材", "炒め", "煮る",
+                          "焼く", "クックパッド", "手料理", "簡単料理", "時短"],
+    },
+    "diy": {
+        "redirect_to": [
+            ("home",     ["新しい家電", "家電を買", "冷蔵庫が欲しい", "洗濯機を買"]),
+            ("travel",   ["旅行", "ホテル", "観光"]),
+            ("shopping", ["商品を探", "買いたい", "おすすめを教えて"]),
+            ("health",   ["ダイエット", "筋トレ", "運動"]),
+            ("recipe",   ["レシピ", "料理を作", "献立"]),
+            ("gourmet",  ["外食", "レストラン", "お店を探"]),
+        ],
+        "self_keywords": ["DIY", "自分で作", "修理", "修繕", "リフォーム", "棚", "塗装",
+                          "ペンキ", "壁", "床", "ハンドメイド", "工具", "材料"],
+    },
+}
+
+AI_NAME_JP = {
+    "gourmet":  "グルメAI",
+    "travel":   "旅行AI",
+    "shopping": "買い物AI",
+    "home":     "家電・インテリアAI",
+    "health":   "健康AI",
+    "recipe":   "料理AI",
+    "diy":      "DIY AI",
+    "appliance":"家電・インテリアAI",
+}
+
+def _check_out_of_scope(ai_type: str, user_message: str) -> dict | None:
+    """
+    ユーザーのメッセージが現在のAIの専門外かどうかを判定する。
+    専門外なら {"redirect_to_ai": "xxx", "message": "..."} を返す。
+    専門内またはAI設定がなければ None を返す。
+    """
+    config = OUT_OF_SCOPE_MAP.get(ai_type)
+    if not config:
+        return None
+
+    msg = user_message.lower()
+
+    # 自分の専門キーワードが含まれていれば専門内
+    for kw in config["self_keywords"]:
+        if kw in user_message:
+            return None
+
+    # 専門外キーワードを検索してリダイレクト先を決定
+    for target_ai, keywords in config["redirect_to"]:
+        for kw in keywords:
+            if kw in user_message:
+                target_name = AI_NAME_JP.get(target_ai, target_ai)
+                return {
+                    "redirect_to_ai": target_ai,
+                    "message": f"このAIでは対応できません。{target_name}にお聞きください😊",
+                }
+    return None
+
 class BaseAgent:
     AI_TYPE  = "general"
     TOOLS    = []
@@ -167,6 +299,21 @@ class BaseAgent:
                         "\u81ea\u5206\u306e\u73fe\u5728\u5730\u304b\u3089",
                         "\u51fa\u767a\u5730\u306a\u3057\u3067\u30d7\u30e9\u30f3\u3060\u3051\u898b\u305f\u3044",
                     ],
+                }
+
+        # ── 専門外チェック（最初のユーザーメッセージのみ）──────────
+        # clarifierより先に実行し、専門外なら即リダイレクト応答を返す
+        first_user_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "user"]
+        if len(first_user_messages) == 1:  # 会話の1ターン目のみ
+            first_msg = first_user_messages[0].get("content", "")
+            oos = _check_out_of_scope(self.AI_TYPE, first_msg)
+            if oos:
+                return {
+                    "ai":            self.AI_TYPE,
+                    "reply":         oos["message"],
+                    "redirect_to_ai": oos["redirect_to_ai"],
+                    "suggestions":   [],
+                    "needs_clarification": False,
                 }
 
         # ── 深掘り質問フェーズ ──────────────────────────────

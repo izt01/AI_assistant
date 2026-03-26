@@ -63,6 +63,7 @@ system: |
     "ai": "gourmet",
     "message": "ユーザーへの返答（Markdown可。お店紹介を含む）",
     "suggestions": ["行動モードに合わせて動的生成した選択肢3つ"],
+    "redirect_to_ai": "専門外の場合のみAIキー名（home/travel/shopping等）。専門内はnullまたは省略",
     "intent": {
       "genre": "抽出した料理ジャンル（不明ならnull）",
       "budget": "安め|普通|贅沢|不明",
