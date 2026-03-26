@@ -598,36 +598,92 @@ def is_fallback_mode() -> bool:
 
 # ══════════════════════════════════════════════════════════════
 #  メール送信ユーティリティ
-#  環境変数: MAIL_DRIVER=smtp|none  SMTP_HOST/PORT/USER/PASS/FROM
-#            ADMIN_EMAIL  APP_URL
+#  MAIL_DRIVER=sendgrid → SendGrid HTTP API（Railway推奨・SMTP制限を回避）
+#  MAIL_DRIVER=smtp     → 直接SMTP（ローカル開発用）
+#  MAIL_DRIVER=none     → ログのみ（デフォルト）
+#  環境変数:
+#    SENDGRID_API_KEY   SendGrid APIキー（SG.xxxxx）
+#    SENDGRID_FROM      送信元アドレス（SendGridで認証済みのもの）
+#    SMTP_HOST/PORT/USER/PASS/FROM  SMTPドライバー用
+#    ADMIN_EMAIL  APP_URL
 # ══════════════════════════════════════════════════════════════
 
 def _send_email(to: str, subject: str, body_text: str, body_html: str = None) -> bool:
     driver = os.getenv("MAIL_DRIVER", "none").lower()
+
+    # ── none: ログのみ ──────────────────────────────────────
     if driver == "none":
         print(f"[Mail] (MAIL_DRIVER=none) To={to} Subject={subject}")
         return True
-    try:
-        smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        smtp_user = os.getenv("SMTP_USER", "")
-        smtp_pass = os.getenv("SMTP_PASS", "")
-        from_addr = os.getenv("SMTP_FROM", smtp_user)
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = from_addr
-        msg["To"]      = to
-        msg.attach(MIMEText(body_text, "plain", "utf-8"))
-        if body_html:
-            msg.attach(MIMEText(body_html, "html", "utf-8"))
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
-            s.ehlo(); s.starttls(); s.login(smtp_user, smtp_pass)
-            s.sendmail(from_addr, [to], msg.as_string())
-        print(f"[Mail] 送信成功: To={to} Subject={subject}")
-        return True
-    except Exception as e:
-        print(f"[Mail] 送信失敗: {e}")
-        return False
+
+    # ── sendgrid: HTTP API（Railway推奨）─────────────────────
+    if driver == "sendgrid":
+        try:
+            import requests as _req
+            api_key   = os.getenv("SENDGRID_API_KEY", "")
+            from_addr = os.getenv("SENDGRID_FROM", os.getenv("SMTP_FROM", ""))
+            if not api_key:
+                print("[Mail] SENDGRID_API_KEY 未設定")
+                return False
+            # from_addr から名前とメールを分離（"Lumina AI <x@y.com>" 形式に対応）
+            import re as _re
+            m = _re.match(r"^(.*?)<(.+?)>$", from_addr.strip())
+            if m:
+                from_name  = m.group(1).strip()
+                from_email = m.group(2).strip()
+            else:
+                from_name  = "Lumina AI"
+                from_email = from_addr.strip()
+            payload = {
+                "personalizations": [{"to": [{"email": to}]}],
+                "from": {"email": from_email, "name": from_name},
+                "subject": subject,
+                "content": [{"type": "text/plain", "value": body_text}],
+            }
+            if body_html:
+                payload["content"].append({"type": "text/html", "value": body_html})
+            resp = _req.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code in (200, 202):
+                print(f"[Mail] SendGrid 送信成功: To={to} Subject={subject}")
+                return True
+            else:
+                print(f"[Mail] SendGrid 送信失敗: {resp.status_code} {resp.text[:200]}")
+                return False
+        except Exception as e:
+            print(f"[Mail] SendGrid エラー: {e}")
+            return False
+
+    # ── smtp: 直接SMTP（ローカル開発用）─────────────────────
+    if driver == "smtp":
+        try:
+            smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+            smtp_port = int(os.getenv("SMTP_PORT", "587"))
+            smtp_user = os.getenv("SMTP_USER", "")
+            smtp_pass = os.getenv("SMTP_PASS", "")
+            from_addr = os.getenv("SMTP_FROM", smtp_user)
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"]    = from_addr
+            msg["To"]      = to
+            msg.attach(MIMEText(body_text, "plain", "utf-8"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html", "utf-8"))
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
+                s.ehlo(); s.starttls(); s.login(smtp_user, smtp_pass)
+                s.sendmail(from_addr, [to], msg.as_string())
+            print(f"[Mail] SMTP 送信成功: To={to} Subject={subject}")
+            return True
+        except Exception as e:
+            print(f"[Mail] SMTP 送信失敗: {e}")
+            return False
+
+    print(f"[Mail] 未知のドライバー: {driver}")
+    return False
 
 
 def send_admin_budget_alert(used_usd: float, budget_usd: float, pct: float, level: int):
