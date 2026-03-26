@@ -69,7 +69,7 @@ OUT_OF_SCOPE_MAP = {
         "self_keywords": ["買いたい", "欲しい", "おすすめ", "比較", "商品", "価格", "安い",
                           "ショッピング", "プレゼント", "ギフト", "通販", "レビュー"],
     },
-    "home": {
+    "appliance": {
         "redirect_to": [
             ("travel",   ["旅行", "ホテル", "観光"]),
             ("shopping", ["服", "食品", "本", "おもちゃ", "スポーツ用品"]),
@@ -131,6 +131,7 @@ AI_NAME_JP = {
     "travel":   "旅行AI",
     "shopping": "買い物AI",
     "home":     "家電・インテリアAI",
+    "appliance": "家電・インテリアAI",
     "health":   "健康AI",
     "recipe":   "料理AI",
     "diy":      "DIY AI",
