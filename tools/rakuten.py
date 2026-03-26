@@ -132,7 +132,7 @@ _PREF_FALLBACK = {
     "沖縄県": ("okinawa","naha"),
 }
 
-def _keyword_to_area_codes(keyword: str) -> tuple | None:
+def _keyword_to_area_codes(keyword: str):
     """
     都市名・地名から (middleClassCode, smallClassCode) を返す。
     1. 完全一致 → 2. 部分一致 → 3. 都道府県名フォールバック → None
