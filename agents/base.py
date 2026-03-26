@@ -137,7 +137,7 @@ AI_NAME_JP = {
     "appliance":"家電・インテリアAI",
 }
 
-def _check_out_of_scope(ai_type: str, user_message: str) -> dict | None:
+def _check_out_of_scope(ai_type: str, user_message: str):
     """
     ユーザーのメッセージが現在のAIの専門外かどうかを判定する。
     専門外なら {"redirect_to_ai": "xxx", "message": "..."} を返す。

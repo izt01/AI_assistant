@@ -53,7 +53,7 @@ def _load_scenario(ai_type: str) -> dict:
         }
 
 
-def _get_step(scenario: dict, step_id: str) -> dict | None:
+def _get_step(scenario: dict, step_id: str):
     """シナリオからステップIDに対応するステップを取得"""
     for step in scenario.get("steps", []):
         if step["id"] == step_id:

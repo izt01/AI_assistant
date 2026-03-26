@@ -89,7 +89,7 @@ CARRIER_NAMES = {
 }
 
 
-def _city_to_iata(city: str) -> str | None:
+def _city_to_iata(city: str):
     for key, code in CITY_TO_IATA.items():
         if key in city:
             return code
