@@ -125,6 +125,36 @@
           <div class="admin-section" style="margin-bottom:0">
             <div class="admin-section-title" style="margin-bottom:16px">現在の残高状況</div>
             <div id="balance-detail"></div>
+
+            <!-- 残高調整 -->
+            <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
+              <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                ⚖️ 残高調整
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+                OpenAI側の実際の残高と差異がある場合に手動で調整します。<br>
+                プラス入力で増額・マイナス入力で減額します。
+              </div>
+              <div style="margin-bottom:12px">
+                <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">調整金額（USD）</div>
+                <input class="charge-amount-input" id="adjust-amount" type="number" step="0.01" placeholder="例：-5.00 または +10.00" style="width:100%">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(-1)">-$1</button>
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(-5)">-$5</button>
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(-10)">-$10</button>
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(-20)">-$20</button>
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(5)" style="color:var(--gold)">+$5</button>
+                  <button class="btn btn-ghost btn-sm" onclick="setAdjust(10)" style="color:var(--gold)">+$10</button>
+                </div>
+              </div>
+              <div style="margin-bottom:14px">
+                <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">調整理由（必須）</div>
+                <input class="inp" id="adjust-note" style="width:100%" placeholder="例：OpenAI側と残高を合わせるため">
+              </div>
+              <button class="btn" id="adjust-btn"
+                style="width:100%;justify-content:center;background:var(--surface);border:1.5px solid var(--border);color:var(--ink3)"
+                onclick="doAdjust()">⚖️ 残高を調整する</button>
+            </div>
           </div>
         </div>
       </div>
@@ -357,6 +387,47 @@ async function doCharge(){
   })
 }
 
+// ── 残高調整 ──────────────────────────────────────────────────
+function setAdjust(v){ document.getElementById('adjust-amount').value = v }
+
+async function doAdjust(){
+  const amount = parseFloat(document.getElementById('adjust-amount').value)
+  const note   = document.getElementById('adjust-note').value.trim()
+
+  if(isNaN(amount) || amount === 0){
+    adminToast('調整金額を入力してください','e'); return
+  }
+  if(!note){
+    adminToast('調整理由を入力してください','e'); return
+  }
+
+  const sign    = amount > 0 ? '+' : ''
+  const color   = amount < 0 ? '#e55555' : 'var(--gold2)'
+  const label   = amount < 0 ? '減額調整' : '増額調整'
+  adminModal({
+    title: `残高を ${sign}$${Math.abs(amount).toFixed(2)} 調整しますか？`,
+    body: `<span style="color:${color};font-weight:700;font-size:16px">${sign}$${Math.abs(amount).toFixed(2)}</span>
+           <span style="color:var(--muted);font-size:12px">（≒ ${sign}¥${Math.round(Math.abs(amount)*150).toLocaleString()}）</span><br>
+           <div style="margin-top:8px;font-size:12px;color:var(--muted)">理由: ${note}</div>`,
+    okLabel: `⚖️ ${label}を実行`,
+    okColor: amount < 0 ? 'linear-gradient(135deg,#c44,#e55)' : 'linear-gradient(135deg,#c9a84c,#e8c97a)',
+    onOk: async()=>{
+      const res = await adminApi('/charges',{method:'POST',body:{
+        amount_usd: amount,
+        note: `[残高調整] ${note}`
+      }})
+      if(res?.ok){
+        adminToast(`残高を ${sign}$${Math.abs(amount).toFixed(2)} 調整しました`,'s')
+        document.getElementById('adjust-amount').value = ''
+        document.getElementById('adjust-note').value   = ''
+        init()
+      } else {
+        adminToast('調整に失敗しました','e')
+      }
+    }
+  })
+}
+
 // ── チャージ履歴 ──────────────────────────────────────────────
 async function loadHistory(){
   const data = await adminApi('/costs')
@@ -370,8 +441,8 @@ async function loadHistory(){
           ${charges.map(c=>`
             <tr>
               <td class="mono">${fmtDt(c.charged_at)}</td>
-              <td><strong style="color:var(--gold2)">${fmt$(c.amount_usd)}</strong></td>
-              <td class="mono" style="color:var(--muted)">${fmtJPY(c.amount_usd)}</td>
+              <td><strong style="color:${c.amount_usd < 0 ? '#e55' : 'var(--gold2)'}">${fmt$(c.amount_usd)}</strong></td>
+              <td class="mono" style="color:var(--muted)">${c.amount_usd < 0 ? fmtJPY(c.amount_usd) : fmtJPY(c.amount_usd)}</td>
               <td>${c.card_last4?`<span class="mono">•••• ${c.card_last4}</span>`:'—'}</td>
               <td style="color:var(--muted)">${c.note||'—'}</td>
             </tr>`).join('')}

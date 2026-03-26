@@ -2186,8 +2186,11 @@ def admin_costs():
 def admin_add_charge():
     d = request.json or {}
     amount = float(d.get("amount_usd", 0))
-    if amount <= 0:
+    if amount == 0:
         return jsonify({"error": "金額が無効です"}), 400
+    # マイナス値は残高調整として許可（理由メモ必須）
+    if amount < 0 and not d.get("note", "").strip():
+        return jsonify({"error": "残高調整にはメモ（理由）が必須です"}), 400
     db_exec("INSERT INTO admin_openai_budget(amount_usd,note,charged_by,card_last4) VALUES(%s,%s,%s,%s)",
             (amount, d.get("note",""), str(g.current_user["id"]), d.get("card_last4")))
     # チャージ後に残高を再チェック → フォールバックモードを自動解除
