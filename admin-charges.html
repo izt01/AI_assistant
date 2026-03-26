@@ -668,10 +668,7 @@ async function sendTestAlert(level) {
   const resultEl = document.getElementById('test-alert-result')
   resultEl.textContent = `送信中... (${level}%)`
   try {
-    const res = await adminFetch('/api/admin/test-alert-email', {
-      method: 'POST', body: JSON.stringify({ level })
-    })
-    const d = await res.json()
+    const d = await adminApi('/test-alert-email', { method: 'POST', body: { level } })
     if(d.ok) {
       resultEl.innerHTML = `✅ 送信完了 → <strong>${d.sent_to}</strong> (${level}%アラート)`
     } else {
