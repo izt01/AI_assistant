@@ -1156,20 +1156,23 @@ def build_context_injection(user_id, ai_type):
 # overall: 全AIに共通の累積スコア（フェーズ判定に使用）
 # ai固有: そのAIに特化したスコア（AI内での詳細度調整に使用）
 SCORE_WEIGHTS = {
-    # イベント名            overall  ai固有
-    "chat_normal":        (  0.4,   0.8),   # 通常会話（変更なし）
-    "chat_helpful":       (  2.0,   3.5),   # helpful評価（引き上げ: +0.5/+1.0）
-    "chat_not_helpful":   ( -0.2,  -0.8),   # not helpful（ペナルティ軽減）
-    "pref_dislike":       (  1.5,   2.5),   # 嫌いを明言（重要な学習イベント）
+    # イベント名               overall  ai固有
+    "chat_normal":        (  0.4,   0.8),   # 通常会話
+    "chat_helpful":       (  2.0,   3.5),   # helpful評価
+    "chat_not_helpful":   ( -0.2,  -0.8),   # not helpful
+    "pref_dislike":       (  1.5,   2.5),   # 嫌いを明言
     "pref_like":          (  1.0,   2.0),   # 好きを明言
     "pref_allergy":       (  2.0,   3.0),   # アレルギー・絶対制約を明言
-    "proposal_rejected":  (  0.8,   1.5),   # 提案を却下（学習した証拠）
+    "proposal_rejected":  (  0.8,   1.5),   # 提案を却下
     "proposal_accepted":  (  1.5,   2.5),   # 提案を採用
     "action_done":        (  2.0,   4.0),   # 実際に行動した（最高重み）
-    "reaction_love":      (  2.5,   4.5),   # love反応
-    "reaction_helpful":   (  1.5,   2.5),   # helpful反応
-    "reaction_wrong":     ( -0.5,  -1.0),   # wrong反応
-    "reaction_off_topic": ( -0.3,  -0.5),   # off_topic反応
+    "reaction_love":      (  2.5,   4.5),   # 🩷 最高
+    "reaction_helpful":   (  1.5,   2.5),   # 👍 役立った
+    "reaction_boring":    (  0.0,  -0.3),   # 😐 その他・普通（REACTION_SCORE_MAPと統一）
+    "reaction_too_long":  (  0.2,   0.3),   # 📜 長すぎ（REACTION_SCORE_MAPと統一）
+    "reaction_too_short": (  0.2,   0.3),   # 📝 短すぎ（REACTION_SCORE_MAPと統一）
+    "reaction_wrong":     ( -0.5,  -1.0),   # ❌ 内容が違う
+    "reaction_off_topic": ( -0.3,  -0.5),   # 🔀 的外れ
 }
 
 AI_SCORE_COL = {
@@ -1738,13 +1741,14 @@ def feedback():
 #  lu_reactions: 感情フィードバック（5種別）
 # ══════════════════════════════════════════════════════════════
 REACTION_SCORE_MAP = {
-    "love":      {"overall": 2.0, "ai": 3.5},   # 最高評価
-    "helpful":   {"overall": 1.5, "ai": 2.5},   # 役立った
-    "boring":    {"overall": 0.0, "ai": -0.3},  # 普通〜微妙
-    "wrong":     {"overall": 0.0, "ai": -1.0},  # 内容が違う
-    "too_long":  {"overall": 0.2, "ai":  0.3},  # 長すぎ（情報は有用）
-    "too_short": {"overall": 0.2, "ai":  0.3},  # 短すぎ（改善余地）
-    "off_topic": {"overall": 0.0, "ai": -0.5},  # 的外れ
+    # SCORE_WEIGHTS の reaction_* と完全一致させる（参照元はSCORE_WEIGHTS）
+    "love":      {"overall": 2.5, "ai":  4.5},  # 🩷 最高
+    "helpful":   {"overall": 1.5, "ai":  2.5},  # 👍 役立った
+    "boring":    {"overall": 0.0, "ai": -0.3},  # 😐 その他・普通
+    "wrong":     {"overall":-0.5, "ai": -1.0},  # ❌ 内容が違う
+    "too_long":  {"overall": 0.2, "ai":  0.3},  # 📜 長すぎ
+    "too_short": {"overall": 0.2, "ai":  0.3},  # 📝 短すぎ
+    "off_topic": {"overall":-0.3, "ai": -0.5},  # 🔀 的外れ
 }
 
 @app.route("/api/chat/reaction", methods=["POST"])
@@ -1771,8 +1775,13 @@ def post_reaction():
 
     # 成長イベントとしてスコアを更新
     reaction_event_map = {
-        "love": "reaction_love", "helpful": "reaction_helpful",
-        "wrong": "reaction_wrong", "off_topic": "reaction_off_topic",
+        "love":      "reaction_love",
+        "helpful":   "reaction_helpful",
+        "boring":    "reaction_boring",
+        "too_long":  "reaction_too_long",
+        "too_short": "reaction_too_short",
+        "wrong":     "reaction_wrong",
+        "off_topic": "reaction_off_topic",
     }
     event_key = reaction_event_map.get(reaction, "chat_normal")
     _apply_score_event(uid, ai_type, event_key)
