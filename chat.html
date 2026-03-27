@@ -1048,15 +1048,23 @@ const REACTION_LABELS = {
  
 async function giveReaction(btn, reaction) {
   if(lastReactionDone) return
+  // message_id が取得できていない場合は送信不可
+  if(!lastMessageId) {
+    toast('メッセージIDが取得できていません。ページを再読み込みしてください','d')
+    return
+  }
   const row = btn.closest('.fb-row')
   row.querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('active'))
   btn.classList.add('active')
   lastReactionDone = true
-  if(lastMessageId) {
-    try {
-      await apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,ai_type:aiParam}})
-      toast('フィードバックありがとうございます！','s')
-    } catch(e) { toast('送信に失敗しました','d') }
+  try {
+    await apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,ai_type:aiParam}})
+    toast('フィードバックありがとうございます！','s')
+  } catch(e) {
+    // 失敗時はボタン状態を戻す
+    btn.classList.remove('active')
+    lastReactionDone = false
+    toast('送信に失敗しました。もう一度お試しください','d')
   }
 }
  
@@ -1089,7 +1097,9 @@ async function submitNegReaction() {
   if(window._negReactionBtn) {
     await giveReaction(window._negReactionBtn, reaction)
     if(detail && lastMessageId) {
-      apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,detail,ai_type:aiParam}}).catch(()=>{})
+      apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,detail,ai_type:aiParam}}).catch(e=>{
+        console.warn('[reaction detail]', e)
+      })
     }
   }
 }
