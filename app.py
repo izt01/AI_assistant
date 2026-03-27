@@ -853,6 +853,46 @@ def get_user_context(user_id):
     except Exception:
         ctx["learning_events"] = []
 
+    # lu_favorites から直近のお気に入りを取得（AI別・最大5件）
+    try:
+        fav_rows = db_exec(
+            "SELECT ai_type, category, title, subtitle, created_at "
+            "FROM lu_favorites WHERE user_id=%s "
+            "ORDER BY created_at DESC LIMIT 20",
+            (user_id,), fetch="all"
+        ) or []
+        favs_by_ai = {}
+        for r in fav_rows:
+            ai = r["ai_type"]
+            if ai not in favs_by_ai:
+                favs_by_ai[ai] = []
+            if len(favs_by_ai[ai]) < 5:
+                favs_by_ai[ai].append({
+                    "category": r["category"],
+                    "title":    r["title"],
+                    "subtitle": r["subtitle"] or "",
+                })
+        ctx["favorites"] = favs_by_ai
+    except Exception:
+        ctx["favorites"] = {}
+
+    # lu_usage_stats から avg_rating（直近30日）を取得
+    try:
+        rating_rows = db_exec(
+            "SELECT ai_type, AVG(avg_rating) as avg_r, COUNT(*) as days "
+            "FROM lu_usage_stats "
+            "WHERE user_id=%s AND avg_rating IS NOT NULL "
+            "  AND date >= CURRENT_DATE - 30 "
+            "GROUP BY ai_type",
+            (user_id,), fetch="all"
+        ) or []
+        ctx["avg_ratings"] = {
+            r["ai_type"]: round(float(r["avg_r"]), 2)
+            for r in rating_rows if r["avg_r"] is not None
+        }
+    except Exception:
+        ctx["avg_ratings"] = {}
+
     return ctx
 
 def build_context_injection(user_id, ai_type):
@@ -1029,6 +1069,30 @@ def build_context_injection(user_id, ai_type):
             lines.append("【実際に行動した実績（最優先で参考にすること）】:")
             for e in action_events[:3]:
                 lines.append(f"   ✓ {e['key'].replace('action_','')}: {e['val']}")
+
+    # ── お気に入り登録済みアイテムをAIに注入 ──────────────────────
+    favs = ctx.get("favorites", {})
+    # このAI + general の両方のお気に入りを対象にする
+    ai_favs = favs.get(ai_type, []) + favs.get("general", [])
+    if ai_favs:
+        lines.append("【お気に入り登録済み（過去に保存した好みアイテム・高評価コンテンツ）】")
+        lines.append("→ 類似・関連する提案を優先的に出すこと。同じものの再提案も歓迎。")
+        for f in ai_favs[:5]:
+            label = f["title"]
+            if f.get("subtitle"):
+                label += f"（{f['subtitle']}）"
+            lines.append(f"   ♡ [{f['category']}] {label}")
+
+    # ── avg_rating（直近の満足度スコア）をAIに注入 ──────────────
+    avg_ratings = ctx.get("avg_ratings", {})
+    ai_rating   = avg_ratings.get(ai_type)
+    if ai_rating is not None:
+        if ai_rating >= 4.0:
+            lines.append(f"（直近の満足度: {ai_rating}/5.0 — 現在のスタイルを継続すること）")
+        elif ai_rating <= 2.5:
+            lines.append(f"（直近の満足度: {ai_rating}/5.0 — 提案の質・スタイルを大きく見直すこと）")
+        else:
+            lines.append(f"（直近の満足度: {ai_rating}/5.0 — 改善の余地あり。より具体的・パーソナルな提案を心がけること）")
 
     sc           = ctx.get("match_score", {})
     overall      = sc.get("overall_score", 0)
@@ -1209,45 +1273,6 @@ def login():
 @auth_required
 def me():
     return jsonify({"user": serialize_user(g.current_user)})
-
-@app.route("/api/user/me", methods=["PUT"])
-@auth_required
-def update_me():
-    """ユーザー自身の名前・メールアドレスを更新"""
-    uid = str(g.current_user["id"])
-    d   = request.json or {}
-    sets, vals = [], []
-
-    nickname = (d.get("nickname") or "").strip()
-    email    = (d.get("email") or "").strip().lower()
-
-    if not nickname and not email:
-        return jsonify({"error": "更新フィールドがありません"}), 400
-
-    if nickname:
-        if len(nickname) > 50:
-            return jsonify({"error": "お名前は50文字以内で入力してください"}), 400
-        sets.append("nickname=%s"); vals.append(nickname)
-
-    if email:
-        import re
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-            return jsonify({"error": "メールアドレスの形式が正しくありません"}), 400
-        # 重複チェック（自分以外）
-        dup = db_exec(
-            "SELECT id FROM lu_users WHERE email=%s AND id!=%s",
-            (email, uid), fetch="one"
-        )
-        if dup:
-            return jsonify({"error": "そのメールアドレスはすでに使用されています"}), 409
-        sets.append("email=%s"); vals.append(email)
-
-    vals.append(uid)
-    db_exec(f"UPDATE lu_users SET {','.join(sets)},updated_at=NOW() WHERE id=%s", vals)
-
-    # 更新後のユーザー情報を返す
-    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
-    return jsonify({"message": "プロフィールを更新しました", "user": serialize_user(updated)})
 
 @app.route("/api/auth/logout", methods=["POST"])
 @auth_required
