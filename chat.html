@@ -1122,11 +1122,13 @@ async function submitNegReaction() {
 const ACTION_TYPE_MAP = {
   gourmet:  [{v:'visited',  l:'🍽️ 行ってきた'},{v:'other',l:'✍️ その他'}],
   recipe:   [{v:'cooked',   l:'🍳 作ってみた'},{v:'other',l:'✍️ その他'}],
+  cooking:  [{v:'cooked',   l:'🍳 作ってみた'},{v:'other',l:'✍️ その他'}],  // cookingはrecipeと同じ
   travel:   [{v:'booked',   l:'✈️ 予約した'},  {v:'visited',l:'🏨 行ってきた'},{v:'other',l:'✍️ その他'}],
   shopping: [{v:'purchased',l:'🛒 購入した'},  {v:'other',l:'✍️ その他'}],
   diy:      [{v:'diy_done', l:'🔨 作った・直した'},{v:'other',l:'✍️ その他'}],
   health:   [{v:'exercised',l:'💪 やってみた'},{v:'other',l:'✍️ その他'}],
   appliance:[{v:'purchased',l:'🛒 購入した'},  {v:'other',l:'✍️ その他'}],
+  home:     [{v:'purchased',l:'🛒 購入した'},  {v:'other',l:'✍️ その他'}],  // homeはapplianceと同じ
   general:  [{v:'other',    l:'✍️ 実行した'}],
 }
  
@@ -1137,7 +1139,7 @@ function showDoneModal(btn) {
     body: `
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">実際にやってみた内容を教えてください。AIの学習に役立ちます🎉</p>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${types.map(({v,l})=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="action_type" value="${v}" style="accent-color:var(--gold2)">${l}</label>`).join('')}
+        ${types.map(({v,l},i)=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="action_type" value="${v}" style="accent-color:var(--gold2)"${i===0?' checked':''}>${l}</label>`).join('')}
         <textarea id="action_note" rows="2" placeholder="一言メモ（任意）例：美味しかった、また行きたい"
           style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:none;background:var(--cream2)"></textarea>
       </div>`,
