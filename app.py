@@ -1306,6 +1306,43 @@ def login():
 def me():
     return jsonify({"user": serialize_user(g.current_user)})
 
+@app.route("/api/user/me", methods=["PUT"])
+@auth_required
+def update_me():
+    """ユーザー自身の名前・メールアドレスを更新"""
+    import re as _re
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    sets, vals = [], []
+
+    nickname = (d.get("nickname") or "").strip()
+    email    = (d.get("email") or "").strip().lower()
+
+    if not nickname and not email:
+        return jsonify({"error": "更新フィールドがありません"}), 400
+
+    if nickname:
+        if len(nickname) > 50:
+            return jsonify({"error": "お名前は50文字以内で入力してください"}), 400
+        sets.append("nickname=%s"); vals.append(nickname)
+
+    if email:
+        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            return jsonify({"error": "メールアドレスの形式が正しくありません"}), 400
+        dup = db_exec(
+            "SELECT id FROM lu_users WHERE email=%s AND id!=%s",
+            (email, uid), fetch="one"
+        )
+        if dup:
+            return jsonify({"error": "そのメールアドレスはすでに使用されています"}), 409
+        sets.append("email=%s"); vals.append(email)
+
+    vals.append(uid)
+    db_exec(f"UPDATE lu_users SET {','.join(sets)},updated_at=NOW() WHERE id=%s", vals)
+
+    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    return jsonify({"message": "プロフィールを更新しました", "user": serialize_user(updated)})
+
 @app.route("/api/auth/logout", methods=["POST"])
 @auth_required
 def logout():
