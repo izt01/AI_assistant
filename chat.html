@@ -453,24 +453,27 @@ function sendChip(text) {
   document.getElementById('chat-input').value = text; sendMsg()
 }
  
-function addMessage(role, text) {
+function addMessage(role, text, msgId = null) {
   const el = document.createElement('div')
   el.className = `msg-row ${role}`
   const timeStr = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})
   if(role === 'ai') {
     const msgIndex = messages.length
-    el.innerHTML = `
-      <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
-      <div>
-        <div class="msg-bubble">${parseMarkdown(text)}</div>
-        <div class="fb-row" data-msg-idx="${msgIndex}">
+    // msgIdがある（実際のAI返答）場合のみリアクションボタンを表示
+    const fbRowHtml = msgId ? `
+        <div class="fb-row" data-msg-idx="${msgIndex}" data-msg-id="${msgId}">
           <button class="fb-btn reaction-love"   onclick="giveReaction(this,'love')">🩷 最高</button>
           <button class="fb-btn reaction-helpful" onclick="giveReaction(this,'helpful')">👍 役立った</button>
           <button class="fb-btn reaction-neg"     onclick="showNegReactionModal(this)">👎 改善点</button>
           <div class="fb-sep"></div>
           <button class="fav-btn" onclick="saveMsgAsFavorite(this)">♡ お気に入り</button>
           <button class="fb-done-btn"             onclick="showDoneModal(this)">✓ やってみた</button>
-        </div>
+        </div>` : ''
+    el.innerHTML = `
+      <div class="msg-avatar" style="background:${ai.bg}">${ai.icon}</div>
+      <div>
+        <div class="msg-bubble">${parseMarkdown(text)}</div>
+        ${fbRowHtml}
       </div>`
   } else {
     const initials = (user.name||'U')[0]
@@ -759,7 +762,7 @@ async function sendMsg() {
       console.warn('[Chat] reply が空でした。サーバーレスポンス:', resp)
     }
     messages.push({ role:'assistant', content:reply })
-    if(reply) addMessage('ai', reply)
+    if(reply) addMessage('ai', reply, resp.message_id || null)
  
     if(resp.learning_applied > 0) {
       toast(`✦ AIがあなたの好みを${resp.learning_applied}件学習しました`, '')
@@ -1047,28 +1050,39 @@ const REACTION_LABELS = {
 }
  
 async function giveReaction(btn, reaction) {
-  if(lastReactionDone) return
-  // message_id が取得できていない場合は送信不可
-  if(!lastMessageId) {
-    toast('メッセージIDが取得できていません。ページを再読み込みしてください','d')
+  const row = btn.closest('.fb-row')
+  // 既にこの行でリアクション済みならスキップ
+  if(row.dataset.reactionDone === '1') return
+
+  // data-msg-id 属性からmessage_idを取得（各メッセージ固有のID）
+  const msgId = row.dataset.msgId || null
+  if(!msgId) {
+    toast('このメッセージにはリアクションできません','d')
     return
   }
-  const row = btn.closest('.fb-row')
+
   row.querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('active'))
   btn.classList.add('active')
-  lastReactionDone = true
+  row.dataset.reactionDone = '1'  // この行をリアクション済みにマーク
+
+  // 最後のメッセージのlastReactionDoneも更新
+  if(msgId === lastMessageId) lastReactionDone = true
+
   try {
-    await apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,ai_type:aiParam}})
+    await apiRequest('/chat/reaction',{method:'POST',body:{message_id:msgId,reaction,ai_type:aiParam}})
     toast('フィードバックありがとうございます！','s')
   } catch(e) {
     // 失敗時はボタン状態を戻す
     btn.classList.remove('active')
-    lastReactionDone = false
+    row.dataset.reactionDone = '0'
+    if(msgId === lastMessageId) lastReactionDone = false
     toast('送信に失敗しました。もう一度お試しください','d')
   }
 }
  
 function showNegReactionModal(btn) {
+  // 先にbtnを保存（showModal内でHTMLが再構築される前に参照を保持）
+  window._negReactionBtn = btn
   showModal({
     title: '改善点を教えてください',
     body: `
@@ -1078,15 +1092,14 @@ function showNegReactionModal(btn) {
           <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
             <input type="radio" name="neg_reaction" value="${val}" style="accent-color:var(--gold2)">${label}
           </label>`).join('')}
-        <textarea id="neg_detail" rows="2" placeholder="詳細コメント（任意）"
-          style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:none;background:var(--cream2)"></textarea>
+        <textarea id="neg_detail" rows="3" placeholder="詳細コメント（任意）"
+          style="margin-top:8px;width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:inherit;resize:vertical;background:var(--surface);color:var(--ink)"></textarea>
       </div>`,
     actions: [
       {label:'キャンセル', cls:'btn-g',    fn:'closeModal()'},
-      {label:'送信',       cls:'btn-gold', fn:`submitNegReaction(${JSON.stringify(btn.closest('.fb-row').id||'')})`},
+      {label:'送信',       cls:'btn-gold', fn:'submitNegReaction()'},
     ]
   })
-  window._negReactionBtn = btn
 }
  
 async function submitNegReaction() {
@@ -1096,8 +1109,9 @@ async function submitNegReaction() {
   closeModal()
   if(window._negReactionBtn) {
     await giveReaction(window._negReactionBtn, reaction)
-    if(detail && lastMessageId) {
-      apiRequest('/chat/reaction',{method:'POST',body:{message_id:lastMessageId,reaction,detail,ai_type:aiParam}}).catch(e=>{
+    const negMsgId = window._negReactionBtn?.closest('.fb-row')?.dataset?.msgId || lastMessageId
+    if(detail && negMsgId) {
+      apiRequest('/chat/reaction',{method:'POST',body:{message_id:negMsgId,reaction,detail,ai_type:aiParam}}).catch(e=>{
         console.warn('[reaction detail]', e)
       })
     }
