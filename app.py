@@ -1210,6 +1210,45 @@ def login():
 def me():
     return jsonify({"user": serialize_user(g.current_user)})
 
+@app.route("/api/user/me", methods=["PUT"])
+@auth_required
+def update_me():
+    """ユーザー自身の名前・メールアドレスを更新"""
+    uid = str(g.current_user["id"])
+    d   = request.json or {}
+    sets, vals = [], []
+
+    nickname = (d.get("nickname") or "").strip()
+    email    = (d.get("email") or "").strip().lower()
+
+    if not nickname and not email:
+        return jsonify({"error": "更新フィールドがありません"}), 400
+
+    if nickname:
+        if len(nickname) > 50:
+            return jsonify({"error": "お名前は50文字以内で入力してください"}), 400
+        sets.append("nickname=%s"); vals.append(nickname)
+
+    if email:
+        import re
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            return jsonify({"error": "メールアドレスの形式が正しくありません"}), 400
+        # 重複チェック（自分以外）
+        dup = db_exec(
+            "SELECT id FROM lu_users WHERE email=%s AND id!=%s",
+            (email, uid), fetch="one"
+        )
+        if dup:
+            return jsonify({"error": "そのメールアドレスはすでに使用されています"}), 409
+        sets.append("email=%s"); vals.append(email)
+
+    vals.append(uid)
+    db_exec(f"UPDATE lu_users SET {','.join(sets)},updated_at=NOW() WHERE id=%s", vals)
+
+    # 更新後のユーザー情報を返す
+    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    return jsonify({"message": "プロフィールを更新しました", "user": serialize_user(updated)})
+
 @app.route("/api/auth/logout", methods=["POST"])
 @auth_required
 def logout():
@@ -2109,19 +2148,11 @@ def admin_dashboard():
     # セッション統計
     total_chats  = db_exec("SELECT COUNT(*) as c FROM lu_sessions", fetch="one")["c"]
     chats_today  = db_exec("SELECT COUNT(*) as c FROM lu_sessions WHERE DATE(started_at)=CURRENT_DATE", fetch="one")["c"]
-    # 月間チャット数（直近6ヶ月）※0件の月も必ず含める
-    _monthly_sql = (
-        "SELECT TO_CHAR(m.month,'YYYY-MM') as month, COALESCE(COUNT(s.id),0) as c "
-        "FROM generate_series("
-        "  DATE_TRUNC('month', NOW()) - INTERVAL '5 months',"
-        "  DATE_TRUNC('month', NOW()),"
-        "  INTERVAL '1 month'"
-        ") AS m(month) "
-        "LEFT JOIN lu_sessions s "
-        "  ON DATE_TRUNC('month', s.started_at) = m.month "
-        "GROUP BY m.month ORDER BY m.month"
-    )
-    monthly_chats = db_exec(_monthly_sql, fetch="all") or []
+    # 月間チャット数（直近6ヶ月）
+    monthly_chats = db_exec(
+        "SELECT TO_CHAR(DATE_TRUNC('month',started_at),'YYYY-MM') as month, COUNT(*) as c "
+        "FROM lu_sessions WHERE started_at >= NOW() - INTERVAL '6 months' "
+        "GROUP BY month ORDER BY month", fetch="all") or []
     # APIコスト
     budget_row   = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
     budget_usd   = float(budget_row["value"]) if budget_row else 100.0

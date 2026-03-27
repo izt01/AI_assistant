@@ -230,8 +230,11 @@ requireAuth().then(async u => {
       apiRequest('/preferences'),
     ])
     // プロフィールフィールド
-    if(document.getElementById('pf-area')) document.getElementById('pf-area').value = profileData.area || ''
-    if(document.getElementById('pf-budget')) document.getElementById('pf-budget').value = profileData.monthly_budget || ''
+    if(document.getElementById('pf-dob'))       document.getElementById('pf-dob').value       = profileData.dob        || ''
+    if(document.getElementById('pf-gender'))    document.getElementById('pf-gender').value    = profileData.gender     || ''
+    if(document.getElementById('pf-region'))    document.getElementById('pf-region').value    = profileData.area       || ''
+    if(document.getElementById('pf-area'))      document.getElementById('pf-area').value      = profileData.area       || ''
+    if(document.getElementById('pf-budget'))    document.getElementById('pf-budget').value    = profileData.monthly_budget  || ''
     if(document.getElementById('pf-household')) document.getElementById('pf-household').value = profileData.household_size || ''
 
     // 興味・趣味チップを復元（lu_profiles.interests）
@@ -292,27 +295,55 @@ function togglePref(el) { el.classList.toggle('sel') }
 async function saveProfile() {
   const nickname = document.getElementById('pf-name').value.trim()
   const email    = document.getElementById('pf-email').value.trim()
-  if(!nickname||!email) { toast('必須項目を入力してください','d'); return }
+  const dob      = document.getElementById('pf-dob')?.value  || ''
+  const gender   = document.getElementById('pf-gender')?.value || ''
+  const region   = document.getElementById('pf-region')?.value || ''
+
+  if(!nickname || !email) { toast('名前とメールアドレスは必須です', 'd'); return }
+
+  const btn = document.querySelector('[onclick="saveProfile()"]')
+  if(btn) { btn.disabled = true; btn.textContent = '保存中...' }
 
   try {
-    // プロフィール情報を保存
+    // ① lu_users の nickname・email を更新（新エンドポイント）
+    const res = await apiRequest('/user/me', {
+      method: 'PUT',
+      body: { nickname, email }
+    })
+
+    // ② lu_profiles の追加情報を更新
     const profileUpdate = {}
-    if(document.getElementById('pf-area')) profileUpdate.area = document.getElementById('pf-area').value
-    if(document.getElementById('pf-budget')) profileUpdate.monthly_budget = parseInt(document.getElementById('pf-budget').value)||null
-    if(document.getElementById('pf-household')) profileUpdate.household_size = parseInt(document.getElementById('pf-household').value)||null
+    if(dob)    profileUpdate.dob    = dob
+    if(gender) profileUpdate.gender = gender
+    if(region) profileUpdate.area   = region
+    if(document.getElementById('pf-area'))      profileUpdate.area           = document.getElementById('pf-area').value
+    if(document.getElementById('pf-budget'))    profileUpdate.monthly_budget = parseInt(document.getElementById('pf-budget').value) || null
+    if(document.getElementById('pf-household')) profileUpdate.household_size = parseInt(document.getElementById('pf-household').value) || null
 
     if(Object.keys(profileUpdate).length > 0) {
-      await apiRequest('/profile', {method:'PUT', body:profileUpdate})
+      await apiRequest('/profile', { method: 'PUT', body: profileUpdate })
     }
 
-    // ローカルキャッシュを更新
-    if(user) { user.nickname = nickname; setCachedUser(user) }
-    document.getElementById('av-big').textContent = nickname[0]
-    document.getElementById('pf-name-disp').textContent = nickname
+    // ③ ローカルキャッシュを最新情報で更新
+    if(res.user) {
+      setCachedUser({ ...(getCachedUser() || {}), ...res.user })
+      user = res.user
+    } else if(user) {
+      user.nickname = nickname
+      user.email    = email
+      setCachedUser(user)
+    }
+
+    // ④ 画面表示を即時反映
+    document.getElementById('av-big').textContent        = nickname[0].toUpperCase()
+    document.getElementById('pf-name-disp').textContent  = nickname
     document.getElementById('pf-email-disp').textContent = email
-    toast('プロフィールを保存しました','s')
+
+    toast('プロフィールを保存しました', 's')
   } catch(e) {
-    toast(e.error||'保存に失敗しました','d')
+    toast(e.error || '保存に失敗しました', 'd')
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = '保存する' }
   }
 }
 
