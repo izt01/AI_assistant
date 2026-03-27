@@ -7,14 +7,36 @@
 <script src="admin-shared.js"></script>
 <link rel="stylesheet" href="admin.css">
 <style>
-.chart-bar-wrap{display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:8px}
-.chart-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-.chart-bar{width:100%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--gold),rgba(201,168,76,.4));
-  transition:height .4s ease;min-height:4px;cursor:default;position:relative}
-.chart-bar:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;
-  transform:translateX(-50%);background:var(--ink3);border:1px solid var(--border2);
-  border-radius:6px;padding:4px 9px;font-size:11px;white-space:nowrap;z-index:10}
-.chart-label{font-size:9.5px;color:var(--subtle);font-family:'JetBrains Mono',monospace}
+.chart-wrap{position:relative;padding:8px 0 0}
+.chart-bar-wrap{display:flex;align-items:flex-end;gap:8px;height:160px;padding:0 4px;
+  border-bottom:1px solid rgba(255,255,255,.08);position:relative}
+/* Y軸グリッドライン */
+.chart-bar-wrap::before,.chart-bar-wrap::after{
+  content:'';position:absolute;left:0;right:0;
+  border-top:1px dashed rgba(255,255,255,.06);pointer-events:none}
+.chart-bar-wrap::before{top:0}
+.chart-bar-wrap::after{top:50%}
+.chart-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:0;position:relative}
+.chart-bar{width:100%;border-radius:6px 6px 0 0;
+  background:linear-gradient(180deg,var(--gold) 0%,rgba(201,168,76,.35) 100%);
+  transition:height .5s cubic-bezier(.4,0,.2,1);min-height:4px;cursor:pointer;
+  position:relative;box-shadow:0 0 12px rgba(201,168,76,.15)}
+.chart-bar:hover{background:linear-gradient(180deg,#f0cb6a 0%,rgba(240,203,106,.5) 100%);
+  box-shadow:0 0 20px rgba(201,168,76,.4)}
+/* ツールチップ */
+.chart-bar::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;
+  transform:translateX(-50%) scale(.9);opacity:0;pointer-events:none;
+  background:#1e2535;border:1px solid rgba(201,168,76,.4);color:#f0cb6a;
+  border-radius:7px;padding:5px 11px;font-size:11.5px;white-space:nowrap;
+  z-index:20;transition:all .15s ease;font-family:'JetBrains Mono',monospace;
+  box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.chart-bar:hover::after{opacity:1;transform:translateX(-50%) scale(1)}
+/* 棒の上に件数を表示 */
+.chart-bar-val{font-size:10px;color:var(--gold2);font-family:'JetBrains Mono',monospace;
+  position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+  white-space:nowrap;font-weight:600;opacity:.9}
+.chart-label{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;
+  margin-top:6px;text-align:center;letter-spacing:.02em}
 
 .ai-usage-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .ai-usage-row:last-child{border-bottom:none}
@@ -194,14 +216,23 @@ async function loadDashboard(){
   // 月別チャートバー
   const monthly = dash.chats.monthly || []
   const maxC = Math.max(...monthly.map(m=>m.count), 1)
+  const CHART_H = 140  // chart-bar-wrapのheightに合わせた実効高さ(px)
   document.getElementById('monthly-chart').innerHTML = monthly.length
-    ? monthly.map(m=>`
+    ? monthly.map(m=>{
+        const barH = Math.max(Math.round(m.count / maxC * CHART_H), m.count > 0 ? 6 : 2)
+        const monthLabel = m.month.slice(5)  // "2025-10" → "10月"形式
+        const displayLabel = monthLabel.replace('-', '/') + '月'
+        return `
         <div class="chart-bar-col">
-          <div class="chart-bar" style="height:${Math.round(m.count/maxC*100)}px"
-               data-tip="${m.month}: ${fmtN(m.count)}件"></div>
-          <div class="chart-label">${m.month.slice(5)}</div>
-        </div>`).join('')
-    : '<div style="color:var(--subtle);font-size:12px">データなし</div>'
+          <div style="position:relative;width:100%;display:flex;justify-content:center">
+            ${m.count > 0 ? `<span class="chart-bar-val">${fmtN(m.count)}</span>` : ''}
+            <div class="chart-bar" style="height:${barH}px"
+                 data-tip="${m.month}：${fmtN(m.count)}件"></div>
+          </div>
+          <div class="chart-label">${displayLabel}</div>
+        </div>`
+      }).join('')
+    : '<div style="color:var(--subtle);font-size:12px;margin:auto">データなし</div>'
 
   // プラン分布
   const plans = u.plans
