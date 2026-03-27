@@ -1173,9 +1173,16 @@ SCORE_WEIGHTS = {
 }
 
 AI_SCORE_COL = {
-    "recipe":"food_score","gourmet":"food_score","travel":"travel_score",
-    "shopping":"shopping_score","health":"health_score",
-    "appliance":"home_score","diy":"diy_score",
+    "recipe":    "food_score",
+    "cooking":   "food_score",    # cooking は recipe と同じfood_score
+    "gourmet":   "food_score",
+    "travel":    "travel_score",
+    "shopping":  "shopping_score",
+    "health":    "health_score",
+    "appliance": "home_score",
+    "home":      "home_score",
+    "diy":       "diy_score",
+    # "general" は意図的に除外: overall_score のみ更新する
 }
 
 def _apply_score_event(user_id: str, ai_type: str, event: str):
@@ -1187,25 +1194,47 @@ def _apply_score_event(user_id: str, ai_type: str, event: str):
         conn = get_db()
         with conn.cursor() as cur:
             cur.execute("INSERT INTO lu_match_scores (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
-            if d_overall >= 0:
-                cur.execute(
-                    f"UPDATE lu_match_scores SET "
-                    f"overall_score=LEAST(100,overall_score+%s), "
-                    f"{col}=LEAST(100,{col}+%s), "
-                    f"last_updated=NOW() WHERE user_id=%s",
-                    (d_overall, d_ai, user_id)
-                )
+            # colがoverall_scoreと同じ場合（未知のai_type）はoverall_scoreのみ更新
+            if col == "overall_score":
+                if d_overall >= 0:
+                    cur.execute(
+                        "UPDATE lu_match_scores SET "
+                        "overall_score=LEAST(100,overall_score+%s), "
+                        "last_updated=NOW() WHERE user_id=%s",
+                        (d_overall, user_id)
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE lu_match_scores SET "
+                        "overall_score=GREATEST(0,overall_score+%s), "
+                        "last_updated=NOW() WHERE user_id=%s",
+                        (d_overall, user_id)
+                    )
             else:
-                cur.execute(
-                    f"UPDATE lu_match_scores SET "
-                    f"overall_score=GREATEST(0,overall_score+%s), "
-                    f"{col}=GREATEST(0,{col}+%s), "
-                    f"last_updated=NOW() WHERE user_id=%s",
-                    (d_overall, d_ai, user_id)
-                )
+                if d_overall >= 0:
+                    cur.execute(
+                        f"UPDATE lu_match_scores SET "
+                        f"overall_score=LEAST(100,overall_score+%s), "
+                        f"{col}=LEAST(100,{col}+%s), "
+                        f"last_updated=NOW() WHERE user_id=%s",
+                        (d_overall, d_ai, user_id)
+                    )
+                else:
+                    cur.execute(
+                        f"UPDATE lu_match_scores SET "
+                        f"overall_score=GREATEST(0,overall_score+%s), "
+                        f"{col}=GREATEST(0,{col}+%s), "
+                        f"last_updated=NOW() WHERE user_id=%s",
+                        (d_overall, d_ai, user_id)
+                    )
         conn.commit()
     except Exception as e:
         print(f"[Score] {event} 更新エラー: {e}")
+        # トランザクションをロールバックして次のDB操作が連鎖失敗しないようにする
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
 
 def update_match_score(user_id, ai_type, rating=0):
     """後方互換ラッパー。既存の rating=1/-1/0 呼び出しを成長イベントに変換"""
@@ -1941,6 +1970,10 @@ def _upsert_usage_stats(user_id: str, ai_type: str):
         )
     except Exception as e:
         print(f"[UsageStats] {e}")
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
 
 
 def _log_learning(user_id: str, ai_type: str, key: str, val: str,
@@ -1954,6 +1987,10 @@ def _log_learning(user_id: str, ai_type: str, key: str, val: str,
         )
     except Exception as e:
         print(f"[LearningLog] {e}")
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
 
 
 @app.route("/api/usage-stats", methods=["GET"])
