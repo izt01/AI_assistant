@@ -32,9 +32,10 @@
   box-shadow:0 4px 16px rgba(0,0,0,.4)}
 .chart-bar:hover::after{opacity:1;transform:translateX(-50%) scale(1)}
 /* 棒の上に件数を表示 */
-.chart-bar-val{font-size:10px;color:var(--gold2);font-family:'JetBrains Mono',monospace;
-  position:absolute;top:-18px;left:50%;transform:translateX(-50%);
-  white-space:nowrap;font-weight:600;opacity:.9}
+.chart-bar-val{font-size:10.5px;color:var(--gold2);font-family:'JetBrains Mono',monospace;
+  white-space:nowrap;font-weight:600;line-height:1}
+.chart-bar.cur{background:linear-gradient(180deg,#f5d060 0%,rgba(245,208,96,.5) 100%);
+  box-shadow:0 0 18px rgba(245,208,96,.35)}
 .chart-label{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;
   margin-top:6px;text-align:center;letter-spacing:.02em}
 
@@ -214,25 +215,34 @@ async function loadDashboard(){
     alerts.map(a=>`<div class="alert-bar ${a.type}">${a.msg}</div>`).join('')
 
   // 月別チャートバー
-  const monthly = dash.chats.monthly || []
-  const maxC = Math.max(...monthly.map(m=>m.count), 1)
-  const CHART_H = 140  // chart-bar-wrapのheightに合わせた実効高さ(px)
-  document.getElementById('monthly-chart').innerHTML = monthly.length
-    ? monthly.map(m=>{
-        const barH = Math.max(Math.round(m.count / maxC * CHART_H), m.count > 0 ? 6 : 2)
-        const monthLabel = m.month.slice(5)  // "2025-10" → "10月"形式
-        const displayLabel = monthLabel.replace('-', '/') + '月'
-        return `
-        <div class="chart-bar-col">
-          <div style="position:relative;width:100%;display:flex;justify-content:center">
-            ${m.count > 0 ? `<span class="chart-bar-val">${fmtN(m.count)}</span>` : ''}
-            <div class="chart-bar" style="height:${barH}px"
-                 data-tip="${m.month}：${fmtN(m.count)}件"></div>
-          </div>
-          <div class="chart-label">${displayLabel}</div>
-        </div>`
-      }).join('')
-    : '<div style="color:var(--subtle);font-size:12px;margin:auto">データなし</div>'
+  // 月別チャート: APIが0件の月もフロントで補完して必ず6本表示する
+  const rawMonthly = dash.chats.monthly || []
+  const monthlyMap = {}
+  rawMonthly.forEach(m => { monthlyMap[m.month] = m.count })
+  // 当月を含む直近6ヶ月分を生成
+  const monthly = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i)
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+    monthly.push({ month: key, count: monthlyMap[key] || 0 })
+  }
+  const maxC = Math.max(...monthly.map(m => m.count), 1)
+  const CHART_H = 130
+  const nowKey = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0')
+  document.getElementById('monthly-chart').innerHTML = monthly.map(m => {
+    const barH = Math.max(Math.round(m.count / maxC * CHART_H), m.count > 0 ? 8 : 3)
+    const mo = parseInt(m.month.split('-')[1])
+    const isCurrent = m.month === nowKey
+    return `
+      <div class="chart-bar-col">
+        <div style="position:relative;width:100%;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <span class="chart-bar-val" style="opacity:${m.count>0?1:.25}">${fmtN(m.count)}</span>
+          <div class="chart-bar${isCurrent?' cur':''}" style="height:${barH}px;width:82%"
+               data-tip="${m.month} : ${fmtN(m.count)}件"></div>
+        </div>
+        <div class="chart-label" style="${isCurrent?'color:var(--gold2);font-weight:700':''}">${mo}月</div>
+      </div>`
+  }).join('')
 
   // プラン分布
   const plans = u.plans
