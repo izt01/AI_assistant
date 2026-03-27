@@ -2109,11 +2109,19 @@ def admin_dashboard():
     # セッション統計
     total_chats  = db_exec("SELECT COUNT(*) as c FROM lu_sessions", fetch="one")["c"]
     chats_today  = db_exec("SELECT COUNT(*) as c FROM lu_sessions WHERE DATE(started_at)=CURRENT_DATE", fetch="one")["c"]
-    # 月間チャット数（直近6ヶ月）
-    monthly_chats = db_exec(
-        "SELECT TO_CHAR(DATE_TRUNC('month',started_at),'YYYY-MM') as month, COUNT(*) as c "
-        "FROM lu_sessions WHERE started_at >= NOW() - INTERVAL '6 months' "
-        "GROUP BY month ORDER BY month", fetch="all") or []
+    # 月間チャット数（直近6ヶ月）※0件の月も必ず含める
+    _monthly_sql = (
+        "SELECT TO_CHAR(m.month,'YYYY-MM') as month, COALESCE(COUNT(s.id),0) as c "
+        "FROM generate_series("
+        "  DATE_TRUNC('month', NOW()) - INTERVAL '5 months',"
+        "  DATE_TRUNC('month', NOW()),"
+        "  INTERVAL '1 month'"
+        ") AS m(month) "
+        "LEFT JOIN lu_sessions s "
+        "  ON DATE_TRUNC('month', s.started_at) = m.month "
+        "GROUP BY m.month ORDER BY m.month"
+    )
+    monthly_chats = db_exec(_monthly_sql, fetch="all") or []
     # APIコスト
     budget_row   = db_exec("SELECT value FROM admin_settings WHERE key='monthly_budget_usd'", fetch="one")
     budget_usd   = float(budget_row["value"]) if budget_row else 100.0
