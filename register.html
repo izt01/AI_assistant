@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
+<script src="https://js.stripe.com/v3/"></script>
 <title>新規登録 — Lumina AI</title>
 <style>
 body{background:var(--ink)}
@@ -123,12 +124,12 @@ body{background:var(--ink)}
         </div>
         <div id="payment-field" style="display:none">
           <div class="field">
-            <label class="lbl">カード番号<span class="req">*</span></label>
-            <input class="inp" id="card" type="text" placeholder="1234 5678 9012 3456" maxlength="19" oninput="formatCard(this)">
+            <label class="lbl">カード情報<span class="req">*</span></label>
+            <div id="stripe-card-element" style="border:1.5px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);transition:border-color .2s"></div>
+            <div id="stripe-card-error" style="color:#ef4444;font-size:12px;min-height:16px;margin-top:4px"></div>
           </div>
-          <div class="row2">
-            <div class="field"><label class="lbl">有効期限</label><input class="inp" id="expiry" type="text" placeholder="MM/YY" maxlength="5"></div>
-            <div class="field"><label class="lbl">セキュリティコード</label><input class="inp" id="cvv" type="text" placeholder="123" maxlength="4"></div>
+          <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:-4px">
+            🔒 SSL暗号化・Stripeによる安全な処理。カード情報は当サービスのサーバーには保存されません。
           </div>
         </div>
         <div style="display:flex;gap:8px">
@@ -157,6 +158,44 @@ body{background:var(--ink)}
 <script src="shared.js"></script>
 <script>
 let selectedPlan = 'pro'
+let _stripeReg = null
+let _stripeCardEl = null
+
+// Stripe初期化
+async function _initStripe() {
+  if (_stripeReg) return _stripeReg
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json())
+    if (cfg.stripe_publishable_key && typeof Stripe !== 'undefined') {
+      _stripeReg = Stripe(cfg.stripe_publishable_key)
+    }
+  } catch(e) {}
+  return _stripeReg
+}
+
+function _mountStripeCard() {
+  if (_stripeCardEl) return  // 既にマウント済み
+  _initStripe().then(stripe => {
+    if (!stripe) return
+    const elements = stripe.elements()
+    _stripeCardEl = elements.create('card', {
+      style: {
+        base: {
+          fontSize: '14px',
+          color: '#333',
+          fontFamily: 'Noto Sans JP, sans-serif',
+          '::placeholder': { color: '#aaa' }
+        }
+      },
+      hidePostalCode: true
+    })
+    _stripeCardEl.mount('#stripe-card-element')
+    _stripeCardEl.on('change', e => {
+      const el = document.getElementById('stripe-card-error')
+      if (el) el.textContent = e.error ? e.error.message : ''
+    })
+  })
+}
 
 // Pre-select from URL
 const urlPlan = new URLSearchParams(location.search).get('plan')
@@ -166,7 +205,12 @@ function selPlan(p) {
   selectedPlan = p
   document.querySelectorAll('.plan-sel').forEach(el => el.classList.remove('active'))
   document.getElementById('pl-'+p).classList.add('active')
-  document.getElementById('payment-field').style.display = p === 'free' ? 'none' : 'block'
+  const showPayment = p !== 'free'
+  document.getElementById('payment-field').style.display = showPayment ? 'block' : 'none'
+  if (showPayment) {
+    // Stripe Elements をマウント
+    setTimeout(_mountStripeCard, 100)
+  }
 }
 
 function checkPw(v) {
@@ -185,10 +229,6 @@ function checkPw(v) {
   str.textContent=labels[score-1]||'—'
 }
 
-function formatCard(el) {
-  let v = el.value.replace(/\D/g,'').substring(0,16)
-  el.value = v.replace(/(.{4})/g,'$1 ').trim()
-}
 
 function goStep1() {
   document.getElementById('step2').style.display='none'
@@ -224,29 +264,77 @@ function setStep(n) {
 }
 
 async function doRegister() {
-  const name=document.getElementById('name').value.trim()
-  const email=document.getElementById('email').value.trim()
-  const pw=document.getElementById('pw').value
-  if(selectedPlan!=='free'){
-    const card=document.getElementById('card').value
-    if(!card){toast('カード情報を入力してください','d');return}
-  }
-  const plan=selectedPlan
-  const info=PLANS[plan]
-  const btn=document.querySelector('#step2 .btn-gold')
-  if(btn){btn.disabled=true;btn.textContent='登録中…'}
+  const name  = document.getElementById('name').value.trim()
+  const email = document.getElementById('email').value.trim()
+  const pw    = document.getElementById('pw').value
+  const plan  = selectedPlan
+  const info  = PLANS[plan]
+  const btn   = document.querySelector('#step2 .btn-gold')
+  if (btn) { btn.disabled = true; btn.textContent = '登録中…' }
+
   try {
-    const d = await apiRequest('/auth/register',{method:'POST',body:{nickname:name,email,password:pw,plan}})
+    // ── ステップ1: アカウント作成（Freeプランとして登録）
+    const d = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: { nickname: name, email, password: pw, plan: 'free' }
+    })
     setToken(d.token)
     setCachedUser(d.user)
-    document.getElementById('step2').style.display='none'
-    document.getElementById('step3').style.display='block'
+
+    // ── ステップ2: 有料プランの場合はStripeで決済処理
+    if (plan !== 'free') {
+      if (!_stripeReg || !_stripeCardEl) {
+        toast('決済システムの初期化に失敗しました。ページを再読み込みしてください。', 'd')
+        if (btn) { btn.disabled = false; btn.textContent = '登録を完了する' }
+        return
+      }
+      // サブスク作成のためのSetupIntentを取得
+      const planRes = await apiRequest('/user/plan', { method: 'PUT', body: { plan } })
+
+      if (planRes.requires_payment_method) {
+        // SetupIntentでカードを確認・登録
+        if (btn) btn.textContent = 'カード確認中…'
+        const { setupIntent, error } = await _stripeReg.confirmCardSetup(
+          planRes.setup_intent_client_secret,
+          { payment_method: { card: _stripeCardEl } }
+        )
+        if (error) {
+          const errEl = document.getElementById('stripe-card-error')
+          if (errEl) errEl.textContent = error.message
+          toast(error.message || 'カード情報が正しくありません', 'd')
+          if (btn) { btn.disabled = false; btn.textContent = '登録を完了する' }
+          return
+        }
+        // payment_method_id でサブスク作成
+        if (btn) btn.textContent = 'サブスク登録中…'
+        await apiRequest('/user/plan', {
+          method: 'PUT',
+          body: { plan, payment_method_id: setupIntent.payment_method }
+        })
+      } else if (planRes.ok) {
+        // 既存カードで即時適用
+        const u = getCachedUser() || {}
+        setCachedUser({ ...u, plan: planRes.plan, usage_limit: planRes.limit })
+      }
+    }
+
+    // ── ステップ3: 完了画面
+    // 最新のユーザー情報を取得
+    try {
+      const me = await apiRequest('/auth/me')
+      if (me.user) setCachedUser(me.user)
+    } catch(e) {}
+
+    const finalUser = getCachedUser() || d.user
+    document.getElementById('step2').style.display = 'none'
+    document.getElementById('step3').style.display = 'block'
     setStep(3)
-    document.getElementById('done-plan').textContent=info.name+'プラン'
-    document.getElementById('done-limit').textContent=info.limit
+    document.getElementById('done-plan').textContent = info.name + 'プラン'
+    document.getElementById('done-limit').textContent = info.limit
+
   } catch(e) {
-    toast(e.error||'登録に失敗しました','d')
-    if(btn){btn.disabled=false;btn.textContent='アカウントを作成する'}
+    toast(e.error || '登録に失敗しました', 'd')
+    if (btn) { btn.disabled = false; btn.textContent = '登録を完了する' }
   }
 }
 </script>
