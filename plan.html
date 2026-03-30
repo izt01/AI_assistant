@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
+<script src="https://js.stripe.com/v3/"></script>
 <title>プラン・課金 — Lumina AI</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#c9a84c">
@@ -39,7 +40,7 @@
   <div id="sidebar-root"></div>
   <div class="main-wrap">
     <div id="header-root"></div>
-    <div class="page-body wide" style="animation:fadeUp .3s ease both;margin:0 auto">
+    <div class="page-body wide" style="animation:fadeUp .3s ease both">
       <div class="tabs">
         <button class="tb active" onclick="showTab('plans',this)">プラン比較</button>
         <button class="tb" onclick="showTab('billing',this)">請求・支払い</button>
@@ -137,7 +138,7 @@ let user = null;
 })()
 
 function init() {
-  buildSidebar('plan')
+  document.getElementById('sidebar-root').innerHTML = buildSidebar('plan')
   // buildHeaderはvoid関数のため直接呼び出す（innerHTML代入は不可）
   buildHeader('プラン・課金', 'プランの確認・変更')
   // topbarに戻るボタン＋ナビゲーションボタンを追加
@@ -272,25 +273,157 @@ function changePlan(plan) {
   })
 }
 
+// Stripeの公開鍵（環境変数から取得。フロントに埋め込む公開鍵のみ）
+let _stripe = null
+async function _getStripe() {
+  if (_stripe) return _stripe
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json())
+    if (cfg.stripe_publishable_key) {
+      _stripe = Stripe(cfg.stripe_publishable_key)
+    }
+  } catch(e) {}
+  return _stripe
+}
+
 async function applyPlan(plan) {
   const info = PLANS[plan]
+  const isUpgrade = (planRank[plan] ?? 0) > (planRank[user.plan] ?? 0)
   const btn = document.querySelector('.m-foot .btn-gold')
   if (btn) { btn.disabled = true; btn.textContent = '処理中...' }
+
   try {
     const res = await apiRequest('/user/plan', { method: 'PUT', body: { plan } })
-    // キャッシュ更新
-    const u = getCachedUser() || {}
-    u.plan  = res.plan
-    u.limit = res.limit
-    u.usage_limit = res.limit
-    setCachedUser({ ...u, ...res.user })
+
+    // ── カード情報入力が必要（新規サブスク・初回）──
+    if (res.requires_payment_method) {
+      closeModal()
+      await _showCardInputModal(plan, res.setup_intent_client_secret, res.customer_id)
+      return
+    }
+
+    // ── 3Dセキュア等の追加認証が必要 ──
+    if (res.requires_action) {
+      closeModal()
+      const stripe = await _getStripe()
+      if (!stripe) { toast('Stripe未設定です', 'd'); return }
+      const { error } = await stripe.confirmCardPayment(res.payment_intent_client_secret)
+      if (error) {
+        toast(error.message || '認証に失敗しました', 'd')
+        return
+      }
+      toast(`${info.name}プランへのアップグレードが完了しました！`, 's')
+      _updatePlanCache(res)
+      setTimeout(() => location.reload(), 900)
+      return
+    }
+
+    // ── 即時完了（ダウングレード・既存サブスク更新）──
+    _updatePlanCache(res)
     closeModal()
     const dir = res.direction === 'upgrade' ? 'アップグレード' : 'プラン変更'
     toast(`${info.name}プランへの${dir}が完了しました！`, 's')
     setTimeout(() => location.reload(), 900)
+
   } catch (e) {
     closeModal()
     toast(e.error || 'プラン変更に失敗しました', 'd')
+    if (btn) { btn.disabled = false; btn.textContent = `${info.name}に変更する` }
+  }
+}
+
+function _updatePlanCache(res) {
+  const u = getCachedUser() || {}
+  if (res.user) {
+    setCachedUser({ ...u, ...res.user })
+  } else {
+    u.plan = res.plan; u.limit = res.limit; u.usage_limit = res.limit
+    setCachedUser(u)
+  }
+}
+
+async function _showCardInputModal(plan, clientSecret, customerId) {
+  const stripe = await _getStripe()
+  if (!stripe) {
+    toast('決済システムが利用できません。管理者にお問い合わせください', 'd')
+    return
+  }
+  const info = PLANS[plan]
+
+  showModal({
+    title: `💳 お支払い情報の入力`,
+    wide: true,
+    body: `
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+        <strong>${info.name}プラン</strong>（¥${info.price.toLocaleString()}/月）のお支払い情報を入力してください。<br>
+        カード情報はStripeによって安全に処理されます。当システムのサーバーには保存されません。
+      </p>
+      <div id="stripe-card-element" style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin-bottom:8px"></div>
+      <div id="stripe-card-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-top:4px"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;display:flex;align-items:center;gap:4px">
+        🔒 SSL暗号化・Stripeによる安全な処理
+      </div>`,
+    actions: [
+      { label: 'キャンセル', cls: 'btn-g', fn: 'closeModal()' },
+      { label: `${info.name}プランを開始する`, cls: 'btn-gold', fn: `_submitCard('${plan}','${clientSecret}','${customerId}')` },
+    ]
+  })
+
+  // Stripeのカード入力UIをマウント
+  setTimeout(() => {
+    const elements = stripe.elements()
+    window._stripeCardElement = elements.create('card', {
+      style: {
+        base: { fontSize: '14px', color: 'var(--ink, #333)', fontFamily: 'inherit' }
+      }
+    })
+    window._stripeCardElement.mount('#stripe-card-element')
+    window._stripeCardElement.on('change', e => {
+      document.getElementById('stripe-card-error').textContent = e.error ? e.error.message : ''
+    })
+  }, 100)
+}
+
+async function _submitCard(plan, clientSecret, customerId) {
+  const stripe = await _getStripe()
+  const btn = document.querySelector('.m-foot .btn-gold')
+  if (btn) { btn.disabled = true; btn.textContent = '処理中...' }
+
+  try {
+    // SetupIntentでカードを確認・保存
+    const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, {
+      payment_method: { card: window._stripeCardElement }
+    })
+
+    if (error) {
+      document.getElementById('stripe-card-error').textContent = error.message
+      if (btn) { btn.disabled = false; btn.textContent = `${PLANS[plan].name}プランを開始する` }
+      return
+    }
+
+    // payment_method_idをサーバーに渡してサブスク作成
+    const res = await apiRequest('/user/plan', {
+      method: 'PUT',
+      body: { plan, payment_method_id: setupIntent.payment_method }
+    })
+
+    if (res.requires_action) {
+      const { error: confirmError } = await stripe.confirmCardPayment(res.payment_intent_client_secret)
+      if (confirmError) {
+        toast(confirmError.message || '認証に失敗しました', 'd')
+        closeModal()
+        return
+      }
+    }
+
+    _updatePlanCache(res)
+    closeModal()
+    toast(`${PLANS[plan].name}プランへのアップグレードが完了しました！`, 's')
+    setTimeout(() => location.reload(), 900)
+
+  } catch(e) {
+    toast(e.error || '決済に失敗しました', 'd')
+    if (btn) { btn.disabled = false; btn.textContent = `${PLANS[plan].name}プランを開始する` }
   }
 }
 

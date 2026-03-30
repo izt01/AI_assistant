@@ -8,3 +8,4 @@ pyyaml
 jinja2
 bcrypt
 PyJWT
+stripe>=7.0.0
