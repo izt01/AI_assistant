@@ -1400,6 +1400,17 @@ def change_user_plan():
             )
             existing_sub_id = existing_sub_row.get("stripe_subscription_id") if existing_sub_row else None
 
+            # キャンセル済みサブスクの場合は existing_sub_id をクリアして新規作成へ
+            if existing_sub_id:
+                try:
+                    sub = _stripe.Subscription.retrieve(existing_sub_id)
+                    if sub.get("status") in ("canceled", "incomplete_expired"):
+                        db_exec("UPDATE lu_users SET stripe_subscription_id=NULL WHERE id=%s", (uid,))
+                        existing_sub_id = None
+                except _stripe.error.InvalidRequestError:
+                    db_exec("UPDATE lu_users SET stripe_subscription_id=NULL WHERE id=%s", (uid,))
+                    existing_sub_id = None
+
             if existing_sub_id:
                 # 既存サブスクをアップグレード（即時適用）
                 sub = _stripe.Subscription.retrieve(existing_sub_id)
