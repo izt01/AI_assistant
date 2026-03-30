@@ -398,6 +398,9 @@ with app.app_context():
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE lu_match_scores ADD COLUMN IF NOT EXISTS gourmet_score FLOAT NOT NULL DEFAULT 0.0",
         # lu_users への成長追跡カラム追加（DB_今後）
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(100)",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(100)",
+        "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMP",
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS onboarding_done BOOLEAN DEFAULT FALSE",
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS first_chat_at TIMESTAMP",
         "ALTER TABLE lu_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP",
@@ -1306,43 +1309,6 @@ def login():
 def me():
     return jsonify({"user": serialize_user(g.current_user)})
 
-@app.route("/api/user/me", methods=["PUT"])
-@auth_required
-def update_me():
-    """ユーザー自身の名前・メールアドレスを更新"""
-    import re as _re
-    uid = str(g.current_user["id"])
-    d   = request.json or {}
-    sets, vals = [], []
-
-    nickname = (d.get("nickname") or "").strip()
-    email    = (d.get("email") or "").strip().lower()
-
-    if not nickname and not email:
-        return jsonify({"error": "更新フィールドがありません"}), 400
-
-    if nickname:
-        if len(nickname) > 50:
-            return jsonify({"error": "お名前は50文字以内で入力してください"}), 400
-        sets.append("nickname=%s"); vals.append(nickname)
-
-    if email:
-        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-            return jsonify({"error": "メールアドレスの形式が正しくありません"}), 400
-        dup = db_exec(
-            "SELECT id FROM lu_users WHERE email=%s AND id!=%s",
-            (email, uid), fetch="one"
-        )
-        if dup:
-            return jsonify({"error": "そのメールアドレスはすでに使用されています"}), 409
-        sets.append("email=%s"); vals.append(email)
-
-    vals.append(uid)
-    db_exec(f"UPDATE lu_users SET {','.join(sets)},updated_at=NOW() WHERE id=%s", vals)
-
-    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
-    return jsonify({"message": "プロフィールを更新しました", "user": serialize_user(updated)})
-
 @app.route("/api/auth/logout", methods=["POST"])
 @auth_required
 def logout():
@@ -1354,9 +1320,54 @@ def logout():
 # ══════════════════════════════════════════════════════════════
 PLAN_PRICES = {"free": 0, "pro": 980, "master": 2980}
 
+# ══════════════════════════════════════════════════════════════
+#  Stripe サブスクリプション課金
+#  環境変数:
+#    STRIPE_SECRET_KEY      : sk_live_xxx  (本番) / sk_test_xxx (テスト)
+#    STRIPE_WEBHOOK_SECRET  : whsec_xxx    (Webhook署名検証用)
+#    STRIPE_PRICE_PRO       : price_xxx    (Proプランの Price ID)
+#    STRIPE_PRICE_MASTER    : price_xxx    (MasterプランのPrice ID)
+# ══════════════════════════════════════════════════════════════
+import stripe as _stripe
+
+_stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
+
+# Stripe Price ID → プラン名のマッピング
+STRIPE_PRICE_MAP = {
+    os.getenv("STRIPE_PRICE_PRO",    ""): "pro",
+    os.getenv("STRIPE_PRICE_MASTER", ""): "master",
+}
+PLAN_TO_STRIPE_PRICE = {v: k for k, v in STRIPE_PRICE_MAP.items() if k}
+
+
+def _get_or_create_stripe_customer(uid: str, email: str, nickname: str) -> str:
+    """StripeのCustomer IDを取得または新規作成して返す"""
+    row = db_exec(
+        "SELECT stripe_customer_id FROM lu_users WHERE id=%s", (uid,), fetch="one"
+    )
+    if row and row.get("stripe_customer_id"):
+        return row["stripe_customer_id"]
+    customer = _stripe.Customer.create(
+        email=email,
+        name=nickname,
+        metadata={"user_id": uid},
+    )
+    db_exec(
+        "UPDATE lu_users SET stripe_customer_id=%s WHERE id=%s",
+        (customer["id"], uid)
+    )
+    return customer["id"]
+
+
 @app.route("/api/user/plan", methods=["PUT"])
 @auth_required
 def change_user_plan():
+    """
+    プラン変更エントリーポイント。
+    - アップグレード: Stripeサブスク作成 → クライアント側でCard確認 → Webhook受信でDB更新
+    - ダウングレード: Stripeサブスクキャンセル(期末) → 即時DB更新(フロントの表示用)
+    - freeへのダウングレード: 即時解約
+    """
     uid  = str(g.current_user["id"])
     data = request.json or {}
     plan = data.get("plan", "")
@@ -1367,33 +1378,235 @@ def change_user_plan():
     if plan == current_plan:
         return jsonify({"error": "現在と同じプランです"}), 400
 
-    # ダウングレード時は usage_count をリセットしない（次回更新日まで現プランを維持）
-    # アップグレード時は即時適用（usage_count は据え置き）
+    is_upgrade = PLAN_PRICES.get(plan, 0) > PLAN_PRICES.get(current_plan, 0)
+
+    # ── アップグレード ────────────────────────────────────────
+    if is_upgrade:
+        if not _stripe.api_key:
+            # Stripe未設定時はフォールバック（開発環境用）
+            return _plan_change_fallback(uid, plan, current_plan, "upgrade")
+
+        price_id = PLAN_TO_STRIPE_PRICE.get(plan)
+        if not price_id:
+            return jsonify({"error": f"Stripe Price IDが未設定です（{plan}）"}), 500
+
+        try:
+            u = g.current_user
+            customer_id = _get_or_create_stripe_customer(uid, u["email"], u["nickname"])
+
+            # 既存サブスクがあれば更新、なければ新規作成
+            existing_sub_row = db_exec(
+                "SELECT stripe_subscription_id FROM lu_users WHERE id=%s", (uid,), fetch="one"
+            )
+            existing_sub_id = existing_sub_row.get("stripe_subscription_id") if existing_sub_row else None
+
+            if existing_sub_id:
+                # 既存サブスクをアップグレード（即時適用）
+                sub = _stripe.Subscription.retrieve(existing_sub_id)
+                _stripe.Subscription.modify(
+                    existing_sub_id,
+                    items=[{"id": sub["items"]["data"][0]["id"], "price": price_id}],
+                    proration_behavior="create_prorations",
+                )
+                # DBを即時更新
+                new_limit = PLAN_LIMITS[plan]
+                db_exec(
+                    "UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s",
+                    (plan, uid)
+                )
+                updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+                return jsonify({"ok": True, "direction": "upgrade", "plan": plan,
+                                "limit": new_limit, "user": serialize_user(dict(updated))})
+            else:
+                # 新規サブスクリプション作成
+                # payment_method が必要 → クライアントからSetupIntentを経由して取得
+                payment_method_id = data.get("payment_method_id")
+                if not payment_method_id:
+                    # SetupIntentを作成してクライアントに返す（カード情報入力フロー）
+                    setup_intent = _stripe.SetupIntent.create(
+                        customer=customer_id,
+                        usage="off_session",
+                        metadata={"user_id": uid, "plan": plan},
+                    )
+                    return jsonify({
+                        "requires_payment_method": True,
+                        "setup_intent_client_secret": setup_intent["client_secret"],
+                        "customer_id": customer_id,
+                        "plan": plan,
+                    })
+
+                # payment_method_idが渡された → サブスク作成
+                _stripe.PaymentMethod.attach(payment_method_id, customer=customer_id)
+                _stripe.Customer.modify(customer_id,
+                    invoice_settings={"default_payment_method": payment_method_id})
+
+                sub = _stripe.Subscription.create(
+                    customer=customer_id,
+                    items=[{"price": price_id}],
+                    default_payment_method=payment_method_id,
+                    expand=["latest_invoice.payment_intent"],
+                    metadata={"user_id": uid, "plan": plan},
+                )
+
+                # 決済状態の確認
+                pi = sub["latest_invoice"]["payment_intent"]
+                if pi["status"] == "succeeded":
+                    # 即時成功 → DBを更新
+                    new_limit = PLAN_LIMITS[plan]
+                    db_exec(
+                        "UPDATE lu_users SET plan=%s, stripe_subscription_id=%s, updated_at=NOW() WHERE id=%s",
+                        (plan, sub["id"], uid)
+                    )
+                    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+                    return jsonify({"ok": True, "direction": "upgrade", "plan": plan,
+                                    "limit": new_limit, "user": serialize_user(dict(updated))})
+                elif pi["status"] == "requires_action":
+                    # 3Dセキュア等の追加認証が必要
+                    return jsonify({
+                        "requires_action": True,
+                        "payment_intent_client_secret": pi["client_secret"],
+                        "subscription_id": sub["id"],
+                        "plan": plan,
+                    })
+                else:
+                    _stripe.Subscription.cancel(sub["id"])
+                    return jsonify({"error": "決済に失敗しました。カード情報をご確認ください"}), 402
+
+        except _stripe.error.CardError as e:
+            return jsonify({"error": e.user_message or "カードエラーが発生しました"}), 402
+        except _stripe.error.StripeError as e:
+            print(f"[Stripe] {e}")
+            return jsonify({"error": "決済処理中にエラーが発生しました"}), 500
+
+    # ── ダウングレード ────────────────────────────────────────
+    else:
+        if _stripe.api_key:
+            sub_row = db_exec(
+                "SELECT stripe_subscription_id FROM lu_users WHERE id=%s", (uid,), fetch="one"
+            )
+            sub_id = sub_row.get("stripe_subscription_id") if sub_row else None
+            if sub_id:
+                try:
+                    if plan == "free":
+                        # freeへの変更は即時キャンセル
+                        _stripe.Subscription.cancel(sub_id)
+                        db_exec(
+                            "UPDATE lu_users SET stripe_subscription_id=NULL WHERE id=%s", (uid,)
+                        )
+                    else:
+                        # 他プランへのダウングレードは期末まで現プランを維持
+                        sub = _stripe.Subscription.retrieve(sub_id)
+                        price_id = PLAN_TO_STRIPE_PRICE.get(plan)
+                        if price_id:
+                            _stripe.Subscription.modify(
+                                sub_id,
+                                items=[{"id": sub["items"]["data"][0]["id"], "price": price_id}],
+                                proration_behavior="none",
+                            )
+                except _stripe.error.StripeError as e:
+                    print(f"[Stripe downgrade] {e}")
+
+        return _plan_change_fallback(uid, plan, current_plan, "downgrade")
+
+
+def _plan_change_fallback(uid: str, plan: str, current_plan: str, direction: str):
+    """Stripe未設定時または即時DB更新が必要なときのフォールバック"""
     new_limit = PLAN_LIMITS[plan]
-    db_exec(
-        "UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s",
-        (plan, uid)
-    )
-
-    # 課金ログ（本番ではStripe連携に置き換える）
-    direction = "upgrade" if PLAN_PRICES.get(plan, 0) > PLAN_PRICES.get(current_plan, 0) else "downgrade"
-    try:
-        db_exec(
-            "INSERT INTO admin_cost_logs (user_id, month, model, input_tokens, output_tokens, cost_usd, recorded_at) "
-            "VALUES (%s, to_char(NOW(),'YYYY-MM'), 'plan_change', 0, 0, %s, NOW())",
-            (uid, PLAN_PRICES.get(plan, 0) / 150)  # 円→USD概算
-        )
-    except Exception:
-        pass  # ログ失敗は無視
-
-    updated_user = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
+    db_exec("UPDATE lu_users SET plan=%s, updated_at=NOW() WHERE id=%s", (plan, uid))
+    updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
     return jsonify({
-        "ok": True,
-        "direction": direction,
-        "plan": plan,
-        "limit": new_limit,
-        "user": serialize_user(dict(updated_user))
+        "ok": True, "direction": direction, "plan": plan,
+        "limit": new_limit, "user": serialize_user(dict(updated))
     })
+
+
+# ── Stripe Webhook ────────────────────────────────────────────
+@app.route("/api/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    """
+    Stripeからのイベントを受信してDBを更新する。
+    署名検証により改ざんを防止する。
+    """
+    payload    = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+    if not webhook_secret:
+        return jsonify({"error": "Webhook secret not configured"}), 500
+
+    try:
+        event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except _stripe.error.SignatureVerificationError:
+        return jsonify({"error": "Invalid signature"}), 400
+
+    etype = event["type"]
+    obj   = event["data"]["object"]
+
+    # ── 決済成功 → プランをDBに反映 ───────────────────────────
+    if etype == "invoice.payment_succeeded":
+        sub_id  = obj.get("subscription")
+        user_id = obj.get("metadata", {}).get("user_id")
+        if not user_id and sub_id:
+            sub = _stripe.Subscription.retrieve(sub_id)
+            user_id = sub.get("metadata", {}).get("user_id")
+        if user_id and sub_id:
+            sub = _stripe.Subscription.retrieve(sub_id)
+            price_id = sub["items"]["data"][0]["price"]["id"]
+            plan = STRIPE_PRICE_MAP.get(price_id, "free")
+            new_limit = PLAN_LIMITS.get(plan, 10)
+            db_exec(
+                "UPDATE lu_users SET plan=%s, stripe_subscription_id=%s, updated_at=NOW() WHERE id=%s",
+                (plan, sub_id, user_id)
+            )
+            print(f"[Stripe Webhook] invoice.payment_succeeded: user={user_id} plan={plan}")
+
+    # ── 決済失敗 → プランをfreeに戻す ─────────────────────────
+    elif etype == "invoice.payment_failed":
+        sub_id  = obj.get("subscription")
+        user_id = obj.get("metadata", {}).get("user_id")
+        if not user_id and sub_id:
+            sub = _stripe.Subscription.retrieve(sub_id)
+            user_id = sub.get("metadata", {}).get("user_id")
+        if user_id:
+            db_exec(
+                "UPDATE lu_users SET plan='free', stripe_subscription_id=NULL, updated_at=NOW() WHERE id=%s",
+                (user_id,)
+            )
+            print(f"[Stripe Webhook] invoice.payment_failed: user={user_id} → free")
+
+    # ── サブスク解約完了 → freeに戻す ─────────────────────────
+    elif etype == "customer.subscription.deleted":
+        sub_id  = obj["id"]
+        user_id = obj.get("metadata", {}).get("user_id")
+        if not user_id:
+            row = db_exec(
+                "SELECT id FROM lu_users WHERE stripe_subscription_id=%s", (sub_id,), fetch="one"
+            )
+            user_id = str(row["id"]) if row else None
+        if user_id:
+            db_exec(
+                "UPDATE lu_users SET plan='free', stripe_subscription_id=NULL, updated_at=NOW() WHERE id=%s",
+                (user_id,)
+            )
+            print(f"[Stripe Webhook] subscription.deleted: user={user_id} → free")
+
+    # ── 月次更新 → usage_countをリセット ─────────────────────
+    elif etype == "customer.subscription.updated":
+        sub_id  = obj["id"]
+        user_id = obj.get("metadata", {}).get("user_id")
+        current_period_start = obj.get("current_period_start")
+        if user_id and current_period_start:
+            # 新しい請求期間の開始 = 月次リセット
+            import datetime as _dt
+            now_ts = int(_dt.datetime.utcnow().timestamp())
+            if abs(now_ts - current_period_start) < 3600:  # 1時間以内なら月次更新と判断
+                db_exec(
+                    "UPDATE lu_users SET usage_count=0, updated_at=NOW() WHERE id=%s",
+                    (user_id,)
+                )
+                print(f"[Stripe Webhook] subscription.updated (renewal): user={user_id} usage_count reset")
+
+    return jsonify({"received": True})
 
 # ══════════════════════════════════════════════════════════════
 #  プロフィール・好み
@@ -2785,9 +2998,10 @@ def _get_budget_warning() -> str:
 def get_frontend_config():
     """フロントエンドが楽天APIを直接叩くために必要な公開設定を返す"""
     return jsonify({
-        "rakuten_app_id":  os.getenv("RAKUTEN_APP_ID", ""),
-        "fallback_mode":   is_fallback_mode(),
-        "budget_warning":  _get_budget_warning(),  # none/warning/critical
+        "rakuten_app_id":         os.getenv("RAKUTEN_APP_ID", ""),
+        "fallback_mode":          is_fallback_mode(),
+        "budget_warning":         _get_budget_warning(),
+        "stripe_publishable_key": os.getenv("STRIPE_PUBLISHABLE_KEY", ""),  # pk_live_xxx
     })
 
 @app.route("/api/system/status", methods=["GET"])
