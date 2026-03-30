@@ -118,14 +118,11 @@
   </div>
 </div>
 
-<script src="shared.js?v=1774838878"></script>
+<script src="shared.js"></script>
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank: shared.js からのフォールバック定義（キャッシュ対策）
-if (typeof planRank === 'undefined') {
-  var planRank = {free:0, pro:1, master:2};
-}
+// planRank は shared.js で定義済み
 let user = null;
 
 (async () => {
