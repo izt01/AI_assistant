@@ -137,12 +137,12 @@ function showUpgradeModal(currentPlan){
   ]
   const cards=plans.filter(p=>p.key!==currentPlan).map(p=>`
     <a href="plan.html?upgrade=${p.key}"
-       style="display:block;border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s;text-decoration:none;color:inherit"
+       style="display:block;border:2px solid ${p.color};border-radius:12px;padding:16px;margin-bottom:10px;transition:background .15s;text-decoration:none;color:inherit"
        onmouseenter="this.style.background='rgba(201,168,76,.06)'"
        onmouseleave="this.style.background=''">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:${p.color}">${p.label}</span>
-        <span style="font-size:20px;font-weight:700;color:var(--ink)">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
+        <span style="font-size:20px;font-weight:700">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
       </div>
       <div style="margin-top:6px;font-size:13px;color:var(--muted)">${p.limit} · ${p.desc}</div>
       <div style="margin-top:8px;font-size:12px;color:var(--gold2);font-weight:600">→ このプランで始める ›</div>
@@ -155,32 +155,6 @@ function showUpgradeModal(currentPlan){
   })
 }
 
-// ── Stripe アップグレードフロー（shared: chat.html / plan.html 共通）──────
-
-let _stripeInstance = null
-async function _getStripe() {
-  if (_stripeInstance) return _stripeInstance
-  try {
-    const cfg = await fetch('/api/config').then(r => r.json())
-    if (cfg.stripe_publishable_key && typeof Stripe !== 'undefined') {
-      _stripeInstance = Stripe(cfg.stripe_publishable_key)
-    }
-  } catch(e) {}
-  return _stripeInstance
-}
-
-function _updatePlanCache(res) {
-  const u = getCachedUser() || {}
-  if (res.user) {
-    setCachedUser({ ...u, ...res.user })
-  } else {
-    u.plan = res.plan
-    u.usage_limit = res.limit
-    u.usage_count = 0
-    setCachedUser(u)
-  }
-}
-
 function doUpgrade(plan) {
   if (typeof changePlan === 'function') {
     closeModal()
@@ -189,129 +163,7 @@ function doUpgrade(plan) {
     location.href = 'plan.html?upgrade=' + plan
   }
 }
-}
-}
 
-async function _doUpgradeDirect(plan) {
-  const info = PLANS[plan]
-  if (!info) return
-  showModal({
-    title: `⬆ ${info.name}にアップグレード`,
-    body: `<p style="font-size:13px;color:var(--muted);line-height:1.8">
-      月額: <strong>¥${info.price.toLocaleString()}</strong> · 月<strong>${info.limit}回</strong>まで会話可能<br>
-      <span style="font-size:12px">✅ 今すぐ適用されます。追加の会話が可能になります。</span>
-    </p>`,
-    actions: [
-      {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
-      {label:`${info.name}に変更する`, cls:'btn-gold', fn:`_applyPlanShared('${plan}')`},
-    ]
-  })
-}
-
-async function _applyPlanShared(plan) {
-  const info = PLANS[plan]
-  const btn = document.querySelector('.m-foot .btn-gold')
-  if (btn) { btn.disabled = true; btn.textContent = '処理中...' }
-
-  try {
-    const res = await apiRequest('/user/plan', { method: 'PUT', body: { plan } })
-
-    if (res.requires_payment_method) {
-      closeModal()
-      await _showCardInputModalShared(plan, res.setup_intent_client_secret, res.customer_id)
-      return
-    }
-
-    if (res.requires_action) {
-      closeModal()
-      const stripe = await _getStripe()
-      if (!stripe) { toast('Stripe未設定です', 'd'); return }
-      const { error } = await stripe.confirmCardPayment(res.payment_intent_client_secret)
-      if (error) { toast(error.message || '認証に失敗しました', 'd'); return }
-      _updatePlanCache(res)
-      toast(`${info.name}プランへのアップグレードが完了しました！`, 's')
-      setTimeout(() => location.reload(), 900)
-      return
-    }
-
-    _updatePlanCache(res)
-    closeModal()
-    toast(`${info.name}プランへのアップグレードが完了しました！`, 's')
-    setTimeout(() => location.reload(), 900)
-
-  } catch(e) {
-    closeModal()
-    toast(e.error || 'プラン変更に失敗しました', 'd')
-  }
-}
-
-async function _showCardInputModalShared(plan, clientSecret, customerId) {
-  const stripe = await _getStripe()
-  if (!stripe) {
-    toast('決済システムが利用できません', 'd')
-    return
-  }
-  const info = PLANS[plan]
-  showModal({
-    title: '💳 お支払い情報の入力',
-    wide: true,
-    body: `
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.7">
-        <strong>${info.name}プラン</strong>（¥${info.price.toLocaleString()}/月）のお支払い情報を入力してください。<br>
-        カード情報はStripeによって安全に処理されます。
-      </p>
-      <div id="stripe-card-element" style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin-bottom:8px"></div>
-      <div id="stripe-card-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-top:4px"></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">🔒 SSL暗号化・Stripeによる安全な処理</div>`,
-    actions: [
-      { label: 'キャンセル', cls: 'btn-g', fn: 'closeModal()' },
-      { label: `${info.name}プランを開始する`, cls: 'btn-gold', fn: `_submitCardShared('${plan}','${clientSecret}','${customerId}')` },
-    ]
-  })
-  setTimeout(() => {
-    const elements = stripe.elements()
-    window._stripeCardElement = elements.create('card', {
-      style: { base: { fontSize: '14px', color: '#333', fontFamily: 'inherit' } }
-    })
-    window._stripeCardElement.mount('#stripe-card-element')
-    window._stripeCardElement.on('change', e => {
-      const el = document.getElementById('stripe-card-error')
-      if (el) el.textContent = e.error ? e.error.message : ''
-    })
-  }, 100)
-}
-
-async function _submitCardShared(plan, clientSecret, customerId) {
-  const stripe = await _getStripe()
-  const btn = document.querySelector('.m-foot .btn-gold')
-  if (btn) { btn.disabled = true; btn.textContent = '処理中...' }
-  try {
-    const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, {
-      payment_method: { card: window._stripeCardElement }
-    })
-    if (error) {
-      const el = document.getElementById('stripe-card-error')
-      if (el) el.textContent = error.message
-      if (btn) { btn.disabled = false; btn.textContent = `${PLANS[plan].name}プランを開始する` }
-      return
-    }
-    const res = await apiRequest('/user/plan', {
-      method: 'PUT',
-      body: { plan, payment_method_id: setupIntent.payment_method }
-    })
-    if (res.requires_action) {
-      const { error: ce } = await stripe.confirmCardPayment(res.payment_intent_client_secret)
-      if (ce) { toast(ce.message || '認証に失敗しました', 'd'); closeModal(); return }
-    }
-    _updatePlanCache(res)
-    closeModal()
-    toast(`${PLANS[plan].name}プランへのアップグレードが完了しました！`, 's')
-    setTimeout(() => location.reload(), 900)
-  } catch(e) {
-    toast(e.error || '決済に失敗しました', 'd')
-    if (btn) { btn.disabled = false; btn.textContent = `${PLANS[plan].name}プランを開始する` }
-  }
-}
 function showLimitReachedModal(){
   showModal({title:'今月の利用上限に達しました',
     body:'<p style="font-size:13px;color:var(--muted)">Masterプランの月間上限(200回)に達しました。来月またご利用ください。</p>',
