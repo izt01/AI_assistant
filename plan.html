@@ -122,8 +122,19 @@
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank: shared.js のキャッシュ問題に備え plan.html 内でも定義
+// planRank / _updatePlanCache: shared.js のキャッシュ問題に備え plan.html 内でも直接定義
 var planRank = {free:0, pro:1, master:2};
+function _updatePlanCache(res) {
+  try {
+    const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
+    if (res && res.user) {
+      if (typeof setCachedUser === 'function') setCachedUser({ ...u, ...res.user });
+    } else if (res) {
+      u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0;
+      if (typeof setCachedUser === 'function') setCachedUser(u);
+    }
+  } catch(e) { console.warn('_updatePlanCache error', e); }
+}
 let user = null;
 
 (async () => {
