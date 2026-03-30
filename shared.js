@@ -119,7 +119,7 @@ function showModal({title,body,actions=[],wide=false,closeBtn=true}){
   root.classList.add('open')
   root.innerHTML=`
     <div class="m-backdrop" onclick="closeModal()"></div>
-    <div class="m-box${wide?' wide':''}" style="${wide?'max-width:580px':''}">
+    <div class="m-box${wide?' wide':''}" style="${wide?'max-width:580px':''}" onclick="event.stopPropagation()">
       ${closeBtn?'<div class="m-close" onclick="closeModal()">✕</div>':''}
       <div class="m-title">${title}</div>
       <div class="m-body">${body}</div>
@@ -137,17 +137,17 @@ function showUpgradeModal(currentPlan){
     {key:'master',label:'Master',price:'¥2,980',limit:'200回/月',color:'#e8c97a',desc:'使えば使うほど賢くなる'},
   ]
   const cards=plans.filter(p=>p.key!==currentPlan).map(p=>`
-    <div style="border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s"
-         onmouseenter="this.style.background='rgba(201,168,76,.06)'"
-         onmouseleave="this.style.background=''"
-         onclick="location.href='plan.html?upgrade='+p.key">
+    <a href="plan.html?upgrade=${p.key}"
+       style="display:block;border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s;text-decoration:none;color:inherit"
+       onmouseenter="this.style.background='rgba(201,168,76,.06)'"
+       onmouseleave="this.style.background=''">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:${p.color}">${p.label}</span>
-        <span style="font-size:20px;font-weight:700">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
+        <span style="font-size:20px;font-weight:700;color:var(--ink)">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
       </div>
       <div style="margin-top:6px;font-size:13px;color:var(--muted)">${p.limit} · ${p.desc}</div>
-      <div style="margin-top:8px;font-size:12px;color:var(--gold2);font-weight:600">→ このプランで始める</div>
-    </div>`).join('')
+      <div style="margin-top:8px;font-size:12px;color:var(--gold2);font-weight:600">→ このプランで始める ›</div>
+    </a>`).join('')
   showModal({
     title:'今月の利用上限に達しました',
     body:`<p style="font-size:13px;color:var(--muted);margin-bottom:16px">プランをアップグレードして制限なしでAIと対話しましょう。会話が増えるほどあなた専用のAIに成長します。</p>${cards}
@@ -184,13 +184,12 @@ function _updatePlanCache(res) {
 
 function doUpgrade(plan) {
   if (typeof changePlan === 'function') {
-    // plan.html上では changePlan() を使う（確認モーダル付き）
     closeModal()
     setTimeout(() => changePlan(plan), 150)
   } else {
-    // chat.html等では plan.html に遷移して決済を完結させる
     location.href = 'plan.html?upgrade=' + plan
   }
+}
 }
 }
 
