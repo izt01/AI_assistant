@@ -122,19 +122,16 @@
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank と _updatePlanCache を plan.html 内で定義（キャッシュ問題対策）
-// var を使用することで shared.js との二重宣言エラーを回避
+// planRank: shared.js のキャッシュ問題対策で plan.html 内に直接定義
+// var を使用 → 万が一 shared.js 側に残っていても再宣言エラーにならない
 var planRank = {free:0, pro:1, master:2};
+// _updatePlanCache: shared.js のキャッシュ問題対策
 function _updatePlanCache(res) {
   try {
-    const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
-    if (res && res.user) {
-      if (typeof setCachedUser === 'function') setCachedUser({ ...u, ...res.user });
-    } else if (res) {
-      u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0;
-      if (typeof setCachedUser === 'function') setCachedUser(u);
-    }
-  } catch(e) { console.warn('_updatePlanCache error', e); }
+    var u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
+    if (res && res.user) { if (typeof setCachedUser === 'function') setCachedUser(Object.assign({}, u, res.user)); }
+    else if (res) { u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0; if (typeof setCachedUser === 'function') setCachedUser(u); }
+  } catch(e) {}
 }
 let user = null;
 
