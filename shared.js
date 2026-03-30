@@ -119,7 +119,7 @@ function showModal({title,body,actions=[],wide=false,closeBtn=true}){
   root.classList.add('open')
   root.innerHTML=`
     <div class="m-backdrop" onclick="closeModal()"></div>
-    <div class="m-box${wide?' wide':''}" style="${wide?'max-width:580px':''}">
+    <div class="m-box${wide?' wide':''}" style="${wide?'max-width:580px':''}" onclick="event.stopPropagation()">
       ${closeBtn?'<div class="m-close" onclick="closeModal()">✕</div>':''}
       <div class="m-title">${title}</div>
       <div class="m-body">${body}</div>
@@ -140,7 +140,7 @@ function showUpgradeModal(currentPlan){
     <div style="border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s"
          onmouseenter="this.style.background='rgba(201,168,76,.06)'"
          onmouseleave="this.style.background=''"
-         onclick="doUpgrade('${p.key}')">
+         onclick="event.stopPropagation();doUpgrade('${p.key}')">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:${p.color}">${p.label}</span>
         <span style="font-size:20px;font-weight:700">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
@@ -186,11 +186,12 @@ function doUpgrade(plan) {
   // plan.html上ではchangePlan()があればそちらを使う（確認モーダル付き）
   if (typeof changePlan === 'function') {
     closeModal()
-    setTimeout(() => changePlan(plan), 100)
+    setTimeout(() => changePlan(plan), 150)
   } else {
     // chat.html等では直接アップグレード処理を実行
+    // closeModal後にイベントが伝播し終わるのを待ってから次モーダルを開く
     closeModal()
-    _doUpgradeDirect(plan)
+    setTimeout(() => _doUpgradeDirect(plan), 150)
   }
 }
 
@@ -242,8 +243,12 @@ async function _applyPlanShared(plan) {
     setTimeout(() => location.reload(), 900)
 
   } catch(e) {
+    console.error('[applyPlan] error:', e)
     closeModal()
-    toast(e.error || 'プラン変更に失敗しました', 'd')
+    const msg = (typeof e === 'object' && e !== null)
+      ? (e.error || e.message || JSON.stringify(e))
+      : String(e)
+    toast(msg || 'プラン変更に失敗しました', 'd')
   }
 }
 
