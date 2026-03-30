@@ -1,4 +1,4 @@
-const CACHE_NAME = "lumina-pwa-v20";  // v20: JSON強制先頭注入・リトライJSON強制・fallbackログ
+const CACHE_NAME = "lumina-pwa-v21";  // v20: JSON強制先頭注入・リトライJSON強制・fallbackログ
 const OFFLINE_URL = "/offline.html";
 // admin系ファイルはキャッシュしない（更新が頻繁なため常にネットワーク取得）
 const NO_CACHE_PATTERNS = [/^\/admin/, /^\/api\//];

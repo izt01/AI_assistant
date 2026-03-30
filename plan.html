@@ -6,6 +6,14 @@
 <link rel="stylesheet" href="shared.css">
 <script src="https://js.stripe.com/v3/"></script>
 <title>プラン・課金 — Lumina AI</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#c9a84c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lumina AI">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <style>
 .plan-card{border:2px solid var(--border);border-radius:18px;padding:22px;position:relative;transition:all .2s;background:var(--surface)}
 .plan-card.current{border-color:var(--gold2);box-shadow:0 0 0 1px var(--gold2),0 8px 30px rgba(201,168,76,.1)}
@@ -122,7 +130,19 @@
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank は shared.js で定義済み
+// planRank / _updatePlanCache: shared.js のキャッシュ問題に備え plan.html 内でも直接定義
+var planRank = {free:0, pro:1, master:2};
+function _updatePlanCache(res) {
+  try {
+    const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
+    if (res && res.user) {
+      if (typeof setCachedUser === 'function') setCachedUser({ ...u, ...res.user });
+    } else if (res) {
+      u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0;
+      if (typeof setCachedUser === 'function') setCachedUser(u);
+    }
+  } catch(e) { console.warn('_updatePlanCache error', e); }
+}
 let user = null;
 
 (async () => {
