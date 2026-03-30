@@ -123,7 +123,7 @@
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
 // planRank / _updatePlanCache: shared.js のキャッシュ問題に備え plan.html 内でも直接定義
-window.planRank = window.planRank || {free:0, pro:1, master:2};
+if (typeof planRank === 'undefined') { var planRank = {free:0, pro:1, master:2}; }
 function _updatePlanCache(res) {
   try {
     const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
@@ -317,7 +317,29 @@ function changePlan(plan) {
   })
 }
 
-// _getStripe / _updatePlanCache は shared.js で定義済みのものを使用
+// _getStripe: shared.js キャッシュ対策でフォールバック定義
+if (typeof _getStripe === 'undefined') {
+  var _stripeInstanceFb = null;
+  window._getStripe = async function() {
+    if (_stripeInstanceFb) return _stripeInstanceFb;
+    try {
+      var cfg = await fetch('/api/config').then(function(r){ return r.json(); });
+      if (cfg.stripe_publishable_key && typeof Stripe !== 'undefined') {
+        _stripeInstanceFb = Stripe(cfg.stripe_publishable_key);
+      }
+    } catch(e) {}
+    return _stripeInstanceFb;
+  };
+}
+if (typeof _updatePlanCache === 'undefined') {
+  window._updatePlanCache = function(res) {
+    try {
+      var u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
+      if (res && res.user) { if (typeof setCachedUser === 'function') setCachedUser(Object.assign({}, u, res.user)); }
+      else if (res) { u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0; if (typeof setCachedUser === 'function') setCachedUser(u); }
+    } catch(e) {}
+  };
+}
 
 async function applyPlan(plan) {
   const info = PLANS[plan]
