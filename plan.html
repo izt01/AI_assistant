@@ -122,7 +122,8 @@
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank は shared.js で定義済み
+// planRank: shared.js のキャッシュ問題に備え plan.html 内でも定義
+var planRank = {free:0, pro:1, master:2};
 let user = null;
 
 (async () => {
