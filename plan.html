@@ -139,6 +139,7 @@ let user = null;
 })()
 
 async function init() {
+  try {
   buildSidebar('plan')
   // buildHeaderはvoid関数のため直接呼び出す（innerHTML代入は不可）
   buildHeader('プラン・課金', 'プランの確認・変更')
@@ -284,7 +285,46 @@ async function init() {
   } catch(e) {
     chartEl.innerHTML = '<div style="color:var(--muted);font-size:12px">データの取得に失敗しました</div>'
   }
+
+  } catch(err) {
+    console.error('[plan.html init error]', err)
+    // プランカードのフォールバック表示
+    const el = document.getElementById('plan-cards')
+    if (el && !el.innerHTML) {
+      _renderPlanCardsFallback()
+    }
+  }
 }
+function _renderPlanCardsFallback() {
+  const planOrder = ['free','pro','master']
+  const el = document.getElementById('plan-cards')
+  if (!el) return
+  el.innerHTML = planOrder.map(p => {
+    const info = PLANS[p]
+    if (!info) return ''
+    const isCurrent = (typeof user !== 'undefined') && user.plan === p
+    const currentRank = planRank[user?.plan] ?? 0
+    const targetRank  = planRank[p] ?? 0
+    const isUpgrade   = targetRank > currentRank
+    const isRec = (user?.plan === 'free' && p === 'pro') || (user?.plan === 'pro' && p === 'master')
+    let btnHtml
+    if (isCurrent) {
+      btnHtml = '<button class="btn btn-g btn-w" disabled>現在のプラン</button>'
+    } else if (isUpgrade) {
+      btnHtml = '<button class="btn btn-gold btn-w" onclick="changePlan(\'' + p + '\')">⬆ アップグレード</button>'
+    } else {
+      btnHtml = '<button class="btn btn-g btn-w" onclick="changePlan(\'' + p + '\')" style="color:var(--subtle)">↓ ダウングレード</button>'
+    }
+    return '<div class="plan-card' + (isCurrent ? ' current' : isRec ? ' recommended' : '') + '">'
+      + (isCurrent ? '<div class="plan-badge-top curr">現在のプラン</div>' : isRec ? '<div class="plan-badge-top rec">おすすめ</div>' : '')
+      + '<div class="plan-name">' + info.name + '</div>'
+      + '<div class="plan-price">¥' + info.price.toLocaleString() + '<span>/月</span></div>'
+      + '<div style="font-size:11px;color:var(--subtle)">月' + info.limit + '回まで</div>'
+      + btnHtml
+      + '</div>'
+  }).join('')
+}
+
 
 function showTab(id, btn) {
   document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none')
