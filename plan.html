@@ -40,7 +40,7 @@
   <div id="sidebar-root"></div>
   <div class="main-wrap">
     <div id="header-root"></div>
-    <div class="page-body wide" style="animation:fadeUp .3s ease both">
+    <div class="page-body wide" style="animation:fadeUp .3s ease both;margin:0 auto;">
       <div class="tabs">
         <button class="tb active" onclick="showTab('plans',this)">プラン比較</button>
         <button class="tb" onclick="showTab('billing',this)">請求・支払い</button>
@@ -138,7 +138,7 @@ let user = null;
 })()
 
 function init() {
-  document.getElementById('sidebar-root').innerHTML = buildSidebar('plan')
+  buildSidebar('plan')
   // buildHeaderはvoid関数のため直接呼び出す（innerHTML代入は不可）
   buildHeader('プラン・課金', 'プランの確認・変更')
   // topbarに戻るボタン＋ナビゲーションボタンを追加
