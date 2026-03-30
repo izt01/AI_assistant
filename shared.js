@@ -136,13 +136,16 @@ function showUpgradeModal(currentPlan){
     {key:'master',label:'Master',price:'¥2,980',limit:'200回/月',color:'#e8c97a',desc:'使えば使うほど賢くなる'},
   ]
   const cards=plans.filter(p=>p.key!==currentPlan).map(p=>`
-    <div style="border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:all .15s"
+    <div style="border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s"
+         onmouseenter="this.style.background='rgba(201,168,76,.06)'"
+         onmouseleave="this.style.background=''"
          onclick="doUpgrade('${p.key}')">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:${p.color}">${p.label}</span>
         <span style="font-size:20px;font-weight:700">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
       </div>
       <div style="margin-top:6px;font-size:13px;color:var(--muted)">${p.limit} · ${p.desc}</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--gold2);font-weight:600">→ このプランで始める</div>
     </div>`).join('')
   showModal({
     title:'今月の利用上限に達しました',
@@ -152,10 +155,10 @@ function showUpgradeModal(currentPlan){
   })
 }
 
-async function doUpgrade(plan){
-  const user=getCachedUser(); if(user){user.plan=plan;user.usage_count=0;setCachedUser(user)}
-  closeModal(); toast(`${PLANS[plan].name}プランにアップグレードしました！`,'s')
-  setTimeout(()=>location.reload(),800)
+function doUpgrade(plan){
+  closeModal()
+  // プランページにパラメータを付けて遷移（plan.html側でアップグレード処理を行う）
+  location.href = 'plan.html?upgrade=' + plan
 }
 function showLimitReachedModal(){
   showModal({title:'今月の利用上限に達しました',

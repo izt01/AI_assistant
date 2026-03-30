@@ -154,9 +154,11 @@ async function init() {
 
   const plan = getPlanInfo(user.plan)
   const upgradeParam = new URLSearchParams(location.search).get('upgrade')
-  if(upgradeParam) {
+  if(upgradeParam && PLANS[upgradeParam]) {
+    // プラン比較タブを表示
     document.querySelectorAll('.tb')[0].click()
-    toast(`${PLANS[upgradeParam].name}プランへのアップグレード画面です`, '')
+    // 少し待ってからアップグレード確認モーダルを自動表示
+    setTimeout(() => changePlan(upgradeParam), 300)
   }
 
   document.getElementById('current-plan-note').innerHTML = `
