@@ -6,14 +6,6 @@
 <link rel="stylesheet" href="shared.css">
 <script src="https://js.stripe.com/v3/"></script>
 <title>プラン・課金 — Lumina AI</title>
-<link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#c9a84c">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Lumina AI">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <style>
 .plan-card{border:2px solid var(--border);border-radius:18px;padding:22px;position:relative;transition:all .2s;background:var(--surface)}
 .plan-card.current{border-color:var(--gold2);box-shadow:0 0 0 1px var(--gold2),0 8px 30px rgba(201,168,76,.1)}
@@ -130,7 +122,8 @@
 <script>
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
-// planRank / _updatePlanCache: shared.js のキャッシュ問題に備え plan.html 内でも直接定義
+// planRank と _updatePlanCache を plan.html 内で定義（キャッシュ問題対策）
+// var を使用することで shared.js との二重宣言エラーを回避
 var planRank = {free:0, pro:1, master:2};
 function _updatePlanCache(res) {
   try {
