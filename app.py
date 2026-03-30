@@ -1780,6 +1780,25 @@ def chat():
     # エージェント決定
     if not agent_name:
         agent_name = route(messages_in)
+        # route() が "general" を返した場合、キーワードベースで再判定する
+        if agent_name == "general":
+            last_msg = messages_in[-1]["content"] if messages_in else ""
+            if any(kw in last_msg for kw in ["レシピ", "料理", "作り方", "献立", "食材", "調理", "美味しい料理", "美味しいレシピ"]):
+                agent_name = "recipe"
+            elif any(kw in last_msg for kw in ["冷蔵庫", "洗濯機", "エアコン", "テレビ", "家電", "照明", "インテリア", "家具"]):
+                agent_name = "appliance"
+            elif any(kw in last_msg for kw in ["旅行", "観光", "ホテル", "温泉", "旅", "宿泊", "出かけたい"]):
+                agent_name = "travel"
+            elif any(kw in last_msg for kw in ["健康", "運動", "ダイエット", "筋トレ", "睡眠", "体調", "フィットネス"]):
+                agent_name = "health"
+            elif any(kw in last_msg for kw in ["DIY", "修理", "ハンドメイド", "リフォーム", "棚", "壁"]):
+                agent_name = "diy"
+            elif any(kw in last_msg for kw in ["レストラン", "食べたい", "外食", "ランチ", "ディナー", "お店", "飲食"]):
+                agent_name = "gourmet"
+            elif any(kw in last_msg for kw in ["買いたい", "欲しい", "購入", "プレゼント", "ギフト", "お土産"]):
+                agent_name = "shopping"
+            if agent_name != "general":
+                print(f"[Router] keyword fallback → agent={agent_name}")
     print(f"[Router] user={uid} ai_type={ai_type} → agent={agent_name}")
 
     # ── フォールバックモードチェック ─────────────────────────────
