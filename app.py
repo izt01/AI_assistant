@@ -1444,13 +1444,15 @@ def change_user_plan():
                     customer=customer_id,
                     items=[{"price": price_id}],
                     default_payment_method=payment_method_id,
-                    expand=["latest_invoice.payment_intent"],
+                    expand=["latest_invoice"],
                     metadata={"user_id": uid, "plan": plan},
                 )
 
-                # 決済状態の確認
-                pi = sub["latest_invoice"]["payment_intent"]
-                if pi["status"] == "succeeded":
+                # 決済状態の確認（新API: payment_intentはInvoiceから削除済み）
+                sub_status = sub["status"]  # active / incomplete / past_due 等
+                latest_invoice = sub["latest_invoice"]
+
+                if sub_status == "active":
                     # 即時成功 → DBを更新
                     new_limit = PLAN_LIMITS[plan]
                     db_exec(
@@ -1460,14 +1462,29 @@ def change_user_plan():
                     updated = db_exec("SELECT * FROM lu_users WHERE id=%s", (uid,), fetch="one")
                     return jsonify({"ok": True, "direction": "upgrade", "plan": plan,
                                     "limit": new_limit, "user": serialize_user(dict(updated))})
-                elif pi["status"] == "requires_action":
-                    # 3Dセキュア等の追加認証が必要
-                    return jsonify({
-                        "requires_action": True,
-                        "payment_intent_client_secret": pi["client_secret"],
-                        "subscription_id": sub["id"],
-                        "plan": plan,
-                    })
+                elif sub_status == "incomplete":
+                    # 追加認証が必要（3Dセキュア等）
+                    # latest_invoiceからPaymentIntentを別途取得
+                    invoice_id = latest_invoice["id"] if latest_invoice else None
+                    client_secret = None
+                    if invoice_id:
+                        try:
+                            inv = _stripe.Invoice.retrieve(invoice_id, expand=["payment_intent"])
+                            pi = inv.get("payment_intent")
+                            if pi:
+                                client_secret = pi["client_secret"]
+                        except Exception:
+                            pass
+                    if client_secret:
+                        return jsonify({
+                            "requires_action": True,
+                            "payment_intent_client_secret": client_secret,
+                            "subscription_id": sub["id"],
+                            "plan": plan,
+                        })
+                    else:
+                        _stripe.Subscription.cancel(sub["id"])
+                        return jsonify({"error": "決済の認証情報が取得できませんでした"}), 402
                 else:
                     _stripe.Subscription.cancel(sub["id"])
                     return jsonify({"error": "決済に失敗しました。カード情報をご確認ください"}), 402
@@ -1542,31 +1559,51 @@ def stripe_webhook():
     etype = event["type"]
     obj   = event["data"]["object"]
 
+    def _get_str(obj, key, default=None):
+        """StripeObjectからstr安全に取得するヘルパー"""
+        try:
+            return obj[key] or default
+        except (KeyError, TypeError):
+            return default
+
+    def _get_meta_user(obj, sub_id=None):
+        """metadataからuser_idを取得（StripeObject対応）"""
+        try:
+            meta = obj["metadata"]
+            uid = meta["user_id"] if meta and "user_id" in meta else None
+        except (KeyError, TypeError):
+            uid = None
+        if not uid and sub_id:
+            try:
+                sub = _stripe.Subscription.retrieve(sub_id)
+                meta = sub["metadata"]
+                uid = meta["user_id"] if meta and "user_id" in meta else None
+            except Exception:
+                pass
+        return uid
+
     # ── 決済成功 → プランをDBに反映 ───────────────────────────
     if etype == "invoice.payment_succeeded":
-        sub_id  = obj.get("subscription")
-        user_id = obj.get("metadata", {}).get("user_id")
-        if not user_id and sub_id:
-            sub = _stripe.Subscription.retrieve(sub_id)
-            user_id = sub.get("metadata", {}).get("user_id")
+        sub_id  = _get_str(obj, "subscription")
+        user_id = _get_meta_user(obj, sub_id)
         if user_id and sub_id:
-            sub = _stripe.Subscription.retrieve(sub_id)
-            price_id = sub["items"]["data"][0]["price"]["id"]
-            plan = STRIPE_PRICE_MAP.get(price_id, "free")
-            new_limit = PLAN_LIMITS.get(plan, 10)
-            db_exec(
-                "UPDATE lu_users SET plan=%s, stripe_subscription_id=%s, updated_at=NOW() WHERE id=%s",
-                (plan, sub_id, user_id)
-            )
-            print(f"[Stripe Webhook] invoice.payment_succeeded: user={user_id} plan={plan}")
+            try:
+                sub = _stripe.Subscription.retrieve(sub_id)
+                price_id = sub["items"]["data"][0]["price"]["id"]
+                plan = STRIPE_PRICE_MAP.get(price_id, "free")
+                new_limit = PLAN_LIMITS.get(plan, 10)
+                db_exec(
+                    "UPDATE lu_users SET plan=%s, stripe_subscription_id=%s, updated_at=NOW() WHERE id=%s",
+                    (plan, sub_id, user_id)
+                )
+                print(f"[Stripe Webhook] invoice.payment_succeeded: user={user_id} plan={plan}")
+            except Exception as e:
+                print(f"[Stripe Webhook] payment_succeeded error: {e}")
 
     # ── 決済失敗 → プランをfreeに戻す ─────────────────────────
     elif etype == "invoice.payment_failed":
-        sub_id  = obj.get("subscription")
-        user_id = obj.get("metadata", {}).get("user_id")
-        if not user_id and sub_id:
-            sub = _stripe.Subscription.retrieve(sub_id)
-            user_id = sub.get("metadata", {}).get("user_id")
+        sub_id  = _get_str(obj, "subscription")
+        user_id = _get_meta_user(obj, sub_id)
         if user_id:
             db_exec(
                 "UPDATE lu_users SET plan='free', stripe_subscription_id=NULL, updated_at=NOW() WHERE id=%s",
@@ -1576,9 +1613,9 @@ def stripe_webhook():
 
     # ── サブスク解約完了 → freeに戻す ─────────────────────────
     elif etype == "customer.subscription.deleted":
-        sub_id  = obj["id"]
-        user_id = obj.get("metadata", {}).get("user_id")
-        if not user_id:
+        sub_id  = _get_str(obj, "id")
+        user_id = _get_meta_user(obj)
+        if not user_id and sub_id:
             row = db_exec(
                 "SELECT id FROM lu_users WHERE stripe_subscription_id=%s", (sub_id,), fetch="one"
             )
@@ -1592,14 +1629,16 @@ def stripe_webhook():
 
     # ── 月次更新 → usage_countをリセット ─────────────────────
     elif etype == "customer.subscription.updated":
-        sub_id  = obj["id"]
-        user_id = obj.get("metadata", {}).get("user_id")
-        current_period_start = obj.get("current_period_start")
+        sub_id  = _get_str(obj, "id")
+        user_id = _get_meta_user(obj)
+        try:
+            current_period_start = obj["current_period_start"]
+        except (KeyError, TypeError):
+            current_period_start = None
         if user_id and current_period_start:
-            # 新しい請求期間の開始 = 月次リセット
             import datetime as _dt
             now_ts = int(_dt.datetime.utcnow().timestamp())
-            if abs(now_ts - current_period_start) < 3600:  # 1時間以内なら月次更新と判断
+            if abs(now_ts - current_period_start) < 3600:
                 db_exec(
                     "UPDATE lu_users SET usage_count=0, updated_at=NOW() WHERE id=%s",
                     (user_id,)
