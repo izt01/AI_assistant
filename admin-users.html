@@ -190,6 +190,91 @@
         </div>
       </div>
 
+      <!-- 個別メール送信 -->
+      <div class="admin-section" style="margin-top:24px">
+        <div class="admin-section-hdr" style="margin-bottom:18px">
+          <div class="admin-section-title">✉️ 個別メール送信</div>
+          <div style="font-size:12px;color:var(--muted)">特定のアドレスまたは登録ユーザーに直接送信</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <!-- 送信フォーム -->
+          <div>
+            <!-- 宛先モード切替 -->
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">宛先の指定方法</div>
+              <div style="display:flex;gap:8px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="direct-mode" value="manual" checked onchange="toggleDirectMode()"> アドレス手打ち
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                  <input type="radio" name="direct-mode" value="select" onchange="toggleDirectMode()"> 登録ユーザーから選択
+                </label>
+              </div>
+            </div>
+
+            <!-- 手打ちモード -->
+            <div id="direct-manual-wrap" style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">送信先メールアドレス <span style="color:#e55">*</span></div>
+              <input class="inp" id="direct-to-manual" type="email" style="width:100%"
+                placeholder="例: user@example.com" oninput="updateDirectPreview()">
+            </div>
+
+            <!-- ユーザー選択モード -->
+            <div id="direct-select-wrap" style="margin-bottom:14px;display:none">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">ユーザーを選択 <span style="color:#e55">*</span></div>
+              <div style="position:relative">
+                <input class="inp" id="direct-user-search" style="width:100%;padding-right:32px"
+                  placeholder="🔍 ニックネーム・メールで絞り込み..." oninput="filterDirectUsers()">
+                <div id="direct-user-dropdown"
+                  style="display:none;position:absolute;z-index:200;top:calc(100% + 4px);left:0;right:0;
+                         background:var(--surface);border:1px solid var(--border);border-radius:10px;
+                         max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.18)">
+                </div>
+              </div>
+              <div id="direct-selected-user"
+                style="margin-top:8px;font-size:12px;color:var(--muted);min-height:18px"></div>
+            </div>
+
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">件名 <span style="color:#e55">*</span></div>
+              <input class="inp" id="direct-subject" style="width:100%"
+                placeholder="例：重要なお知らせ" oninput="updateDirectPreview()">
+            </div>
+
+            <div style="margin-bottom:14px">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">本文 <span style="color:#e55">*</span></div>
+              <textarea class="inp" id="direct-body" rows="5"
+                style="width:100%;resize:vertical;font-family:inherit;line-height:1.6"
+                placeholder="例：お問い合わせいただきありがとうございます。&#10;&#10;ご確認いただきたい件があります。"
+                oninput="updateDirectPreview()"></textarea>
+            </div>
+
+            <button class="btn btn-gold" style="width:100%;justify-content:center"
+              onclick="sendDirectMail()">✉️ 個別送信を実行</button>
+            <div id="direct-result" style="margin-top:10px;font-size:12px"></div>
+          </div>
+
+          <!-- プレビュー -->
+          <div>
+            <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">メールプレビュー</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:2px">宛先</div>
+              <div id="direct-preview-to" style="font-size:13px;color:var(--ink);margin-bottom:12px;min-height:18px;font-weight:600">—</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">件名</div>
+              <div id="direct-preview-subject" style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:14px;min-height:20px">—</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">本文</div>
+              <div id="direct-preview-body" class="notify-preview">〇〇 さん
+
+（本文がここに表示されます）</div>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
+                ※ 登録ユーザーの場合はニックネームが自動で差し込まれます
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -546,6 +631,153 @@ async function sendNotifyAll() {
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(updateNotifyPreview, 500)
 })
+</script>
+<script>
+// ── 個別メール送信 ────────────────────────────────────────────
+
+let _directUsers = []       // 全ユーザーキャッシュ
+let _directSelected = null  // { email, nickname }
+
+// 宛先モード切替
+function toggleDirectMode() {
+  const mode = document.querySelector('input[name="direct-mode"]:checked')?.value
+  document.getElementById('direct-manual-wrap').style.display  = mode === 'manual' ? '' : 'none'
+  document.getElementById('direct-select-wrap').style.display  = mode === 'select' ? '' : 'none'
+  if (mode === 'select' && _directUsers.length === 0) loadDirectUsers()
+  _directSelected = null
+  document.getElementById('direct-selected-user').textContent = ''
+  document.getElementById('direct-user-search').value = ''
+  document.getElementById('direct-user-dropdown').style.display = 'none'
+  updateDirectPreview()
+}
+
+// 登録ユーザー一覧をロード（1回だけ）
+async function loadDirectUsers() {
+  try {
+    const d = await adminApi('/users?limit=1000')
+    _directUsers = d.users || []
+  } catch(e) {
+    console.warn('[Direct Mail] ユーザー取得失敗', e)
+  }
+}
+
+// ユーザー絞り込み
+function filterDirectUsers() {
+  const q   = document.getElementById('direct-user-search').value.trim().toLowerCase()
+  const dd  = document.getElementById('direct-user-dropdown')
+  const list = q
+    ? _directUsers.filter(u =>
+        (u.nickname||'').toLowerCase().includes(q) ||
+        (u.email||'').toLowerCase().includes(q))
+    : _directUsers.slice(0, 20)
+
+  if (list.length === 0) { dd.style.display = 'none'; return }
+
+  dd.innerHTML = list.map(u => `
+    <div onclick="selectDirectUser(${JSON.stringify(u.email)}, ${JSON.stringify(u.nickname||u.email)})"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);
+             display:flex;align-items:center;gap:10px"
+      onmouseover="this.style.background='var(--hover,rgba(255,255,255,.06))'"
+      onmouseout="this.style.background=''">
+      <div style="width:28px;height:28px;border-radius:50%;background:#6366f1;
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:12px;font-weight:700;color:#fff;flex-shrink:0">
+        ${(u.nickname||u.email||'?')[0].toUpperCase()}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600">${u.nickname||'（名前なし）'}</div>
+        <div style="font-size:11px;color:var(--muted)">${u.email}</div>
+      </div>
+    </div>`).join('')
+  dd.style.display = 'block'
+}
+
+function selectDirectUser(email, nickname) {
+  _directSelected = { email, nickname }
+  document.getElementById('direct-user-search').value  = `${nickname} <${email}>`
+  document.getElementById('direct-user-dropdown').style.display = 'none'
+  document.getElementById('direct-selected-user').innerHTML =
+    `<span style="color:#4caf50">✓ 選択中: <strong>${nickname}</strong> (${email})</span>`
+  updateDirectPreview()
+}
+
+// ドロップダウン外クリックで閉じる
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('direct-select-wrap')
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('direct-user-dropdown').style.display = 'none'
+  }
+})
+
+// プレビュー更新
+function updateDirectPreview() {
+  const mode    = document.querySelector('input[name="direct-mode"]:checked')?.value
+  const subject = document.getElementById('direct-subject').value.trim()
+  const body    = document.getElementById('direct-body').value.trim()
+
+  let toLabel = '—'
+  let nameLabel = '〇〇'
+  if (mode === 'manual') {
+    const v = document.getElementById('direct-to-manual').value.trim()
+    toLabel   = v || '—'
+    nameLabel = v || '〇〇'
+  } else if (_directSelected) {
+    toLabel   = `${_directSelected.nickname} <${_directSelected.email}>`
+    nameLabel = _directSelected.nickname
+  }
+
+  document.getElementById('direct-preview-to').textContent      = toLabel
+  document.getElementById('direct-preview-subject').textContent = subject || '—'
+  document.getElementById('direct-preview-body').textContent    =
+    `${nameLabel} さん\n\n${body || '（本文がここに表示されます）'}`
+}
+
+// 送信実行
+async function sendDirectMail() {
+  const mode    = document.querySelector('input[name="direct-mode"]:checked')?.value
+  const subject = document.getElementById('direct-subject').value.trim()
+  const body    = document.getElementById('direct-body').value.trim()
+  const resultEl = document.getElementById('direct-result')
+
+  let to_email = ''
+  let displayName = ''
+  if (mode === 'manual') {
+    to_email    = document.getElementById('direct-to-manual').value.trim().toLowerCase()
+    displayName = to_email
+  } else {
+    if (!_directSelected) { adminToast('送信先ユーザーを選択してください', 'e'); return }
+    to_email    = _directSelected.email
+    displayName = `${_directSelected.nickname} (${_directSelected.email})`
+  }
+
+  if (!to_email)  { adminToast('送信先メールアドレスを入力してください', 'e'); return }
+  if (!subject)   { adminToast('件名を入力してください', 'e'); return }
+  if (!body)      { adminToast('本文を入力してください', 'e'); return }
+
+  adminModal({
+    title: '個別メールを送信しますか？',
+    body:  `宛先: <strong>${displayName}</strong><br>件名: <strong>${subject}</strong><br>送信後は取り消せません。`,
+    okLabel:  '✉️ 送信する',
+    okColor:  'linear-gradient(135deg,#c9a84c,#e8c97a)',
+    onOk: async () => {
+      resultEl.innerHTML = '<span style="color:var(--muted)">送信中...</span>'
+      try {
+        const d = await adminApi('/send-direct', {
+          method: 'POST',
+          body: { to_email, subject, body }
+        })
+        if (d.ok) {
+          resultEl.innerHTML = `<span style="color:#4caf50">✅ 送信完了: ${d.to}</span>`
+          adminToast(`${d.nickname} さんにメールを送信しました`, 's')
+        } else {
+          resultEl.innerHTML = `<span style="color:#e55">❌ ${d.error || '送信失敗'}</span>`
+        }
+      } catch(e) {
+        resultEl.innerHTML = `<span style="color:#e55">❌ エラー: ${e.message}</span>`
+      }
+    }
+  })
+}
 </script>
 </body>
 </html>

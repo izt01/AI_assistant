@@ -3149,6 +3149,33 @@ def admin_notify_users():
     return jsonify({"ok": True, "sent": sent, "failed": failed, "total": len(users)})
 
 
+@app.route("/api/admin/send-direct", methods=["POST"])
+@admin_required
+def admin_send_direct():
+    """管理者が特定のメールアドレス（手打ち or 登録ユーザー選択）に個別メールを送信"""
+    d       = request.json or {}
+    subject = (d.get("subject") or "").strip()
+    body    = (d.get("body")    or "").strip()
+    to_email = (d.get("to_email") or "").strip().lower()
+
+    if not subject or not body:
+        return jsonify({"error": "subject と body は必須です"}), 400
+    if not to_email:
+        return jsonify({"error": "送信先メールアドレスは必須です"}), 400
+
+    # 登録ユーザーか確認してnicknameを取得（手打ちの場合はNone）
+    user = db_exec("SELECT nickname FROM lu_users WHERE email=%s", (to_email,), fetch="one")
+    nickname = user["nickname"] if user else to_email
+
+    body_text = f"{nickname} さん\n\n{body}"
+    ok = send_user_notification(to_email=to_email, nickname=nickname,
+                                subject=subject, body_text=body_text)
+    if ok:
+        return jsonify({"ok": True, "to": to_email, "nickname": nickname})
+    else:
+        return jsonify({"ok": False, "error": "メール送信に失敗しました"}), 500
+
+
 # ══════════════════════════════════════════════════════════════
 #  静的ファイル配信（フロントエンドHTML）
 # ══════════════════════════════════════════════════════════════
