@@ -12,6 +12,31 @@ const PLANS = {
   master: { name:'Master', price:2980, limit:200, color:'#e8c97a' },
 }
 window.planRank = {free:0, pro:1, master:2};
+
+// Stripe インスタンスを返す（plan.html / chat.html 共通）
+let _stripeInstance = null;
+async function _getStripe() {
+  if (_stripeInstance) return _stripeInstance;
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    if (cfg.stripe_publishable_key && typeof Stripe !== 'undefined') {
+      _stripeInstance = Stripe(cfg.stripe_publishable_key);
+    }
+  } catch(e) {}
+  return _stripeInstance;
+}
+
+function _updatePlanCache(res) {
+  try {
+    const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
+    if (res && res.user) {
+      if (typeof setCachedUser === 'function') setCachedUser(Object.assign({}, u, res.user));
+    } else if (res) {
+      u.plan = res.plan; u.usage_limit = res.limit; u.usage_count = 0;
+      if (typeof setCachedUser === 'function') setCachedUser(u);
+    }
+  } catch(e) {}
+}
 const PAY_AS_YOU_GO = 50
 
 function getToken()    { return localStorage.getItem('lu_token') }
