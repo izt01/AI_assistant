@@ -140,7 +140,7 @@ function showUpgradeModal(currentPlan){
     <div style="border:2px solid ${p.color};border-radius:12px;padding:16px;cursor:pointer;margin-bottom:10px;transition:background .15s"
          onmouseenter="this.style.background='rgba(201,168,76,.06)'"
          onmouseleave="this.style.background=''"
-         onclick="event.stopPropagation();location.href='plan.html?upgrade=${p.key}'">
+         onclick="location.href='plan.html?upgrade='+p.key">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:${p.color}">${p.label}</span>
         <span style="font-size:20px;font-weight:700">${p.price}<span style="font-size:12px;color:var(--muted)">/月</span></span>
@@ -184,16 +184,14 @@ function _updatePlanCache(res) {
 
 function doUpgrade(plan) {
   if (typeof changePlan === 'function') {
+    // plan.html上では changePlan() を使う（確認モーダル付き）
     closeModal()
     setTimeout(() => changePlan(plan), 150)
   } else {
+    // chat.html等では plan.html に遷移して決済を完結させる
     location.href = 'plan.html?upgrade=' + plan
   }
-} else {
-    // chat.html等では直接アップグレード処理を実行
-    closeModal()
-    _doUpgradeDirect(plan)
-  }
+}
 }
 
 async function _doUpgradeDirect(plan) {
