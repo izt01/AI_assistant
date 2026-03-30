@@ -11,7 +11,6 @@ const PLANS = {
   pro:    { name:'Pro',    price:980,  limit:50,  color:'#c9a84c' },
   master: { name:'Master', price:2980, limit:200, color:'#e8c97a' },
 }
-const planRank = {free:0, pro:1, master:2}
 const PAY_AS_YOU_GO = 50
 
 function getToken()    { return localStorage.getItem('lu_token') }
