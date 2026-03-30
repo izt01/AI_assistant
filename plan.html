@@ -58,7 +58,8 @@
             </div>
             <div style="text-align:center">
               <div style="font-family:'Fraunces',serif;font-size:32px;font-weight:900;color:var(--gold3)">¥50<span style="font-size:13px;font-weight:400;color:rgba(255,255,255,.4)">/回</span></div>
-              <button class="btn btn-gold btn-sm" style="margin-top:6px" onclick="enablePayG()">従量課金を有効にする</button>
+              <button id="payg-btn" class="btn btn-gold btn-sm" style="margin-top:6px" onclick="enablePayG()">従量課金を有効にする</button>
+              <div id="payg-status" style="margin-top:6px;font-size:11px;color:rgba(255,255,255,.5);display:none"></div>
             </div>
           </div>
         </div>
@@ -129,7 +130,7 @@ let user = null;
   if(user) init()
 })()
 
-function init() {
+async function init() {
   buildSidebar('plan')
   // buildHeaderはvoid関数のため直接呼び出す（innerHTML代入は不可）
   buildHeader('プラン・課金', 'プランの確認・変更')
@@ -210,32 +211,69 @@ function init() {
       <div style="text-align:right"><div style="font-weight:600">¥${plan.price.toLocaleString()}</div><button class="btn btn-g btn-sm">領収書</button></div>
     </div>`).join('')
 
-  // Usage detail
-  const pct = getUsagePct(user)
+  // Usage detail — use usage_count / usage_limit (correct API field names)
+  const usedCount  = user.usage_count ?? user.used ?? 0
+  const limitCount = user.usage_limit ?? user.limit ?? getPlanInfo(user.plan).limit
+  const pct = Math.min(100, Math.round(usedCount / limitCount * 100))
   const progCls = pct>=90?'dngr':pct>=70?'warn':''
   document.getElementById('usage-detail-full').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <span>今月の会話数: <strong>${user.used} / ${user.limit}回</strong></span>
+      <span>今月の会話数: <strong>${usedCount} / ${limitCount}回</strong></span>
       <span class="badge ${pct>=90?'b-red':pct>=70?'b-gold':'b-green'}">${pct}% 使用</span>
     </div>
     <div class="prog-wrap" style="height:10px"><div class="prog ${progCls}" style="width:${pct}%"></div></div>
-    <div style="font-size:11px;color:var(--subtle);margin-top:6px">残り${user.limit-user.used}回 · 月末リセット</div>`
+    <div style="font-size:11px;color:var(--subtle);margin-top:6px">残り${Math.max(0,limitCount-usedCount)}回 · 月末リセット</div>`
 
-  // AI usage bars
-  const aiUsage = [
-    {name:'総合AI',used:Math.round(user.used*.3),icon:'✦'},
-    {name:'旅行AI',used:Math.round(user.used*.25),icon:'✈️'},
-    {name:'料理AI',used:Math.round(user.used*.2),icon:'🍳'},
-    {name:'買い物AI',used:Math.round(user.used*.12),icon:'🛍️'},
-    {name:'健康AI',used:Math.round(user.used*.08),icon:'💚'},
-    {name:'家電AI',used:Math.round(user.used*.05),icon:'📺'},
-  ]
-  document.getElementById('ai-usage-chart').innerHTML = aiUsage.map(a => `
-    <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
-      <div style="width:60px;font-size:12px;color:var(--muted);white-space:nowrap">${a.icon} ${a.name}</div>
-      <div class="prog-wrap" style="flex:1"><div class="prog" style="width:${Math.round(a.used/user.used*100||0)}%"></div></div>
-      <div style="width:30px;text-align:right;font-size:12px;font-weight:600;color:var(--ink3)">${a.used}回</div>
-    </div>`).join('')
+  // AI usage bars — fetch real data from /api/usage-stats
+  const AI_META = {
+    all:      {name:'総合AI',   icon:'✦'},
+    general:  {name:'総合AI',   icon:'✦'},
+    travel:   {name:'旅行AI',   icon:'✈️'},
+    recipe:   {name:'料理AI',   icon:'🍳'},
+    shopping: {name:'買い物AI', icon:'🛍️'},
+    health:   {name:'健康AI',   icon:'💚'},
+    appliance:{name:'家電AI',   icon:'📺'},
+    gourmet:  {name:'グルメAI', icon:'🍽️'},
+    diy:      {name:'DIY AI',   icon:'🔨'},
+  }
+  const AI_ORDER = ['all','general','travel','recipe','gourmet','shopping','appliance','health','diy']
+  const chartEl = document.getElementById('ai-usage-chart')
+  chartEl.innerHTML = '<div style="color:var(--muted);font-size:12px">読み込み中…</div>'
+  try {
+    const statsRes = await apiRequest('/usage-stats?days=30')
+    const now = new Date()
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+    const totals = {}
+    for(const row of (statsRes.stats||[])) {
+      if(!row.date || !row.date.startsWith(thisMonth)) continue
+      const key = row.ai_type || 'general'
+      totals[key] = (totals[key]||0) + (row.msg_count||0)
+    }
+    const totalAll = Object.values(totals).reduce((s,v)=>s+v, 0)
+    // ai_type ごとの集計をラベルに変換（general/all は「総合AI」にまとめる）
+    const merged = {}
+    for(const [k,v] of Object.entries(totals)) {
+      const meta = AI_META[k]; if(!meta) continue
+      merged[meta.name] = {icon:meta.icon, used:(merged[meta.name]?.used||0)+v}
+    }
+    const seen = new Set()
+    const aiUsage = AI_ORDER
+      .map(k => AI_META[k] ? {name:AI_META[k].name, icon:AI_META[k].icon, used:merged[AI_META[k].name]?.used||0} : null)
+      .filter(r => r && !seen.has(r.name) && seen.add(r.name))
+      .filter(r => r.used > 0)
+    if(aiUsage.length === 0) {
+      chartEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">今月の利用データがまだありません</div>'
+    } else {
+      chartEl.innerHTML = aiUsage.map(a => `
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+          <div style="width:72px;font-size:12px;color:var(--muted);white-space:nowrap">${a.icon} ${a.name}</div>
+          <div class="prog-wrap" style="flex:1"><div class="prog" style="width:${totalAll>0?Math.round(a.used/totalAll*100):0}%"></div></div>
+          <div style="width:36px;text-align:right;font-size:12px;font-weight:600;color:var(--ink3)">${a.used}回</div>
+        </div>`).join('')
+    }
+  } catch(e) {
+    chartEl.innerHTML = '<div style="color:var(--muted);font-size:12px">データの取得に失敗しました</div>'
+  }
 }
 
 function showTab(id, btn) {
@@ -419,8 +457,57 @@ async function _submitCard(plan, clientSecret, customerId) {
   }
 }
 
+// 従量課金の有効/無効 状態管理
+let _paygEnabled = false
+
 function enablePayG() {
-  toast('従量課金を有効にしました。制限到達後、¥50/回で会話できます。', 's')
+  const btn = document.getElementById('payg-btn')
+  const status = document.getElementById('payg-status')
+  if (_paygEnabled) {
+    // 無効化確認
+    showModal({
+      title: '従量課金を無効にする',
+      body: '<p style="font-size:13.5px;line-height:1.7;color:var(--ink3)">従量課金を無効にすると、月間制限に達した後は会話できなくなります。</p>',
+      actions: [
+        {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+        {label:'無効にする', cls:'btn-red', fn:'_applyPayG(false)'},
+      ]
+    })
+  } else {
+    // 有効化確認
+    showModal({
+      title: '従量課金を有効にする',
+      body: `<p style="font-size:13.5px;line-height:1.7;color:var(--ink3)">月間制限（${getPlanInfo(user.plan).limit}回）に達した後も、<strong>1回¥50</strong>で会話を続けることができます。<br>上限はなく、使った分だけ翌月請求されます。</p>`,
+      actions: [
+        {label:'キャンセル', cls:'btn-g', fn:'closeModal()'},
+        {label:'有効にする', cls:'btn-gold', fn:'_applyPayG(true)'},
+      ]
+    })
+  }
+}
+
+function _applyPayG(enable) {
+  closeModal()
+  _paygEnabled = enable
+  const btn = document.getElementById('payg-btn')
+  const status = document.getElementById('payg-status')
+  if (enable) {
+    btn.textContent = '従量課金を無効にする'
+    btn.style.background = 'rgba(255,255,255,0.15)'
+    btn.style.color = '#fff'
+    btn.style.borderColor = 'rgba(255,255,255,0.3)'
+    if (status) { status.style.display='block'; status.innerHTML = '✓ 有効中 — 制限超過後、¥50/回で継続できます' }
+    toast('従量課金を有効にしました。制限到達後、¥50/回で会話できます。', 's')
+  } else {
+    btn.textContent = '従量課金を有効にする'
+    btn.style.background = ''
+    btn.style.color = ''
+    btn.style.borderColor = ''
+    btn.classList.remove('btn-g')
+    btn.classList.add('btn-gold')
+    if (status) { status.style.display='none'; status.textContent = '' }
+    toast('従量課金を無効にしました。', '')
+  }
 }
 
 function changeCard() {
