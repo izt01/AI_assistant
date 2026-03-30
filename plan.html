@@ -305,18 +305,7 @@ function changePlan(plan) {
   })
 }
 
-// Stripeの公開鍵（環境変数から取得。フロントに埋め込む公開鍵のみ）
-let _stripe = null
-async function _getStripe() {
-  if (_stripe) return _stripe
-  try {
-    const cfg = await fetch('/api/config').then(r => r.json())
-    if (cfg.stripe_publishable_key) {
-      _stripe = Stripe(cfg.stripe_publishable_key)
-    }
-  } catch(e) {}
-  return _stripe
-}
+// _getStripe / _updatePlanCache は shared.js で定義済みのものを使用
 
 async function applyPlan(plan) {
   const info = PLANS[plan]
@@ -364,15 +353,7 @@ async function applyPlan(plan) {
   }
 }
 
-function _updatePlanCache(res) {
-  const u = getCachedUser() || {}
-  if (res.user) {
-    setCachedUser({ ...u, ...res.user })
-  } else {
-    u.plan = res.plan; u.limit = res.limit; u.usage_limit = res.limit
-    setCachedUser(u)
-  }
-}
+// _updatePlanCache は shared.js で定義済み
 
 async function _showCardInputModal(plan, clientSecret, customerId) {
   const stripe = await _getStripe()
