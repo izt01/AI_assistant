@@ -123,7 +123,7 @@
 buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</script>
 <script>
 // planRank / _updatePlanCache: shared.js のキャッシュ問題に備え plan.html 内でも直接定義
-if (typeof planRank === 'undefined') { var planRank = {free:0, pro:1, master:2}; }
+window.planRank = window.planRank || {free:0, pro:1, master:2};
 function _updatePlanCache(res) {
   try {
     const u = (typeof getCachedUser === 'function' ? getCachedUser() : null) || {};
