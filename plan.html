@@ -124,7 +124,7 @@ buildMobileHeader("プラン", "dashboard.html"); buildMobileNav("plan");</scrip
 <script>
 // planRank: shared.js のキャッシュ問題対策で plan.html 内に直接定義
 // var を使用 → 万が一 shared.js 側に残っていても再宣言エラーにならない
-var planRank = {free:0, pro:1, master:2};
+if (typeof planRank === 'undefined') { var planRank = {free:0, pro:1, master:2}; }
 // _updatePlanCache: shared.js のキャッシュ問題対策
 function _updatePlanCache(res) {
   try {
